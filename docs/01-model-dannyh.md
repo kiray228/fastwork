@@ -25,6 +25,7 @@
 | id | INTEGER PK | |
 | name | TEXT | «Magnum», «KFC» |
 | bin | TEXT UNIQUE | БИН юрлица |
+| logo_path | TEXT NULL | логотип на карточке смены |
 | contract_status | TEXT | `pending` / `active` / `suspended` |
 | created_at | INTEGER | |
 
@@ -92,6 +93,7 @@ id PK, name TEXT UNIQUE, icon_code INTEGER
 | work_date | INTEGER | дата смены — по ней ищут |
 | start_minutes | INTEGER | минут от полуночи |
 | end_minutes | INTEGER | |
+| break_minutes | INTEGER | неоплачиваемый перерыв, по умолчанию 60 |
 | hourly_rate | INTEGER | ставка в тиынах за час |
 | workers_needed | INTEGER | сколько человек нужно |
 | min_rating | REAL NULL | порог допуска, NULL = без ограничений |
@@ -100,8 +102,10 @@ id PK, name TEXT UNIQUE, icon_code INTEGER
 | created_at | INTEGER | |
 
 > **Почему ставка за час, а не сумма за смену?**
-> Сумма выводится из ставки и длительности:
-> `(end_minutes − start_minutes) / 60 × hourly_rate`.
+> Сумма выводится из ставки, длительности и перерыва:
+> `((end_minutes − start_minutes − break_minutes) / 60) × hourly_rate`.
+> Перерыв обнаружен по арифметике карточек прототипа — см.
+> `docs/05-razbor-ekranov.md`, раздел 4.
 > Хранить оба поля — значит хранить один факт дважды: при правке времени
 > сумма разъедется со ставкой. Вычисляемое значение не хранят.
 >
@@ -180,6 +184,19 @@ UNIQUE(shift_id, author_id)
 
 > Из рейтинга считается `users.rating`, а он работает как **допуск**:
 > смена с `min_rating = 4.5` не покажется исполнителю с рейтингом ниже.
+
+### stories — лента базы знаний
+| Колонка | Тип | Заметки |
+|---|---|---|
+| id | INTEGER PK | |
+| title | TEXT | |
+| cover_path | TEXT | круглая иконка в шапке главной |
+| body | TEXT | содержимое |
+| sort_order | INTEGER | порядок в ленте |
+| is_active | INTEGER | 0/1 |
+
+> Справочный контент («как получить выплату», «зачем санкнижка»).
+> С бизнес-логикой не связан, поэтому и таблица стоит особняком.
 
 ### support_tickets / support_messages
 `support_tickets`: id PK, user_id FK, shift_id FK NULL, subject, status, created_at
