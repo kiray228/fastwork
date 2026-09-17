@@ -19,6 +19,11 @@
 
 ## 2. Таблицы
 
+### cities — города
+id PK, name TEXT UNIQUE, is_active INTEGER
+
+> Лента смен фильтруется по городу пользователя. Справочник, меняется редко.
+
 ### companies — компании-заказчики
 | Колонка | Тип | Заметки |
 |---|---|---|
@@ -37,6 +42,7 @@
 |---|---|
 | id | INTEGER PK |
 | company_id | INTEGER FK → companies.id |
+| city_id | INTEGER FK → cities.id |
 | title | TEXT |
 | address | TEXT |
 | lat, lon | REAL |
@@ -54,7 +60,8 @@
 | avatar_path | TEXT NULL | |
 | role | TEXT | `worker` / `manager` / `operator` |
 | company_id | INTEGER FK → companies.id **NULL** | заполнен только у `manager` |
-| rating | REAL NULL | кэш среднего из reviews; NULL = смен ещё не было |
+| city_id | INTEGER FK → cities.id | город — по нему фильтруется лента |
+| rating | REAL | кэш среднего из reviews, **стартовое значение 4.0** |
 | is_verified | INTEGER | 0/1 — прошёл ли проверку документов |
 | created_at | INTEGER | |
 
@@ -138,8 +145,10 @@ id PK, name TEXT UNIQUE, icon_code INTEGER
 Статусы: `pending` → `accepted` / `rejected`, далее `cancelled_by_worker`,
 `no_show` (не вышел) или `completed`.
 
-> **Сколько мест осталось?** Считается запросом:
-> `SELECT COUNT(*) FROM applications WHERE shift_id = ? AND status = 'accepted'`.
+> **Сколько мест осталось?** Считается запросом по **активным** откликам:
+> `SELECT COUNT(*) FROM applications WHERE shift_id = ? AND status IN ('accepted','in_progress')`.
+> Отменённые отклики места не занимают — прототип прямо обещает, что
+> «место может освободиться».
 > Отдельная колонка-счётчик `workers_hired` рано или поздно разойдётся с
 > реальностью — это опять хранение вычисляемого.
 >
@@ -185,6 +194,35 @@ UNIQUE(shift_id, author_id)
 > Из рейтинга считается `users.rating`, а он работает как **допуск**:
 > смена с `min_rating = 4.5` не покажется исполнителю с рейтингом ниже.
 
+### work_acts — акты выполненных работ (АВР)
+| Колонка | Тип | Заметки |
+|---|---|---|
+| id | INTEGER PK | |
+| application_id | INTEGER FK → applications.id UNIQUE | один акт на один отклик |
+| status | TEXT | `pending` / `signed` / `disputed` |
+| amount | INTEGER | зафиксированная сумма вознаграждения |
+| signed_at | INTEGER NULL | |
+| file_path | TEXT NULL | |
+
+> **Жёсткое правило: выплата невозможна без акта со статусом `signed`.**
+> Акт — юридическое основание платежа, а не формальность. Сумма в нём —
+> снимок на момент подписания (см. правило про вычисляемое и зафиксированное).
+
+### referrals — приглашения
+id PK, inviter_id FK → users.id, invited_id FK → users.id UNIQUE,
+bonus_amount INTEGER, status TEXT (`pending`/`paid`), created_at
+
+> Ещё одна ссылка таблицы на `users` дважды — кто пригласил и кого.
+> `invited_id UNIQUE`: одного человека нельзя привести дважды.
+
+### promo_codes / promo_code_uses
+`promo_codes`: id PK, code TEXT UNIQUE, bonus_amount, expires_at, max_uses, is_active
+`promo_code_uses`: id PK, promo_code_id FK, user_id FK, used_at,
+UNIQUE(promo_code_id, user_id)
+
+> Сам код и факты его применения — разные сущности. UNIQUE не даст одному
+> пользователю активировать один код дважды.
+
 ### stories — лента базы знаний
 | Колонка | Тип | Заметки |
 |---|---|---|
@@ -207,6 +245,7 @@ UNIQUE(shift_id, author_id)
 ## 3. Карта связей
 
 ```
+cities ──1:М──► locations        cities ──1:М──► users
 companies ──1:М──► locations ──1:М──► shifts ◄──М:1── categories
                                        │
                                        ├──1:М──► shift_required_documents
@@ -216,6 +255,9 @@ companies ──1:М──► locations ──1:М──► shifts ◄──М:1
 companies ──1:М──► users (manager)
 users ──1:М──► documents ──► users (reviewed_by, оператор)
 users ──1:М──► payouts
+users ──1:М──► referrals ──► users (приглашённый)
+users ──М:М──► promo_codes (через promo_code_uses)
+applications ──1:1──► work_acts
 users ──1:М──► support_tickets ──1:М──► support_messages
 ```
 
@@ -231,8 +273,9 @@ users ──1:М──► support_tickets ──1:М──► support_messages
 6. Отмена исполнителем разрешена не позднее `cancel_deadline_hours` до начала
 7. Начало смены → `in_progress`, деньги компании переходят в `hold`
 8. Смена закрыта → `done` → `release`: исполнителям `available`, платформе `fee`
-9. Взаимные отзывы → пересчёт `users.rating`
-10. Исполнитель заказывает `payout` на карту
+9. Исполнитель **подписывает АВР** — без этого выплата не проводится
+10. Взаимные отзывы → пересчёт `users.rating`
+11. Исполнитель заказывает `payout` на карту
 
 ---
 
