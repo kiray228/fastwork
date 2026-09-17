@@ -1,149 +1,277 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fastwork/main.dart';
+import 'package:fastwork/data/auth_repository.dart';
 import 'package:fastwork/data/fake_shift_repository.dart';
+import 'package:fastwork/data/session.dart';
+import 'package:fastwork/user.dart';
 
 /// Проверяем экраны целиком — как будто пользователь тыкает пальцем,
 /// только очень быстро.
 ///
 /// Вместо настоящей базы подставляем данные в памяти. Экраны разницы не
-/// замечают: они работают с интерфейсом хранилища, а не с SQLite.
-/// Поэтому тесты идут за доли секунды и ничего не пишут на диск.
+/// замечают: они работают с интерфейсами хранилищ, а не с SQLite.
 void main() {
+  AppUser testUser({double rating = 4.0}) => AppUser(
+        id: 1,
+        phone: '77001234567',
+        fullName: 'Ернар Калдыбеков',
+        city: 'Алматы',
+        rating: rating,
+        isVerified: false,
+      );
+
   /// По умолчанию тестовый «экран» маленький — 800×600, и часть карточек
   /// в него не влезает. А списки во Flutter создают только те элементы,
   /// что видны, — поэтому ненайденная кнопка означала бы не ошибку,
   /// а просто «её ещё не нарисовали».
   void useTallPhone(WidgetTester tester) {
     tester.view.devicePixelRatio = 1.0;
-    tester.view.physicalSize = const Size(420, 2000);
+    tester.view.physicalSize = const Size(420, 2200);
     addTearDown(tester.view.reset);
   }
 
-  Future<void> openApp(WidgetTester tester) async {
+  /// Запускаем приложение под уже вошедшим пользователем.
+  Future<void> openApp(WidgetTester tester, {double rating = 4.0}) async {
     useTallPhone(tester);
-    await tester.pumpWidget(FastworkApp(repository: FakeShiftRepository()));
+    final user = testUser(rating: rating);
+    final session = AppSession()..setUser(user);
+    await tester.pumpWidget(FastworkApp(
+      session: session,
+      shifts: FakeShiftRepository(userRating: rating),
+      auth: FakeAuthRepository(signedIn: user),
+    ));
     await tester.pumpAndSettle();
   }
 
-  testWidgets('нажатие на «Подробнее» открывает экран смены', (tester) async {
-    await openApp(tester);
-
-    expect(find.text('Подробнее'), findsWidgets);
-
-    await tester.tap(find.text('Подробнее').first);
+  /// Запускаем приложение без вошедшего пользователя.
+  Future<void> openAppSignedOut(WidgetTester tester) async {
+    useTallPhone(tester);
+    await tester.pumpWidget(FastworkApp(
+      session: AppSession(),
+      shifts: FakeShiftRepository(),
+      auth: FakeAuthRepository(),
+    ));
     await tester.pumpAndSettle();
+  }
 
-    expect(find.text('Вознаграждение'), findsOneWidget);
-    expect(find.text('Записаться на смену'), findsOneWidget);
+  group('вход', () {
+    testWidgets('без пользователя показывается регистрация', (tester) async {
+      await openAppSignedOut(tester);
+
+      expect(find.text('Вход'), findsOneWidget);
+      expect(find.text('Начать работать'), findsOneWidget);
+    });
+
+    testWidgets('короткий номер не пускает дальше', (tester) async {
+      await openAppSignedOut(tester);
+
+      await tester.enterText(find.byType(TextField).first, '77');
+      await tester.tap(find.text('Начать работать'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Введите номер телефона полностью'), findsOneWidget);
+    });
+
+    testWidgets('регистрация открывает ленту смен', (tester) async {
+      await openAppSignedOut(tester);
+
+      await tester.enterText(find.byType(TextField).at(0), '77001234567');
+      await tester.enterText(find.byType(TextField).at(1), 'Ернар Калдыбеков');
+      await tester.tap(find.text('Начать работать'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Подробнее'), findsWidgets);
+    });
   });
 
-  testWidgets('кнопка «Мест нет» не открывает экран смены', (tester) async {
-    await openApp(tester);
+  group('лента смен', () {
+    testWidgets('нажатие на «Подробнее» открывает экран смены', (tester) async {
+      await openApp(tester);
 
-    // У смены Zara мест нет — кнопка неактивна.
-    final soldOut = find.widgetWithText(FilledButton, 'Мест нет');
-    expect(soldOut, findsOneWidget);
+      await tester.tap(find.text('Подробнее').first);
+      await tester.pumpAndSettle();
 
-    // warnIfMissed: false — мы специально жмём по выключенной кнопке.
-    await tester.tap(soldOut, warnIfMissed: false);
-    await tester.pumpAndSettle();
+      expect(find.text('Вознаграждение'), findsOneWidget);
+      expect(find.text('Записаться на смену'), findsOneWidget);
+    });
 
-    expect(find.text('Вознаграждение'), findsNothing);
+    testWidgets('кнопка «Мест нет» не открывает экран смены', (tester) async {
+      await openApp(tester);
+
+      final soldOut = find.widgetWithText(FilledButton, 'Мест нет');
+      expect(soldOut, findsOneWidget);
+
+      // warnIfMissed: false — мы специально жмём по выключенной кнопке.
+      await tester.tap(soldOut, warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Вознаграждение'), findsNothing);
+    });
+
+    testWidgets('день без смен показывает пустое состояние', (tester) async {
+      await openApp(tester);
+
+      final dayAfterTomorrow = DateTime.now().add(const Duration(days: 2));
+      await tester.tap(find.text('${dayAfterTomorrow.day}').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('На этот день смен нет'), findsOneWidget);
+    });
+
+    testWidgets('фильтр по компании сокращает список', (tester) async {
+      await openApp(tester);
+
+      // Сегодня две смены: «Золотое яблоко» и Zara.
+      expect(find.text('Золотое яблоко'), findsOneWidget);
+      expect(find.text('Zara'), findsOneWidget);
+
+      await tester.tap(find.text('Фильтр'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Zara').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Показать результаты'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Золотое яблоко'), findsNothing);
+      expect(find.text('Zara'), findsOneWidget);
+      expect(find.text('Фильтр · 1'), findsOneWidget);
+    });
   });
 
-  testWidgets('день без смен показывает пустое состояние', (tester) async {
-    await openApp(tester);
+  group('запись на смену', () {
+    testWidgets('запись требует подтверждения условий', (tester) async {
+      await openApp(tester);
 
-    // Послезавтра смен нет.
-    final dayAfterTomorrow = DateTime.now().add(const Duration(days: 2));
-    await tester.tap(find.text('${dayAfterTomorrow.day}').first);
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Подробнее').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Записаться на смену'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('На этот день смен нет'), findsOneWidget);
+      expect(find.text('Подтвердите запись'), findsOneWidget);
+      expect(find.text('Вы обязуетесь'), findsOneWidget);
+
+      // Пока галочка не поставлена — подтвердить нельзя.
+      final confirm = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Подтверждаю'),
+      );
+      expect(confirm.onPressed, isNull);
+    });
+
+    testWidgets('подтверждённая запись сохраняется', (tester) async {
+      await openApp(tester);
+
+      await tester.tap(find.text('Подробнее').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Свободно мест: 3'), findsOneWidget);
+
+      await tester.tap(find.text('Записаться на смену'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подтверждаю'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Вы записаны на эту смену'), findsOneWidget);
+      expect(find.text('Свободно мест: 2'), findsOneWidget);
+
+      // Смена сегодня, до начала меньше 10 часов — отмена уже недоступна.
+      expect(find.text('Отмена уже недоступна'), findsOneWidget);
+    });
+
+    testWidgets('отказ в окне условий ничего не меняет', (tester) async {
+      await openApp(tester);
+
+      await tester.tap(find.text('Подробнее').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Записаться на смену'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Назад'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Вы записаны на эту смену'), findsNothing);
+      expect(find.text('Свободно мест: 3'), findsOneWidget);
+    });
+
+    testWidgets('записанная смена появляется в разделе «Мои»', (tester) async {
+      await openApp(tester);
+
+      await tester.tap(find.text('Подробнее').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Записаться на смену'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подтверждаю'));
+      await tester.pumpAndSettle();
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Мои'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Мои подработки'), findsOneWidget);
+      expect(find.text('Золотое яблоко'), findsOneWidget);
+
+      await tester.tap(find.text('Архив'));
+      await tester.pumpAndSettle();
+      expect(find.text('Пока пусто'), findsOneWidget);
+    });
   });
 
-  testWidgets('запись требует подтверждения условий', (tester) async {
-    await openApp(tester);
+  group('рейтинг как допуск', () {
+    testWidgets('смена с порогом 4.5 закрыта при рейтинге 4.0',
+        (tester) async {
+      await openApp(tester, rating: 4.0);
 
-    await tester.tap(find.text('Подробнее').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Записаться на смену'));
-    await tester.pumpAndSettle();
+      // Смена Sinsay через три дня требует рейтинг 4.5.
+      final inThreeDays = DateTime.now().add(const Duration(days: 3));
+      await tester.tap(find.text('${inThreeDays.day}').first);
+      await tester.pumpAndSettle();
 
-    // Открылось окно с условиями.
-    expect(find.text('Подтвердите запись'), findsOneWidget);
-    expect(find.text('Вы обязуетесь'), findsOneWidget);
+      expect(find.text('Нужен рейтинг 4.5'), findsOneWidget);
+      expect(
+        find.widgetWithText(FilledButton, 'Рейтинг ниже требуемого'),
+        findsOneWidget,
+      );
+    });
 
-    // Пока галочка не поставлена — подтвердить нельзя.
-    final confirm = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Подтверждаю'),
-    );
-    expect(confirm.onPressed, isNull);
+    testWidgets('при рейтинге 4.8 та же смена открыта', (tester) async {
+      await openApp(tester, rating: 4.8);
+
+      final inThreeDays = DateTime.now().add(const Duration(days: 3));
+      await tester.tap(find.text('${inThreeDays.day}').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Нужен рейтинг 4.5'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Подробнее'), findsOneWidget);
+    });
   });
 
-  testWidgets('подтверждённая запись сохраняется', (tester) async {
-    await openApp(tester);
+  group('профиль', () {
+    testWidgets('показывает данные пользователя', (tester) async {
+      await openApp(tester);
 
-    // Открываем первую смену: 5 мест, 2 заняты — свободно 3.
-    await tester.tap(find.text('Подробнее').first);
-    await tester.pumpAndSettle();
-    expect(find.text('Свободно мест: 3'), findsOneWidget);
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
 
-    // Записываемся: окно условий, галочка, подтверждение.
-    await tester.tap(find.text('Записаться на смену'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(Checkbox));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Подтверждаю'));
-    await tester.pumpAndSettle();
+      expect(find.text('Ернар Калдыбеков'), findsOneWidget);
+      expect(find.text('4.0'), findsOneWidget); // рейтинг
+      expect(find.text('Новичок'), findsOneWidget); // уровень
+      expect(find.text('Алматы'), findsOneWidget); // город
+    });
 
-    // Появилась плашка и свободных мест стало меньше.
-    expect(find.text('Вы записаны на эту смену'), findsOneWidget);
-    expect(find.text('Свободно мест: 2'), findsOneWidget);
+    testWidgets('выход возвращает на экран входа', (tester) async {
+      await openApp(tester);
 
-    // Смена сегодня, до начала меньше 10 часов — отмена уже недоступна.
-    expect(find.text('Отмена уже недоступна'), findsOneWidget);
-  });
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Выйти из аккаунта'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Выйти'));
+      await tester.pumpAndSettle();
 
-  testWidgets('отказ в окне условий ничего не меняет', (tester) async {
-    await openApp(tester);
-
-    await tester.tap(find.text('Подробнее').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Записаться на смену'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Назад'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Вы записаны на эту смену'), findsNothing);
-    expect(find.text('Свободно мест: 3'), findsOneWidget);
-  });
-
-  testWidgets('записанная смена появляется в разделе «Мои»', (tester) async {
-    await openApp(tester);
-
-    await tester.tap(find.text('Подробнее').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Записаться на смену'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(Checkbox));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Подтверждаю'));
-    await tester.pumpAndSettle();
-
-    // Возвращаемся назад и открываем вкладку «Мои».
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Мои'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Мои подработки'), findsOneWidget);
-    expect(find.text('Золотое яблоко'), findsOneWidget);
-
-    // В архиве при этом пусто.
-    await tester.tap(find.text('Архив'));
-    await tester.pumpAndSettle();
-    expect(find.text('Пока пусто'), findsOneWidget);
+      expect(find.text('Начать работать'), findsOneWidget);
+    });
   });
 }

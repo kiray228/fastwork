@@ -1,5 +1,6 @@
 import '../shift.dart';
 import 'database.dart';
+import 'shift_filter.dart';
 import 'shift_repository.dart';
 
 /// Хранилище смен в памяти — без базы данных.
@@ -14,7 +15,10 @@ class FakeShiftRepository implements ShiftRepository {
   final List<Shift> _shifts;
   final Map<int, String> _myStatuses = {};
 
-  FakeShiftRepository([List<Shift>? shifts])
+  /// Рейтинг «текущего пользователя» — по нему проверяется допуск.
+  double userRating;
+
+  FakeShiftRepository({List<Shift>? shifts, this.userRating = 4.0})
       : _shifts = shifts ?? buildDemoShifts();
 
   Shift _decorate(Shift s) {
@@ -28,15 +32,27 @@ class FakeShiftRepository implements ShiftRepository {
   }
 
   @override
-  Future<List<Shift>> shiftsOn(DateTime date) async => _shifts
-      .where((s) => isSameDay(s.workDate, date))
-      .map(_decorate)
-      .toList();
+  Future<List<Shift>> shiftsOn(
+    DateTime date, {
+    ShiftFilter filter = const ShiftFilter(),
+  }) async {
+    final list = _shifts
+        .where((s) => isSameDay(s.workDate, date))
+        .map(_decorate)
+        .toList();
+    return applyFilter(list, filter);
+  }
 
   @override
   Future<Set<DateTime>> daysWithShifts() async => _shifts
       .map((s) => DateTime(s.workDate.year, s.workDate.month, s.workDate.day))
       .toSet();
+
+  @override
+  Future<List<String>> companies() async {
+    final names = _shifts.map((s) => s.company).toSet().toList()..sort();
+    return names;
+  }
 
   @override
   Future<Shift?> shiftById(int id) async {
@@ -51,6 +67,7 @@ class FakeShiftRepository implements ShiftRepository {
     final shift = await shiftById(shiftId);
     if (shift == null) return BookingResult.notFound;
     if (shift.isApplied) return BookingResult.alreadyBooked;
+    if (!shift.ratingAllows(userRating)) return BookingResult.ratingTooLow;
     if (!shift.hasFreeSlots) return BookingResult.noSlots;
 
     _myStatuses[shiftId] = ApplicationStatus.active;

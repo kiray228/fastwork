@@ -32,6 +32,40 @@ class ShiftRows extends Table {
   /// Добавлена во второй версии схемы — см. миграцию ниже.
   IntColumn get cancelDeadlineHours =>
       integer().withDefault(const Constant(10))();
+
+  /// Минимальный рейтинг для допуска к смене. null — ограничений нет.
+  /// Добавлена в третьей версии схемы.
+  RealColumn get minRating => real().nullable()();
+}
+
+/// Пользователи приложения.
+class UserRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+
+  /// Телефон — логин. UNIQUE: два аккаунта на один номер невозможны,
+  /// и это проверяет сама база, а не код.
+  TextColumn get phone => text().unique()();
+
+  TextColumn get fullName => text()();
+  TextColumn get city => text()();
+
+  /// Рейтинг. У новичка он не пустой, а стартовый — иначе он не прошёл бы
+  /// ни один фильтр по рейтингу и не смог бы начать работать вообще.
+  RealColumn get rating => real().withDefault(const Constant(4.0))();
+
+  BoolColumn get isVerified =>
+      boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime()();
+}
+
+/// Мелкие настройки приложения: ключ — значение.
+/// Здесь храним, кто сейчас вошёл, чтобы не спрашивать при каждом запуске.
+class AppSettings extends Table {
+  TextColumn get key => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column> get primaryKey => {key};
 }
 
 /// Таблица откликов — связка между сменой и работником.
@@ -72,7 +106,7 @@ class ApplicationStatus {
 // БАЗА ДАННЫХ
 // ---------------------------------------------------------------------------
 
-@DriftDatabase(tables: [ShiftRows, ApplicationRows])
+@DriftDatabase(tables: [ShiftRows, ApplicationRows, UserRows, AppSettings])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
       : super(executor ?? _open());
@@ -88,9 +122,9 @@ class AppDatabase extends _$AppDatabase {
         ),
       );
 
-  /// Версия схемы. Мы добавили колонку — значит версия выросла с 1 до 2.
+  /// Версия схемы. Каждое изменение таблиц поднимает номер на единицу.
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -103,6 +137,11 @@ class AppDatabase extends _$AppDatabase {
           // колонку в существующую таблицу.
           if (from < 2) {
             await m.addColumn(shiftRows, shiftRows.cancelDeadlineHours);
+          }
+          if (from < 3) {
+            await m.createTable(userRows);
+            await m.createTable(appSettings);
+            await m.addColumn(shiftRows, shiftRows.minRating);
           }
         },
         beforeOpen: (details) async {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'data/session.dart';
 import 'data/shift_repository.dart';
 import 'shift.dart';
 import 'theme/app_colors.dart';
@@ -10,11 +11,13 @@ import 'widgets/common.dart';
 class ShiftDetailPage extends StatefulWidget {
   final int shiftId;
   final ShiftRepository repository;
+  final AppSession session;
 
   const ShiftDetailPage({
     super.key,
     required this.shiftId,
     required this.repository,
+    required this.session,
   });
 
   @override
@@ -60,6 +63,8 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
         BookingResult.ok => 'Вы записаны на смену',
         BookingResult.noSlots => 'Не получилось: мест уже нет',
         BookingResult.alreadyBooked => 'Вы уже записаны на эту смену',
+        BookingResult.ratingTooLow =>
+          'Ваш рейтинг ниже требуемого для этой смены',
         _ => 'Не получилось записаться',
       },
     );
@@ -148,6 +153,12 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
                 if (current.isApplied) ...[
                   _AppliedBanner(shift: current),
                   const SizedBox(height: 14),
+                ] else if (!current.ratingAllows(widget.session.rating)) ...[
+                  _RatingLockBanner(
+                    required: current.minRating!,
+                    actual: widget.session.rating,
+                  ),
+                  const SizedBox(height: 14),
                 ],
                 _HeroCard(shift: current),
                 const SizedBox(height: 14),
@@ -219,6 +230,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
           _BottomBar(
             shift: current,
             busy: busy,
+            userRating: widget.session.rating,
             onBook: _book,
             onCancel: _cancel,
           ),
@@ -276,6 +288,57 @@ class _AppliedBanner extends StatelessWidget {
               height: 1.35,
               color: canCancel ? AppColors.body : AppColors.accent,
               fontWeight: canCancel ? FontWeight.w500 : FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Плашка «рейтинг не дотягивает».
+///
+/// Рейтинг здесь не украшение профиля, а допуск: часть заказчиков берёт
+/// только проверенных исполнителей.
+class _RatingLockBanner extends StatelessWidget {
+  final double required;
+  final double actual;
+
+  const _RatingLockBanner({required this.required, required this.actual});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.accent.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.lock_outline_rounded,
+              color: AppColors.accent, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Этот заказчик берёт от '
+                  '${required.toStringAsFixed(1)}',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontSize: 14,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Ваш рейтинг — ${actual.toStringAsFixed(1)}. '
+                  'Отработайте несколько смен без опозданий, и он вырастет.',
+                  style: const TextStyle(fontSize: 12.5, height: 1.35),
+                ),
+              ],
             ),
           ),
         ],
@@ -635,12 +698,14 @@ class _SlotsCard extends StatelessWidget {
 class _BottomBar extends StatelessWidget {
   final Shift shift;
   final bool busy;
+  final double userRating;
   final VoidCallback onBook;
   final VoidCallback onCancel;
 
   const _BottomBar({
     required this.shift,
     required this.busy,
+    required this.userRating,
     required this.onBook,
     required this.onCancel,
   });
@@ -649,6 +714,7 @@ class _BottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final canCancel = shift.canCancelAt(DateTime.now());
+    final allowed = shift.ratingAllows(userRating);
 
     // Что показывать на кнопке, зависит от состояния смены.
     final String label;
@@ -661,6 +727,10 @@ class _BottomBar extends StatelessWidget {
       outlined = true;
     } else if (shift.isApplied) {
       label = 'Отмена уже недоступна';
+      action = null;
+      outlined = false;
+    } else if (!allowed) {
+      label = 'Рейтинг ниже требуемого';
       action = null;
       outlined = false;
     } else if (shift.hasFreeSlots) {

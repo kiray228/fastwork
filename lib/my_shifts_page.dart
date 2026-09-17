@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'data/session.dart';
 import 'data/shift_repository.dart';
 import 'shift.dart';
 import 'shift_detail_page.dart';
@@ -13,8 +14,13 @@ import 'widgets/shift_card.dart';
 /// Это тот же запрос к той же таблице, только с другим условием.
 class MyShiftsPage extends StatefulWidget {
   final ShiftRepository repository;
+  final AppSession session;
 
-  const MyShiftsPage({super.key, required this.repository});
+  const MyShiftsPage({
+    super.key,
+    required this.repository,
+    required this.session,
+  });
 
   @override
   State<MyShiftsPage> createState() => _MyShiftsPageState();
@@ -50,6 +56,7 @@ class _MyShiftsPageState extends State<MyShiftsPage> {
         builder: (_) => ShiftDetailPage(
           shiftId: shift.id,
           repository: widget.repository,
+          session: widget.session,
         ),
       ),
     );
@@ -82,6 +89,7 @@ class _MyShiftsPageState extends State<MyShiftsPage> {
                   itemCount: items.length,
                   itemBuilder: (context, index) => ShiftCard(
                     shift: items[index],
+                    userRating: widget.session.rating,
                     onTap: () => _openShift(items[index]),
                   ),
                 ),

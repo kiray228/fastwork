@@ -9,18 +9,27 @@ class ShiftCard extends StatelessWidget {
   final Shift shift;
   final VoidCallback onTap;
 
-  const ShiftCard({super.key, required this.shift, required this.onTap});
+  /// Рейтинг текущего пользователя — по нему решается допуск к смене.
+  final double userRating;
+
+  const ShiftCard({
+    super.key,
+    required this.shift,
+    required this.onTap,
+    this.userRating = 5,
+  });
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final filled = shift.workersHired / shift.workersNeeded;
+    final allowed = shift.ratingAllows(userRating);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: SurfaceCard(
-        onTap: shift.hasFreeSlots ? onTap : null,
+        onTap: shift.hasFreeSlots && allowed ? onTap : null,
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -87,12 +96,19 @@ class ShiftCard extends StatelessWidget {
             InfoRow(icon: Icons.work_outline, text: shift.title),
             InfoRow(icon: Icons.place_outlined, text: shift.address),
 
-            if (shift.tags.isNotEmpty) ...[
+            if (shift.tags.isNotEmpty || !allowed) ...[
               const SizedBox(height: 12),
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
                 children: [
+                  if (!allowed)
+                    TagChip(
+                      text: 'Нужен рейтинг '
+                          '${shift.minRating!.toStringAsFixed(1)}',
+                      icon: Icons.lock_outline_rounded,
+                      color: AppColors.accent,
+                    ),
                   for (final tag in shift.tags)
                     TagChip(
                       text: tag,
@@ -105,7 +121,7 @@ class ShiftCard extends StatelessWidget {
             const SizedBox(height: 16),
 
             // Полоска заполнения мест: видно, насколько смена уже набрана.
-            if (shift.hasFreeSlots) ...[
+            if (shift.hasFreeSlots && allowed) ...[
               Row(
                 children: [
                   Expanded(
@@ -139,8 +155,14 @@ class ShiftCard extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: shift.hasFreeSlots ? onTap : null,
-                child: Text(shift.hasFreeSlots ? 'Подробнее' : 'Мест нет'),
+                onPressed: shift.hasFreeSlots && allowed ? onTap : null,
+                child: Text(
+                  !allowed
+                      ? 'Рейтинг ниже требуемого'
+                      : shift.hasFreeSlots
+                          ? 'Подробнее'
+                          : 'Мест нет',
+                ),
               ),
             ),
           ],

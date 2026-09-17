@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fastwork/data/fake_shift_repository.dart';
+import 'package:fastwork/data/shift_filter.dart';
 import 'package:fastwork/data/shift_repository.dart';
 
 /// Проверяем правила записи на смены — без экранов, только логика.
@@ -7,7 +8,9 @@ import 'package:fastwork/data/shift_repository.dart';
 void main() {
   late FakeShiftRepository repo;
 
-  setUp(() => repo = FakeShiftRepository());
+  // Рейтинг 5.0 — чтобы пройти по всем сменам. Допуск по рейтингу
+  // проверяем отдельным тестом ниже.
+  setUp(() => repo = FakeShiftRepository(userRating: 5.0));
 
   // Смена №1 — сегодня в 10:00, №5 — через три дня в 11:00.
   // Отменить можно за 10 часов до начала, поэтому сегодняшнюю смену
@@ -80,6 +83,54 @@ void main() {
     await repo.cancelApplication(5);
     expect(await repo.myShifts(archived: false), isEmpty);
     expect((await repo.myShifts(archived: true)).map((s) => s.id), [5]);
+  });
+
+  test('смена с порогом рейтинга закрыта для новичка', () async {
+    final novice = FakeShiftRepository(userRating: 4.0);
+
+    // Смена №5 доступна только с рейтингом 4.5.
+    expect(await novice.apply(5), BookingResult.ratingTooLow);
+    expect((await novice.shiftById(5))!.isApplied, isFalse);
+
+    // С рейтингом 4.5 та же смена открыта.
+    final senior = FakeShiftRepository(userRating: 4.5);
+    expect(await senior.apply(5), BookingResult.ok);
+  });
+
+  test('фильтр по компании оставляет только её смены', () async {
+    final all = await repo.shiftsOn(DateTime.now());
+    expect(all.length, 2);
+
+    final onlyZara = await repo.shiftsOn(
+      DateTime.now(),
+      filter: const ShiftFilter(companies: {'Zara'}),
+    );
+    expect(onlyZara.map((s) => s.company), ['Zara']);
+  });
+
+  test('«только свободные» убирает заполненные смены', () async {
+    final open = await repo.shiftsOn(
+      DateTime.now(),
+      filter: const ShiftFilter(onlyOpen: true),
+    );
+
+    // У Zara мест нет — она не должна попасть в выдачу.
+    expect(open.every((s) => s.hasFreeSlots), isTrue);
+    expect(open.map((s) => s.company), isNot(contains('Zara')));
+  });
+
+  test('сортировка по оплате меняет порядок', () async {
+    final desc = await repo.shiftsOn(
+      DateTime.now(),
+      filter: const ShiftFilter(sort: ShiftSort.payDesc),
+    );
+    final asc = await repo.shiftsOn(
+      DateTime.now(),
+      filter: const ShiftFilter(sort: ShiftSort.payAsc),
+    );
+
+    expect(desc.first.totalPay, greaterThan(desc.last.totalPay));
+    expect(asc.first.totalPay, lessThan(asc.last.totalPay));
   });
 
   test('дни со сменами определяются по данным', () async {

@@ -18,6 +18,7 @@ class Shift {
   final String? employerComment; // свободный текст заказчика
   final int payoutDelayDays; // через сколько дней придёт вознаграждение
   final int cancelDeadlineHours; // за сколько часов до смены можно отменить
+  final double? minRating; // порог допуска; null — ограничений нет
 
   /// Статус моего отклика на эту смену: `active`, `cancelled` или null,
   /// если я на неё не откликался. Приходит из базы вместе со сменой.
@@ -40,6 +41,7 @@ class Shift {
     this.employerComment,
     this.payoutDelayDays = 1,
     this.cancelDeadlineHours = 10,
+    this.minRating,
     this.myStatus,
   });
 
@@ -64,6 +66,7 @@ class Shift {
         employerComment: employerComment,
         payoutDelayDays: payoutDelayDays,
         cancelDeadlineHours: cancelDeadlineHours,
+        minRating: minRating,
         myStatus: clearMyStatus ? null : (myStatus ?? this.myStatus),
       );
 
@@ -92,6 +95,12 @@ class Shift {
 
   /// Можно ли записаться: места есть и я ещё не записан.
   bool get canApply => hasFreeSlots && !isApplied;
+
+  /// Проходит ли исполнитель по рейтингу.
+  /// Рейтинг здесь не украшение профиля, а **допуск**: часть заказчиков
+  /// не берёт людей ниже определённой оценки.
+  bool ratingAllows(double rating) =>
+      minRating == null || rating >= minRating!;
 
   /// Момент начала смены — дата и время вместе.
   DateTime get startsAt => DateTime(
@@ -277,6 +286,8 @@ List<Shift> buildDemoShifts() {
       ],
       dressCode: 'Опрятный внешний вид. Форму выдадим на месте.',
       payoutDelayDays: 2,
+      // Этот заказчик берёт только проверенных исполнителей.
+      minRating: 4.5,
     ),
   ];
 }

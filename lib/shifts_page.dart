@@ -1,19 +1,27 @@
 import 'package:flutter/material.dart';
 
+import 'data/session.dart';
+import 'data/shift_filter.dart';
 import 'data/shift_repository.dart';
 import 'shift.dart';
 import 'shift_detail_page.dart';
 import 'theme/app_colors.dart';
 import 'widgets/common.dart';
 import 'widgets/date_strip.dart';
+import 'widgets/filter_sheet.dart';
 import 'widgets/shift_card.dart';
 import 'widgets/stories_row.dart';
 
 /// Главный экран: подсказки, полоса дат и список смен.
 class ShiftsPage extends StatefulWidget {
   final ShiftRepository repository;
+  final AppSession session;
 
-  const ShiftsPage({super.key, required this.repository});
+  const ShiftsPage({
+    super.key,
+    required this.repository,
+    required this.session,
+  });
 
   @override
   State<ShiftsPage> createState() => _ShiftsPageState();
@@ -30,6 +38,11 @@ class _ShiftsPageState extends State<ShiftsPage> {
   /// Это разные состояния, и показывать их надо по-разному.
   List<Shift>? shifts;
   Set<DateTime> daysWithShifts = {};
+  List<String> companies = [];
+
+  /// Текущие настройки ленты. Хранятся одним объектом — так их проще
+  /// передать в окно фильтра и вернуть обратно.
+  ShiftFilter filter = const ShiftFilter();
 
   @override
   void initState() {
@@ -47,8 +60,12 @@ class _ShiftsPageState extends State<ShiftsPage> {
   /// `async`/`await` — это про ожидание: запрос к базе занимает время,
   /// и `await` говорит «подожди ответа, но не морозь при этом экран».
   Future<void> _load() async {
-    final loaded = await widget.repository.shiftsOn(dayAt(selectedDay));
+    final loaded = await widget.repository.shiftsOn(
+      dayAt(selectedDay),
+      filter: filter,
+    );
     final days = await widget.repository.daysWithShifts();
+    final names = await widget.repository.companies();
 
     // Пока мы ждали ответа, пользователь мог уйти с экрана.
     // Тогда обновлять уже нечего — и Flutter ругнётся, если попробовать.
@@ -57,7 +74,24 @@ class _ShiftsPageState extends State<ShiftsPage> {
     setState(() {
       shifts = loaded;
       daysWithShifts = days;
+      companies = names;
     });
+  }
+
+  /// Открыть окно фильтра и применить выбранное.
+  Future<void> _openFilter() async {
+    final result = await showFilterSheet(
+      context,
+      current: filter,
+      companies: companies,
+    );
+    if (result == null || !mounted) return;
+
+    setState(() {
+      filter = result;
+      shifts = null;
+    });
+    await _load();
   }
 
   void _selectDay(int day) {
@@ -76,6 +110,7 @@ class _ShiftsPageState extends State<ShiftsPage> {
         builder: (_) => ShiftDetailPage(
           shiftId: shift.id,
           repository: widget.repository,
+          session: widget.session,
         ),
       ),
     );
@@ -107,15 +142,26 @@ class _ShiftsPageState extends State<ShiftsPage> {
             hasShiftsOn: (date) => daysWithShifts.contains(date),
             onDaySelected: _selectDay,
           ),
-          _ListHeader(date: selectedDate, count: list?.length),
+          _ListHeader(
+            date: selectedDate,
+            count: list?.length,
+            filter: filter,
+            onFilterTap: _openFilter,
+          ),
           Expanded(
             child: switch (list) {
               null => const Center(child: CircularProgressIndicator()),
-              [] => const EmptyState(
-                  icon: Icons.event_busy_rounded,
-                  title: 'На этот день смен нет',
-                  subtitle: 'Выберите другую дату — зелёная точка\n'
-                      'под числом означает, что смены есть',
+              [] => EmptyState(
+                  icon: filter.isEmpty
+                      ? Icons.event_busy_rounded
+                      : Icons.filter_alt_off_rounded,
+                  title: filter.isEmpty
+                      ? 'На этот день смен нет'
+                      : 'Ничего не найдено',
+                  subtitle: filter.isEmpty
+                      ? 'Выберите другую дату — зелёная точка\n'
+                          'под числом означает, что смены есть'
+                      : 'Попробуйте убрать часть условий\nв фильтре',
                 ),
               final items => RefreshIndicator(
                   onRefresh: _load,
@@ -124,6 +170,7 @@ class _ShiftsPageState extends State<ShiftsPage> {
                     itemCount: items.length,
                     itemBuilder: (context, index) => ShiftCard(
                       shift: items[index],
+                      userRating: widget.session.rating,
                       onTap: () => _openShift(items[index]),
                     ),
                   ),
@@ -136,12 +183,19 @@ class _ShiftsPageState extends State<ShiftsPage> {
   }
 }
 
-/// Строка над списком: какая дата выбрана и сколько смен найдено.
+/// Строка над списком: дата, число смен и кнопка фильтра.
 class _ListHeader extends StatelessWidget {
   final DateTime date;
   final int? count;
+  final ShiftFilter filter;
+  final VoidCallback onFilterTap;
 
-  const _ListHeader({required this.date, required this.count});
+  const _ListHeader({
+    required this.date,
+    required this.count,
+    required this.filter,
+    required this.onFilterTap,
+  });
 
   String get _countLabel {
     final c = count;
@@ -157,10 +211,11 @@ class _ListHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final active = filter.activeCount;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Flexible(
             child: Text(
@@ -179,7 +234,65 @@ class _ListHeader extends StatelessWidget {
               color: AppColors.muted,
             ),
           ),
+          const Spacer(),
+          _FilterButton(activeCount: active, onTap: onFilterTap),
         ],
+      ),
+    );
+  }
+}
+
+/// Кнопка фильтра. Если что-то выбрано — показываем это числом,
+/// чтобы пользователь не гадал, почему список короткий.
+class _FilterButton extends StatelessWidget {
+  final int activeCount;
+  final VoidCallback onTap;
+
+  const _FilterButton({required this.activeCount, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final on = activeCount > 0;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: on
+              ? AppColors.brand
+              : (isDark ? AppColors.darkSurface : Colors.white),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: on
+                ? AppColors.brand
+                : (isDark ? AppColors.darkBorder : AppColors.border),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.tune_rounded,
+              size: 16,
+              color: on
+                  ? Colors.white
+                  : Theme.of(context).colorScheme.onSurface,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              on ? 'Фильтр · $activeCount' : 'Фильтр',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: on
+                    ? Colors.white
+                    : Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

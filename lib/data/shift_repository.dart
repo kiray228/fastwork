@@ -2,20 +2,8 @@ import 'package:drift/drift.dart';
 
 import '../shift.dart';
 import 'database.dart';
-
-/// Мы пока один пользователь приложения. Настоящей регистрации ещё нет.
-const currentWorkerId = 1;
-
-// ---------------------------------------------------------------------------
-// ИНТЕРФЕЙС
-//
-// Здесь описано, ЧТО умеет хранилище смен, но не сказано КАК.
-// Экраны работают только с этим описанием и не знают, лежат данные
-// в SQLite, на сервере или просто в памяти.
-//
-// Это и есть тот самый приём из Clean Architecture: экран зависит от
-// описания, а не от конкретной базы. Заменим базу — экраны не изменятся.
-// ---------------------------------------------------------------------------
+import 'session.dart';
+import 'shift_filter.dart';
 
 /// Чем закончилась попытка записаться или отменить запись.
 ///
@@ -25,18 +13,30 @@ enum BookingResult {
   ok,
   noSlots, // мест уже нет
   alreadyBooked, // уже записан
+  ratingTooLow, // рейтинг ниже порога заказчика
   tooLateToCancel, // срок отмены прошёл
   notFound,
 }
 
+// ---------------------------------------------------------------------------
+// ИНТЕРФЕЙС
+//
+// Здесь описано, ЧТО умеет хранилище смен, но не сказано КАК.
+// Экраны работают только с этим описанием и не знают, лежат данные
+// в SQLite, на сервере или просто в памяти.
+// ---------------------------------------------------------------------------
+
 abstract class ShiftRepository {
-  /// Смены на конкретный день.
-  Future<List<Shift>> shiftsOn(DateTime date);
+  /// Смены на конкретный день с учётом фильтра и сортировки.
+  Future<List<Shift>> shiftsOn(DateTime date, {ShiftFilter filter});
 
   /// В какие дни вообще есть смены — для точек в полосе дат.
   Future<Set<DateTime>> daysWithShifts();
 
-  /// Одна смена по её номеру (после отклика нужно перечитать свежие данные).
+  /// Список компаний — чтобы построить фильтр.
+  Future<List<String>> companies();
+
+  /// Одна смена по её номеру.
   Future<Shift?> shiftById(int id);
 
   /// Записаться на смену.
@@ -49,14 +49,45 @@ abstract class ShiftRepository {
   Future<List<Shift>> myShifts({required bool archived});
 }
 
+/// Фильтрация и сортировка, общие для всех реализаций хранилища.
+///
+/// Почему не в SQL? Сумма за смену **вычисляется** из ставки, времени и
+/// перерыва, и свободные места тоже считаются. Повторять эти формулы в
+/// SQL значило бы держать правило в двух местах — и однажды они разойдутся.
+List<Shift> applyFilter(List<Shift> shifts, ShiftFilter filter) {
+  var result = shifts;
+
+  if (filter.companies.isNotEmpty) {
+    result =
+        result.where((s) => filter.companies.contains(s.company)).toList();
+  }
+  if (filter.onlyOpen) {
+    result = result.where((s) => s.hasFreeSlots).toList();
+  }
+
+  result = [...result];
+  switch (filter.sort) {
+    case ShiftSort.byTime:
+      result.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+    case ShiftSort.payDesc:
+      result.sort((a, b) => b.totalPay.compareTo(a.totalPay));
+    case ShiftSort.payAsc:
+      result.sort((a, b) => a.totalPay.compareTo(b.totalPay));
+  }
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // РЕАЛИЗАЦИЯ НА SQLite
 // ---------------------------------------------------------------------------
 
 class DbShiftRepository implements ShiftRepository {
   final AppDatabase db;
+  final AppSession session;
 
-  DbShiftRepository(this.db);
+  DbShiftRepository(this.db, this.session);
+
+  int get _workerId => session.workerId;
 
   /// Подзапрос: сколько человек уже набрано на смену.
   /// Считаем только активные отклики — отменённые место не занимают.
@@ -64,10 +95,10 @@ class DbShiftRepository implements ShiftRepository {
     (SELECT COUNT(*) FROM application_rows a
       WHERE a.shift_id = s.id AND a.status = 'active') AS hired''';
 
-  /// Подзапрос: откликнулся ли на эту смену текущий пользователь.
-  static const _myStatusSql = '''
+  /// Подзапрос: записан ли на эту смену текущий пользователь.
+  String get _myStatusSql => '''
     (SELECT a2.status FROM application_rows a2
-      WHERE a2.shift_id = s.id AND a2.worker_id = $currentWorkerId)
+      WHERE a2.shift_id = s.id AND a2.worker_id = $_workerId)
       AS my_status''';
 
   /// Превращаем строку из базы в объект `Shift`, с которым работают экраны.
@@ -90,13 +121,17 @@ class DbShiftRepository implements ShiftRepository {
         employerComment: row.readNullable<String>('employer_comment'),
         payoutDelayDays: row.read<int>('payout_delay_days'),
         cancelDeadlineHours: row.read<int>('cancel_deadline_hours'),
+        minRating: row.readNullable<double>('min_rating'),
       );
 
   static List<String> _splitDuties(String raw) =>
       raw.isEmpty ? const [] : raw.split('\n');
 
   @override
-  Future<List<Shift>> shiftsOn(DateTime date) async {
+  Future<List<Shift>> shiftsOn(
+    DateTime date, {
+    ShiftFilter filter = const ShiftFilter(),
+  }) async {
     final from = DateTime(date.year, date.month, date.day);
     final to = from.add(const Duration(days: 1));
 
@@ -106,13 +141,12 @@ class DbShiftRepository implements ShiftRepository {
       SELECT s.*, $_hiredSql, $_myStatusSql
       FROM shift_rows s
       WHERE s.work_date >= ? AND s.work_date < ?
-      ORDER BY s.start_minutes
       ''',
       variables: [Variable.withDateTime(from), Variable.withDateTime(to)],
       readsFrom: {db.shiftRows, db.applicationRows},
     ).get();
 
-    return rows.map(_toShift).toList();
+    return applyFilter(rows.map(_toShift).toList(), filter);
   }
 
   @override
@@ -126,6 +160,15 @@ class DbShiftRepository implements ShiftRepository {
       final d = r.read<DateTime>('work_date');
       return DateTime(d.year, d.month, d.day);
     }).toSet();
+  }
+
+  @override
+  Future<List<String>> companies() async {
+    final rows = await db.customSelect(
+      'SELECT DISTINCT company FROM shift_rows ORDER BY company',
+      readsFrom: {db.shiftRows},
+    ).get();
+    return rows.map((r) => r.read<String>('company')).toList();
   }
 
   @override
@@ -148,12 +191,14 @@ class DbShiftRepository implements ShiftRepository {
       final shift = await shiftById(shiftId);
       if (shift == null) return BookingResult.notFound;
       if (shift.isApplied) return BookingResult.alreadyBooked;
+      if (!shift.ratingAllows(session.rating)) {
+        return BookingResult.ratingTooLow;
+      }
       if (!shift.hasFreeSlots) return BookingResult.noSlots;
 
       final existing = await (db.select(db.applicationRows)
             ..where((a) =>
-                a.shiftId.equals(shiftId) &
-                a.workerId.equals(currentWorkerId)))
+                a.shiftId.equals(shiftId) & a.workerId.equals(_workerId)))
           .getSingleOrNull();
 
       if (existing != null) {
@@ -169,7 +214,7 @@ class DbShiftRepository implements ShiftRepository {
       await db.into(db.applicationRows).insert(
             ApplicationRowsCompanion.insert(
               shiftId: shiftId,
-              workerId: currentWorkerId,
+              workerId: _workerId,
               status: ApplicationStatus.active,
               createdAt: DateTime.now(),
             ),
@@ -192,7 +237,7 @@ class DbShiftRepository implements ShiftRepository {
 
     await (db.update(db.applicationRows)
           ..where((a) =>
-              a.shiftId.equals(shiftId) & a.workerId.equals(currentWorkerId)))
+              a.shiftId.equals(shiftId) & a.workerId.equals(_workerId)))
         .write(const ApplicationRowsCompanion(
       status: Value(ApplicationStatus.cancelled),
     ));
@@ -205,8 +250,6 @@ class DbShiftRepository implements ShiftRepository {
     final today = DateTime(now.year, now.month, now.day);
 
     // «Архив» — не отдельная таблица, а другое условие в том же запросе.
-    // В работе: отклик активен и смена ещё не прошла.
-    // Архив: всё остальное.
     final condition = archived
         ? "(a.status != 'active' OR s.work_date < ?)"
         : "(a.status = 'active' AND s.work_date >= ?)";
@@ -216,7 +259,7 @@ class DbShiftRepository implements ShiftRepository {
       SELECT s.*, $_hiredSql, $_myStatusSql
       FROM application_rows a
       JOIN shift_rows s ON s.id = a.shift_id
-      WHERE a.worker_id = $currentWorkerId AND $condition
+      WHERE a.worker_id = $_workerId AND $condition
       ORDER BY s.work_date ${archived ? 'DESC' : 'ASC'}, s.start_minutes
       ''',
       variables: [Variable.withDateTime(today)],
@@ -249,11 +292,12 @@ class DbShiftRepository implements ShiftRepository {
               employerComment: Value(demo.employerComment),
               payoutDelayDays: Value(demo.payoutDelayDays),
               cancelDeadlineHours: Value(demo.cancelDeadlineHours),
+              minRating: Value(demo.minRating),
             ),
           );
 
       // Часть мест уже занята другими работниками — заводим их отклики.
-      // Номера с 100-го, чтобы не пересекаться с текущим пользователем.
+      // Номера с 100-го, чтобы не пересекаться с настоящими пользователями.
       for (var i = 0; i < demo.workersHired; i++) {
         await db.into(db.applicationRows).insert(
               ApplicationRowsCompanion.insert(

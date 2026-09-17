@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'data/auth_repository.dart';
+import 'data/session.dart';
 import 'data/shift_repository.dart';
 import 'my_shifts_page.dart';
 import 'profile_page.dart';
@@ -8,9 +10,16 @@ import 'theme/app_colors.dart';
 
 /// Каркас приложения: нижнее меню и три раздела.
 class HomeShell extends StatefulWidget {
-  final ShiftRepository repository;
+  final AppSession session;
+  final ShiftRepository shifts;
+  final AuthRepository auth;
 
-  const HomeShell({super.key, required this.repository});
+  const HomeShell({
+    super.key,
+    required this.session,
+    required this.shifts,
+    required this.auth,
+  });
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -26,9 +35,9 @@ class _HomeShellState extends State<HomeShell> {
     // Создаём экран заново при каждом переключении вкладки —
     // так «Мои подработки» всегда показывают свежие данные из базы.
     final page = switch (index) {
-      0 => ShiftsPage(repository: widget.repository),
-      1 => MyShiftsPage(repository: widget.repository),
-      _ => const ProfilePage(),
+      0 => ShiftsPage(repository: widget.shifts, session: widget.session),
+      1 => MyShiftsPage(repository: widget.shifts, session: widget.session),
+      _ => ProfilePage(session: widget.session, auth: widget.auth),
     };
 
     return Scaffold(
