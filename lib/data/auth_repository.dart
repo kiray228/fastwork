@@ -54,12 +54,31 @@ class DbAuthRepository implements AuthRepository {
       readsFrom: {db.applicationRows, db.shiftRows},
     ).get();
 
+    // А вот и главное изменение: рейтинг больше не берётся из колонки.
+    //
+    // Колонка `rating` осталась, но теперь она значит «стартовый рейтинг»:
+    // им пользуемся, пока о человеке нет ни одного отзыва. Как только
+    // заказчики начали ставить оценки — рейтинг считается по ним.
+    //
+    // Так рейтинг физически не может разойтись с отзывами: он и есть
+    // отзывы, свёрнутые в одно число.
+    final rating = await db.customSelect(
+      '''
+      SELECT AVG(rating) AS avg_rating, COUNT(*) AS cnt
+      FROM worker_review_rows
+      WHERE worker_id = ?
+      ''',
+      variables: [Variable.withInt(row.id)],
+      readsFrom: {db.workerReviewRows},
+    ).getSingle();
+
     return AppUser(
       id: row.id,
       phone: row.phone,
       fullName: row.fullName,
       city: row.city,
-      rating: row.rating,
+      rating: rating.readNullable<double>('avg_rating') ?? row.rating,
+      ratingCount: rating.read<int>('cnt'),
       isVerified: row.isVerified,
       role: row.role,
       company: row.company,

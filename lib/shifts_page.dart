@@ -6,10 +6,13 @@ import 'data/shift_repository.dart';
 import 'shift.dart';
 import 'shift_detail_page.dart';
 import 'theme/app_colors.dart';
+import 'widgets/async_state.dart';
 import 'widgets/common.dart';
 import 'widgets/date_strip.dart';
 import 'widgets/filter_sheet.dart';
+import 'widgets/nav.dart';
 import 'widgets/shift_card.dart';
+import 'widgets/skeleton.dart';
 import 'widgets/stories_row.dart';
 
 /// Главный экран: подсказки, полоса дат и список смен.
@@ -34,9 +37,11 @@ class _ShiftsPageState extends State<ShiftsPage> {
 
   int selectedDay = 0;
 
-  /// null означает «ещё грузим». Пустой список — «смен нет».
-  /// Это разные состояния, и показывать их надо по-разному.
-  List<Shift>? shifts;
+  /// Три состояния вместо «списка или null»: грузим, получилось, сбой.
+  /// Раньше при ошибке базы экран навсегда застревал на кружке — теперь
+  /// он покажет, что случилось, и предложит повторить.
+  Async<List<Shift>> state = const Loading();
+
   Set<DateTime> daysWithShifts = {};
   List<String> companies = [];
 
@@ -60,22 +65,37 @@ class _ShiftsPageState extends State<ShiftsPage> {
   /// `async`/`await` — это про ожидание: запрос к базе занимает время,
   /// и `await` говорит «подожди ответа, но не морозь при этом экран».
   Future<void> _load() async {
-    final loaded = await widget.repository.shiftsOn(
-      dayAt(selectedDay),
-      filter: filter,
-    );
-    final days = await widget.repository.daysWithShifts();
-    final names = await widget.repository.companies();
+    final result = await load(() async {
+      final loaded = await widget.repository.shiftsOn(
+        dayAt(selectedDay),
+        filter: filter,
+      );
+      final days = await widget.repository.daysWithShifts();
+      final names = await widget.repository.companies();
+      return (loaded, days, names);
+    });
 
     // Пока мы ждали ответа, пользователь мог уйти с экрана.
     // Тогда обновлять уже нечего — и Flutter ругнётся, если попробовать.
     if (!mounted) return;
 
     setState(() {
-      shifts = loaded;
-      daysWithShifts = days;
-      companies = names;
+      switch (result) {
+        case Ready(value: (final loaded, final days, final names)):
+          state = Ready(loaded);
+          daysWithShifts = days;
+          companies = names;
+        case Failed(:final error):
+          state = Failed(error);
+        case Loading():
+          break;
+      }
     });
+  }
+
+  void _retry() {
+    setState(() => state = const Loading());
+    _load();
   }
 
   /// Открыть окно фильтра и применить выбранное.
@@ -89,7 +109,7 @@ class _ShiftsPageState extends State<ShiftsPage> {
 
     setState(() {
       filter = result;
-      shifts = null;
+      state = const Loading();
     });
     await _load();
   }
@@ -97,17 +117,17 @@ class _ShiftsPageState extends State<ShiftsPage> {
   void _selectDay(int day) {
     setState(() {
       selectedDay = day;
-      shifts = null; // показываем «грузим», пока идёт запрос
+      state = const Loading(); // показываем скелет, пока идёт запрос
     });
     _load();
   }
 
   /// Открыть экран «Подробнее» и обновить список после возврата:
-  /// пользователь мог оставить заявку, и число свободных мест изменилось.
+  /// пользователь мог записаться, и число свободных мест изменилось.
   Future<void> _openShift(Shift shift) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ShiftDetailPage(
+      appRoute(
+        ShiftDetailPage(
           shiftId: shift.id,
           repository: widget.repository,
           session: widget.session,
@@ -119,8 +139,11 @@ class _ShiftsPageState extends State<ShiftsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final list = shifts;
     final selectedDate = dayAt(selectedDay);
+    final count = switch (state) {
+      Ready(:final value) => value.length,
+      _ => null,
+    };
 
     return Scaffold(
       appBar: AppBar(
@@ -144,38 +167,51 @@ class _ShiftsPageState extends State<ShiftsPage> {
           ),
           _ListHeader(
             date: selectedDate,
-            count: list?.length,
+            count: count,
             filter: filter,
             onFilterTap: _openFilter,
           ),
           Expanded(
-            child: switch (list) {
-              null => const Center(child: CircularProgressIndicator()),
-              [] => EmptyState(
-                  icon: filter.isEmpty
-                      ? Icons.event_busy_rounded
-                      : Icons.filter_alt_off_rounded,
-                  title: filter.isEmpty
-                      ? 'На этот день смен нет'
-                      : 'Ничего не найдено',
-                  subtitle: filter.isEmpty
-                      ? 'Выберите другую дату — зелёная точка\n'
-                          'под числом означает, что смены есть'
-                      : 'Попробуйте убрать часть условий\nв фильтре',
-                ),
-              final items => RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                    itemCount: items.length,
-                    itemBuilder: (context, index) => ShiftCard(
-                      shift: items[index],
-                      userRating: widget.session.rating,
-                      onTap: () => _openShift(items[index]),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 260),
+              child: switch (state) {
+                Loading() => const ShiftListSkeleton(),
+                Failed(:final error) => ErrorView(
+                    message: describeError(error),
+                    onRetry: _retry,
+                  ),
+                Ready(value: []) => EmptyState(
+                    icon: filter.isEmpty
+                        ? Icons.event_busy_rounded
+                        : Icons.filter_alt_off_rounded,
+                    title: filter.isEmpty
+                        ? 'На этот день смен нет'
+                        : 'Ничего не найдено',
+                    subtitle: filter.isEmpty
+                        ? 'Выберите другую дату — зелёная точка\n'
+                            'под числом означает, что смены есть'
+                        : 'Попробуйте убрать часть условий\nв фильтре',
+                  ),
+                Ready(:final value) => RefreshIndicator(
+                    onRefresh: _load,
+                    // Ключ по дню: при смене даты AnimatedSwitcher видит
+                    // новый список и проигрывает появление заново.
+                    key: ValueKey(selectedDay),
+                    child: ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                      itemCount: value.length,
+                      itemBuilder: (context, index) => AnimatedEntrance(
+                        index: index,
+                        child: ShiftCard(
+                          shift: value[index],
+                          userRating: widget.session.rating,
+                          onTap: () => _openShift(value[index]),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-            },
+              },
+            ),
           ),
         ],
       ),

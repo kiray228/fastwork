@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'data/shift_repository.dart';
 import 'shift.dart';
 import 'theme/app_colors.dart';
+import 'widgets/async_state.dart';
 import 'widgets/common.dart';
+import 'widgets/skeleton.dart';
 
 /// Кошелёк — витрина.
 ///
@@ -23,7 +25,7 @@ class WalletPage extends StatefulWidget {
 }
 
 class _WalletPageState extends State<WalletPage> {
-  List<Shift>? earned;
+  Async<List<Shift>> state = const Loading();
 
   @override
   void initState() {
@@ -32,9 +34,9 @@ class _WalletPageState extends State<WalletPage> {
   }
 
   Future<void> _load() async {
-    final loaded = await widget.repository.completedShifts();
+    final result = await load(widget.repository.completedShifts);
     if (!mounted) return;
-    setState(() => earned = loaded);
+    setState(() => state = result);
   }
 
   void _notImplemented() {
@@ -47,7 +49,23 @@ class _WalletPageState extends State<WalletPage> {
 
   @override
   Widget build(BuildContext context) {
-    final list = earned;
+    if (state case Failed(:final error)) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Выплаты')),
+        body: ErrorView(
+          message: describeError(error),
+          onRetry: () {
+            setState(() => state = const Loading());
+            _load();
+          },
+        ),
+      );
+    }
+
+    final list = switch (state) {
+      Ready(:final value) => value,
+      _ => null,
+    };
     final total = list == null
         ? 0
         : list.fold<int>(0, (sum, shift) => sum + shift.totalPay);
@@ -55,7 +73,7 @@ class _WalletPageState extends State<WalletPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Выплаты')),
       body: list == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const TileListSkeleton(count: 3)
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
               children: [
@@ -132,8 +150,11 @@ class _BalanceCard extends StatelessWidget {
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
-                  child: Text(
-                    formatMoney(total),
+                  // Сумма не появляется готовой, а докручивается от нуля:
+                  // так виден результат работы, а не просто число.
+                  child: AnimatedNumber(
+                    value: total,
+                    format: formatMoney,
                     style: text.displaySmall
                         ?.copyWith(fontSize: 38, color: Colors.white),
                   ),

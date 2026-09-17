@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fastwork/main.dart';
@@ -6,8 +9,11 @@ import 'package:fastwork/data/database.dart';
 import 'package:fastwork/data/fake_shift_repository.dart';
 import 'package:fastwork/data/repositories.dart';
 import 'package:fastwork/data/session.dart';
+import 'package:fastwork/data/shift_filter.dart';
 import 'package:fastwork/data/support_repository.dart';
+import 'package:fastwork/shift.dart';
 import 'package:fastwork/user.dart';
+import 'package:fastwork/widgets/skeleton.dart';
 
 /// Проверяем экраны целиком — как будто пользователь тыкает пальцем,
 /// только очень быстро.
@@ -494,6 +500,183 @@ void main() {
     });
   });
 
+  /// Прошедшая смена, созданная нашим заказчиком, — по ней будет оценка.
+  FakeShiftRepository managerRepo() {
+    final now = DateTime.now();
+    return FakeShiftRepository(
+      shifts: [
+        Shift(
+          id: 1,
+          workDate: DateTime(now.year, now.month, now.day - 2),
+          title: 'Услуги фасовщика',
+          company: 'Magnum',
+          address: 'г. Алматы, ул. Абая, 1',
+          startMinutes: 600,
+          endMinutes: 1200,
+          hourlyRate: 100000,
+          workersNeeded: 2,
+          workersHired: 1,
+          createdBy: 1,
+        ),
+      ],
+    );
+  }
+
+  group('оценки исполнителей', () {
+    testWidgets('заказчик видит, кого нужно оценить', (tester) async {
+      await openApp(
+        tester,
+        role: UserRole.manager,
+        repos: buildRepos(
+          shifts: managerRepo(),
+          signedIn: testUser(role: UserRole.manager),
+        ),
+      );
+
+      await tester.tap(find.text('Оценки'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ернар Калдыбеков'), findsOneWidget);
+      expect(find.text('Оценить'), findsOneWidget);
+    });
+
+    testWidgets('после оценки список пустеет', (tester) async {
+      final shifts = managerRepo();
+      await openApp(
+        tester,
+        role: UserRole.manager,
+        repos: buildRepos(
+          shifts: shifts,
+          signedIn: testUser(role: UserRole.manager),
+        ),
+      );
+
+      await tester.tap(find.text('Оценки'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Ернар Калдыбеков'));
+      await tester.pumpAndSettle();
+      expect(find.text('Оцените исполнителя'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.star_outline_rounded).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Поставить оценку'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Все оценены'), findsOneWidget);
+
+      // И оценка действительно записана.
+      final received = await shifts.reviewsAbout(1);
+      expect(received, hasLength(1));
+      expect(received.first.rating, 5);
+    });
+
+    testWidgets('без оценок исполнитель видит пустой экран отзывов',
+        (tester) async {
+      await openApp(tester);
+
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Отзывы обо мне'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Отзывов пока нет'), findsOneWidget);
+    });
+
+    testWidgets('полученный отзыв виден исполнителю', (tester) async {
+      final shifts = managerRepo();
+      await shifts.rateWorker(
+        shiftId: 1,
+        workerId: 1,
+        rating: 4,
+        comment: 'Работал аккуратно',
+      );
+
+      await openApp(
+        tester,
+        repos: buildRepos(shifts: shifts, signedIn: testUser()),
+      );
+
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Отзывы обо мне'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Работал аккуратно'), findsOneWidget);
+      // Средняя оценка посчитана из самих отзывов.
+      expect(find.text('4.0'), findsOneWidget);
+    });
+
+    testWidgets('пока оценок нет, рейтинг подписан как стартовый',
+        (tester) async {
+      await openApp(tester);
+
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Стартовый'), findsOneWidget);
+    });
+  });
+
+  group('сбои и загрузка', () {
+    testWidgets('пока данные едут, видно скелет, а не пустоту',
+        (tester) async {
+      useTallPhone(tester);
+      final slow = SlowShiftRepository();
+      final user = testUser();
+      final session = AppSession()..setUser(user);
+
+      await tester.pumpWidget(FastworkApp(
+        session: session,
+        repos: buildRepos(shifts: slow, signedIn: user),
+      ));
+      // Один кадр — ответа ещё нет.
+      await tester.pump();
+
+      expect(find.byType(ShiftListSkeleton), findsOneWidget);
+      expect(find.text('Подробнее'), findsNothing);
+
+      // «Ответ пришёл».
+      slow.release();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ShiftListSkeleton), findsNothing);
+      expect(find.text('Подробнее'), findsWidgets);
+    });
+
+    testWidgets('сбой хранилища показывает ошибку и кнопку повтора',
+        (tester) async {
+      final broken = BrokenShiftRepository();
+      await openApp(
+        tester,
+        repos: buildRepos(shifts: broken, signedIn: testUser()),
+      );
+
+      expect(find.text('Не получилось загрузить'), findsOneWidget);
+      expect(
+        find.text('Нет связи с сервером. Проверьте интернет и попробуйте снова.'),
+        findsOneWidget,
+      );
+      expect(find.text('Повторить'), findsOneWidget);
+    });
+
+    testWidgets('повтор после починки показывает смены', (tester) async {
+      final broken = BrokenShiftRepository();
+      await openApp(
+        tester,
+        repos: buildRepos(shifts: broken, signedIn: testUser()),
+      );
+
+      // «Сеть починилась» — и кнопка повтора действительно перезагружает.
+      broken.working = true;
+      await tester.tap(find.text('Повторить'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Не получилось загрузить'), findsNothing);
+      expect(find.text('Подробнее'), findsWidgets);
+    });
+  });
+
   group('профиль', () {
     testWidgets('показывает данные пользователя', (tester) async {
       await openApp(tester);
@@ -520,4 +703,44 @@ void main() {
       expect(find.text('Начать работать'), findsOneWidget);
     });
   });
+}
+
+/// Хранилище, которое ломается — чтобы проверить экран ошибки.
+///
+/// Так тестируют сбои: не ждут настоящего обрыва сети, а подсовывают
+/// приложению хранилище, которое гарантированно падает. Ещё одна причина,
+/// по которой экраны работают с интерфейсом, а не с конкретной базой.
+class BrokenShiftRepository extends FakeShiftRepository {
+  bool working = false;
+
+  @override
+  Future<List<Shift>> shiftsOn(
+    DateTime date, {
+    ShiftFilter filter = const ShiftFilter(),
+  }) {
+    if (!working) {
+      throw const SocketException('Failed host lookup: api.fastwork.kz');
+    }
+    return super.shiftsOn(date, filter: filter);
+  }
+}
+
+/// Хранилище, которое отвечает не сразу — чтобы поймать момент загрузки.
+///
+/// Обычные фейки отвечают мгновенно, и экран «грузим» промелькивает за
+/// доли кадра: проверить его нечем. Здесь ответ висит, пока тест сам не
+/// разрешит его отдать.
+class SlowShiftRepository extends FakeShiftRepository {
+  final _gate = Completer<void>();
+
+  void release() => _gate.complete();
+
+  @override
+  Future<List<Shift>> shiftsOn(
+    DateTime date, {
+    ShiftFilter filter = const ShiftFilter(),
+  }) async {
+    await _gate.future;
+    return super.shiftsOn(date, filter: filter);
+  }
 }

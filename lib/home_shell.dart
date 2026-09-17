@@ -4,6 +4,7 @@ import 'data/repositories.dart';
 import 'data/session.dart';
 import 'manager/create_shift_page.dart';
 import 'manager/manager_shifts_page.dart';
+import 'manager/rate_workers_page.dart';
 import 'my_shifts_page.dart';
 import 'profile_page.dart';
 import 'shifts_page.dart';
@@ -38,6 +39,22 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
+  /// Переключение вкладки — заодно перечитываем пользователя из базы.
+  ///
+  /// Рейтинг и число отработанных смен считаются запросом, а не лежат
+  /// в объекте `AppUser`. Значит, объект в памяти устаревает: заказчик
+  /// поставил оценку — рейтинг в базе изменился, а на экране нет.
+  /// Перечитывание при переходе решает это без всяких подписок.
+  Future<void> _openTab(int value) async {
+    setState(() => index = value);
+
+    final user = widget.session.user;
+    if (user == null) return;
+
+    final fresh = await widget.repos.auth.refresh(user.id);
+    if (fresh != null && mounted) widget.session.setUser(fresh);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -57,6 +74,10 @@ class _HomeShellState extends State<HomeShell> {
             repository: widget.repos.shifts,
             onCreated: () => setState(() => index = 0),
           ),
+        2 => RateWorkersPage(
+            session: widget.session,
+            repository: widget.repos.shifts,
+          ),
         _ => ProfilePage(session: widget.session, repos: widget.repos),
       };
     } else {
@@ -74,7 +95,13 @@ class _HomeShellState extends State<HomeShell> {
     }
 
     return Scaffold(
-      body: page,
+      // Вкладки не переключаются рывком: старая растворяется, новая
+      // проявляется. `KeyedSubtree` с ключом-номером нужен, чтобы
+      // AnimatedSwitcher понял, что перед ним именно другой экран.
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        child: KeyedSubtree(key: ValueKey(index), child: page),
+      ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
@@ -91,7 +118,7 @@ class _HomeShellState extends State<HomeShell> {
           surfaceTintColor: Colors.transparent,
           indicatorColor: AppColors.brand.withValues(alpha: 0.12),
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          onDestinationSelected: (i) => setState(() => index = i),
+          onDestinationSelected: _openTab,
           destinations: isManager
               ? const [
                   NavigationDestination(
@@ -109,6 +136,14 @@ class _HomeShellState extends State<HomeShell> {
                       color: AppColors.brand,
                     ),
                     label: 'Создать',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.star_outline_rounded),
+                    selectedIcon: Icon(
+                      Icons.star_rounded,
+                      color: AppColors.brand,
+                    ),
+                    label: 'Оценки',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.person_outline_rounded),

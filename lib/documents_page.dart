@@ -5,6 +5,7 @@ import 'data/support_repository.dart';
 import 'support.dart';
 import 'theme/app_colors.dart';
 import 'widgets/common.dart';
+import 'widgets/skeleton.dart';
 
 /// Документы исполнителя и их проверка.
 class DocumentsPage extends StatefulWidget {
@@ -127,7 +128,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Документы')),
       body: list == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const TileListSkeleton(count: 2)
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
               children: [

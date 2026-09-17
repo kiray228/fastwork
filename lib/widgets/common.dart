@@ -271,3 +271,132 @@ class EmptyState extends StatelessWidget {
     );
   }
 }
+
+/// Экран ошибки с кнопкой «Повторить».
+///
+/// Главное здесь — кнопка. Сообщение об ошибке без способа её исправить
+/// оставляет человека в тупике: он видит, что сломалось, и ничего не
+/// может сделать. Одна кнопка превращает тупик в неудобство.
+class ErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const ErrorView({super.key, required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 88,
+              height: 88,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.accent.withValues(alpha: 0.12),
+              ),
+              child: const Icon(
+                Icons.cloud_off_rounded,
+                size: 40,
+                color: AppColors.accent,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'Не получилось загрузить',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontSize: 18,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.muted, height: 1.4),
+            ),
+            const SizedBox(height: 20),
+            OutlinedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Повторить'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Плавное появление элемента списка: снизу вверх и из прозрачности.
+///
+/// `index` задаёт задержку, поэтому карточки появляются не разом, а
+/// волной — глаз успевает проследить за списком, и он ощущается живым.
+/// Задержку ограничиваем шестым элементом: на длинном списке ждать
+/// секунду недопустимо.
+///
+/// Задержка сделана без таймеров — через `Interval`. Анимация у всех
+/// карточек длится одинаково, но каждая следующая начинает двигаться
+/// чуть позже: до своего отрезка кривая держит значение на нуле.
+class AnimatedEntrance extends StatelessWidget {
+  final int index;
+  final Widget child;
+
+  const AnimatedEntrance({super.key, required this.index, required this.child});
+
+  static const _moveMs = 320;
+  static const _stepMs = 55;
+  static const _maxSteps = 6;
+  static const _totalMs = _moveMs + _stepMs * _maxSteps;
+
+  @override
+  Widget build(BuildContext context) {
+    final start = (_stepMs * index.clamp(0, _maxSteps)) / _totalMs;
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: _totalMs),
+      curve: Interval(start, start + _moveMs / _totalMs,
+          curve: Curves.easeOutCubic),
+      child: child,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: Transform.translate(
+          offset: Offset(0, 16 * (1 - t)),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+/// Число, которое «докручивается» до значения вместо мгновенной подстановки.
+///
+/// Сумма, выросшая на глазах, читается как результат — в отличие от числа,
+/// которое просто оказалось на экране.
+class AnimatedNumber extends StatelessWidget {
+  final int value;
+  final String Function(int) format;
+  final TextStyle? style;
+
+  const AnimatedNumber({
+    super.key,
+    required this.value,
+    required this.format,
+    this.style,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: value.toDouble()),
+      duration: const Duration(milliseconds: 700),
+      curve: Curves.easeOutCubic,
+      builder: (context, v, _) => Text(format(v.round()), style: style),
+    );
+  }
+}

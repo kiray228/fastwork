@@ -11,20 +11,55 @@ class ReviewInput {
   const ReviewInput({required this.rating, this.comment});
 }
 
-/// Окно «оцените место работы».
+/// Окно «оцените место работы» — его открывает исполнитель.
 Future<ReviewInput?> showReviewSheet(BuildContext context, Shift shift) {
+  return showRatingSheet(
+    context,
+    title: 'Как прошла смена?',
+    subtitle: '${shift.company} · ${shift.workDate.day} '
+        '${monthsShort[shift.workDate.month - 1]}',
+    hint: 'Что понравилось или нет? Это увидят другие исполнители',
+  );
+}
+
+/// Общее окно оценки: пять звёзд и необязательный комментарий.
+///
+/// Раньше это окно умело оценивать только смену и принимало `Shift`.
+/// Теперь оно принимает просто тексты, и тем же окном заказчик оценивает
+/// исполнителя. Приём обычный: как только код понадобился второй раз,
+/// из него убирают всё лишнее — и он начинает подходить обоим.
+Future<ReviewInput?> showRatingSheet(
+  BuildContext context, {
+  required String title,
+  required String subtitle,
+  required String hint,
+  String buttonLabel = 'Отправить отзыв',
+}) {
   return showModalBottomSheet<ReviewInput>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => _ReviewSheet(shift: shift),
+    builder: (_) => _ReviewSheet(
+      title: title,
+      subtitle: subtitle,
+      hint: hint,
+      buttonLabel: buttonLabel,
+    ),
   );
 }
 
 class _ReviewSheet extends StatefulWidget {
-  final Shift shift;
+  final String title;
+  final String subtitle;
+  final String hint;
+  final String buttonLabel;
 
-  const _ReviewSheet({required this.shift});
+  const _ReviewSheet({
+    required this.title,
+    required this.subtitle,
+    required this.hint,
+    required this.buttonLabel,
+  });
 
   @override
   State<_ReviewSheet> createState() => _ReviewSheetState();
@@ -81,14 +116,12 @@ class _ReviewSheetState extends State<_ReviewSheet> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Как прошла смена?',
+                    widget.title,
                     style: text.headlineSmall?.copyWith(fontSize: 21),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '${widget.shift.company} · '
-                    '${widget.shift.workDate.day} '
-                    '${monthsShort[widget.shift.workDate.month - 1]}',
+                    widget.subtitle,
                     style: const TextStyle(
                       fontSize: 13.5,
                       color: AppColors.muted,
@@ -133,8 +166,7 @@ class _ReviewSheetState extends State<_ReviewSheet> {
                     maxLines: 3,
                     maxLength: 300,
                     decoration: InputDecoration(
-                      hintText: 'Что понравилось или нет? '
-                          'Это увидят другие исполнители',
+                      hintText: widget.hint,
                       filled: true,
                       fillColor: isDark ? AppColors.darkBg : AppColors.bg,
                       border: OutlineInputBorder(
@@ -174,7 +206,7 @@ class _ReviewSheetState extends State<_ReviewSheet> {
                                           : commentController.text.trim(),
                                 ),
                               ),
-                      child: const Text('Отправить отзыв'),
+                      child: Text(widget.buttonLabel),
                     ),
                   ),
                 ],

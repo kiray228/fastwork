@@ -13,6 +13,10 @@ class AppUser {
   /// считается запросом по откликам. Вычисляемое не хранят.
   final int completedShifts;
 
+  /// Сколько оценок получил исполнитель. Ноль означает, что `rating` —
+  /// это стартовое значение из колонки, а не настоящая средняя оценка.
+  final int ratingCount;
+
   const AppUser({
     required this.id,
     required this.phone,
@@ -23,9 +27,14 @@ class AppUser {
     this.role = 'worker',
     this.company,
     this.completedShifts = 0,
+    this.ratingCount = 0,
   });
 
   bool get isManager => role == 'manager';
+
+  /// Есть ли у рейтинга основание. Пока оценок нет, показывать «4.0»
+  /// как заслуженный рейтинг нечестно — это просто стартовое число.
+  bool get hasRatedShifts => ratingCount > 0;
 
   /// Уровень выводится из числа смен — отдельного поля для него нет.
   String get level {
@@ -47,6 +56,7 @@ class AppUser {
     int? completedShifts,
     double? rating,
     bool? isVerified,
+    int? ratingCount,
   }) =>
       AppUser(
         id: id,
@@ -58,6 +68,7 @@ class AppUser {
         role: role,
         company: company,
         completedShifts: completedShifts ?? this.completedShifts,
+        ratingCount: ratingCount ?? this.ratingCount,
       );
 }
 

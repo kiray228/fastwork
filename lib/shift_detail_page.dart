@@ -7,6 +7,7 @@ import 'shift.dart';
 import 'theme/app_colors.dart';
 import 'widgets/booking_confirm_sheet.dart';
 import 'widgets/common.dart';
+import 'widgets/nav.dart';
 
 /// Экран «Подробнее»: одна смена целиком.
 class ShiftDetailPage extends StatefulWidget {
@@ -164,8 +165,8 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
                 _HeroCard(
                   shift: current,
                   onCompanyTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => CompanyPage(
+                    appRoute(
+                      CompanyPage(
                         company: current.company,
                         repository: widget.repository,
                       ),

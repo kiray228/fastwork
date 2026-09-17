@@ -5,6 +5,7 @@ import 'review.dart';
 import 'shift.dart';
 import 'theme/app_colors.dart';
 import 'widgets/common.dart';
+import 'widgets/skeleton.dart';
 
 /// Страница компании: оценка и отзывы исполнителей.
 class CompanyPage extends StatefulWidget {
@@ -43,7 +44,7 @@ class _CompanyPageState extends State<CompanyPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('О компании')),
       body: data == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const TileListSkeleton(count: 3)
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
               children: [

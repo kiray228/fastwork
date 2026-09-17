@@ -88,6 +88,21 @@ abstract class ShiftRepository {
   /// Кто записался на смену — список для заказчика.
   Future<List<AppUser>> applicantsFor(int shiftId);
 
+  /// Кого заказчику осталось оценить: люди с его уже прошедших смен,
+  /// которым он ещё не поставил оценку.
+  Future<List<PendingRating>> workersToRate(int managerId);
+
+  /// Поставить оценку исполнителю за смену.
+  Future<void> rateWorker({
+    required int shiftId,
+    required int workerId,
+    required int rating,
+    String? comment,
+  });
+
+  /// Отзывы, которые получил исполнитель.
+  Future<List<WorkerReview>> reviewsAbout(int workerId);
+
   /// Учебные данные: пара уже отработанных смен для нового пользователя,
   /// чтобы архив, кошелёк и отзывы не пустовали. Вызывать можно сколько
   /// угодно раз — повторно ничего не добавится.
@@ -398,13 +413,27 @@ class DbShiftRepository implements ShiftRepository {
     required int rating,
     String? comment,
   }) async {
-    await db.into(db.reviewRows).insertOnConflictUpdate(
+    await db.into(db.reviewRows).insert(
           ReviewRowsCompanion.insert(
             shiftId: shiftId,
             authorId: _workerId,
             rating: rating,
             comment: Value(comment),
             createdAt: DateTime.now(),
+          ),
+          // «Вставь, а если такая строка уже есть — обнови её».
+          //
+          // `target` обязателен: без него база смотрит только на первичный
+          // ключ (`id`), а наше правило «один отзыв на смену» держится на
+          // другом ключе — паре (смена, автор). Не указав его, получаешь
+          // не обновление, а падение с ошибкой UNIQUE.
+          onConflict: DoUpdate(
+            (_) => ReviewRowsCompanion(
+              rating: Value(rating),
+              comment: Value(comment),
+              createdAt: Value(DateTime.now()),
+            ),
+            target: [db.reviewRows.shiftId, db.reviewRows.authorId],
           ),
         );
   }
@@ -513,14 +542,19 @@ class DbShiftRepository implements ShiftRepository {
     // номер работника, а имя и рейтинг — в таблице пользователей.
     final rows = await db.customSelect(
       '''
-      SELECT u.*
+      SELECT u.*,
+             COALESCE(
+               (SELECT AVG(w.rating) FROM worker_review_rows w
+                 WHERE w.worker_id = u.id),
+               u.rating
+             ) AS live_rating
       FROM application_rows a
       JOIN user_rows u ON u.id = a.worker_id
       WHERE a.shift_id = ? AND a.status = 'active'
-      ORDER BY u.rating DESC
+      ORDER BY live_rating DESC
       ''',
       variables: [Variable.withInt(shiftId)],
-      readsFrom: {db.applicationRows, db.userRows},
+      readsFrom: {db.applicationRows, db.userRows, db.workerReviewRows},
     ).get();
 
     return rows
@@ -529,9 +563,129 @@ class DbShiftRepository implements ShiftRepository {
               phone: r.read<String>('phone'),
               fullName: r.read<String>('full_name'),
               city: r.read<String>('city'),
-              rating: r.read<double>('rating'),
+              rating: r.read<double>('live_rating'),
               isVerified: r.read<bool>('is_verified'),
               role: r.read<String>('role'),
+            ))
+        .toList();
+  }
+
+  @override
+  Future<List<PendingRating>> workersToRate(int managerId) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // Запрос из трёх таблиц сразу:
+    //   смены заказчика -> кто на них был записан -> имена этих людей.
+    //
+    // NOT EXISTS отсекает тех, кого этот заказчик уже оценил. Это подзапрос
+    // в роли условия: «оставь строку, если вот такой строки нигде нет».
+    final rows = await db.customSelect(
+      '''
+      SELECT s.id       AS shift_id,
+             s.title    AS shift_title,
+             s.work_date,
+             u.id       AS worker_id,
+             u.full_name,
+             COALESCE(
+               (SELECT AVG(w.rating) FROM worker_review_rows w
+                 WHERE w.worker_id = u.id),
+               u.rating
+             ) AS worker_rating
+      FROM shift_rows s
+      JOIN application_rows a ON a.shift_id = s.id AND a.status = 'active'
+      JOIN user_rows u ON u.id = a.worker_id
+      WHERE s.created_by = ?
+        AND s.work_date < ?
+        AND NOT EXISTS (
+          SELECT 1 FROM worker_review_rows w
+           WHERE w.shift_id = s.id
+             AND w.worker_id = u.id
+             AND w.author_id = ?
+        )
+      ORDER BY s.work_date DESC
+      ''',
+      variables: [
+        Variable.withInt(managerId),
+        Variable.withDateTime(today),
+        Variable.withInt(managerId),
+      ],
+      readsFrom: {
+        db.shiftRows,
+        db.applicationRows,
+        db.userRows,
+        db.workerReviewRows,
+      },
+    ).get();
+
+    return rows
+        .map((r) => PendingRating(
+              shiftId: r.read<int>('shift_id'),
+              shiftTitle: r.read<String>('shift_title'),
+              workDate: r.read<DateTime>('work_date'),
+              workerId: r.read<int>('worker_id'),
+              workerName: r.read<String>('full_name'),
+              workerRating: r.read<double>('worker_rating'),
+            ))
+        .toList();
+  }
+
+  @override
+  Future<void> rateWorker({
+    required int shiftId,
+    required int workerId,
+    required int rating,
+    String? comment,
+  }) async {
+    await db.into(db.workerReviewRows).insert(
+          WorkerReviewRowsCompanion.insert(
+            shiftId: shiftId,
+            workerId: workerId,
+            authorId: _workerId,
+            rating: rating,
+            comment: Value(comment),
+            createdAt: DateTime.now(),
+          ),
+          // Передумал — оценка меняется, но не добавляется второй.
+          // Цель конфликта — тот самый тройной уникальный ключ.
+          onConflict: DoUpdate(
+            (_) => WorkerReviewRowsCompanion(
+              rating: Value(rating),
+              comment: Value(comment),
+              createdAt: Value(DateTime.now()),
+            ),
+            target: [
+              db.workerReviewRows.shiftId,
+              db.workerReviewRows.workerId,
+              db.workerReviewRows.authorId,
+            ],
+          ),
+        );
+  }
+
+  @override
+  Future<List<WorkerReview>> reviewsAbout(int workerId) async {
+    final rows = await db.customSelect(
+      '''
+      SELECT w.*, s.title AS shift_title, s.company
+      FROM worker_review_rows w
+      JOIN shift_rows s ON s.id = w.shift_id
+      WHERE w.worker_id = ?
+      ORDER BY w.created_at DESC
+      ''',
+      variables: [Variable.withInt(workerId)],
+      readsFrom: {db.workerReviewRows, db.shiftRows},
+    ).get();
+
+    return rows
+        .map((r) => WorkerReview(
+              id: r.read<int>('id'),
+              shiftId: r.read<int>('shift_id'),
+              shiftTitle: r.read<String>('shift_title'),
+              company: r.read<String>('company'),
+              rating: r.read<int>('rating'),
+              comment: r.readNullable<String>('comment'),
+              createdAt: r.read<DateTime>('created_at'),
             ))
         .toList();
   }

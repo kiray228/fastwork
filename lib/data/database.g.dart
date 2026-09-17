@@ -3663,6 +3663,466 @@ class SupportMessageRowsCompanion extends UpdateCompanion<SupportMessageRow> {
   }
 }
 
+class $WorkerReviewRowsTable extends WorkerReviewRows
+    with TableInfo<$WorkerReviewRowsTable, WorkerReviewRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WorkerReviewRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _shiftIdMeta = const VerificationMeta(
+    'shiftId',
+  );
+  @override
+  late final GeneratedColumn<int> shiftId = GeneratedColumn<int>(
+    'shift_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES shift_rows (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _workerIdMeta = const VerificationMeta(
+    'workerId',
+  );
+  @override
+  late final GeneratedColumn<int> workerId = GeneratedColumn<int>(
+    'worker_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _authorIdMeta = const VerificationMeta(
+    'authorId',
+  );
+  @override
+  late final GeneratedColumn<int> authorId = GeneratedColumn<int>(
+    'author_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _ratingMeta = const VerificationMeta('rating');
+  @override
+  late final GeneratedColumn<int> rating = GeneratedColumn<int>(
+    'rating',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _commentMeta = const VerificationMeta(
+    'comment',
+  );
+  @override
+  late final GeneratedColumn<String> comment = GeneratedColumn<String>(
+    'comment',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    shiftId,
+    workerId,
+    authorId,
+    rating,
+    comment,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'worker_review_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WorkerReviewRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('shift_id')) {
+      context.handle(
+        _shiftIdMeta,
+        shiftId.isAcceptableOrUnknown(data['shift_id']!, _shiftIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_shiftIdMeta);
+    }
+    if (data.containsKey('worker_id')) {
+      context.handle(
+        _workerIdMeta,
+        workerId.isAcceptableOrUnknown(data['worker_id']!, _workerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_workerIdMeta);
+    }
+    if (data.containsKey('author_id')) {
+      context.handle(
+        _authorIdMeta,
+        authorId.isAcceptableOrUnknown(data['author_id']!, _authorIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_authorIdMeta);
+    }
+    if (data.containsKey('rating')) {
+      context.handle(
+        _ratingMeta,
+        rating.isAcceptableOrUnknown(data['rating']!, _ratingMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_ratingMeta);
+    }
+    if (data.containsKey('comment')) {
+      context.handle(
+        _commentMeta,
+        comment.isAcceptableOrUnknown(data['comment']!, _commentMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {shiftId, workerId, authorId},
+  ];
+  @override
+  WorkerReviewRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WorkerReviewRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      shiftId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shift_id'],
+      )!,
+      workerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}worker_id'],
+      )!,
+      authorId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}author_id'],
+      )!,
+      rating: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}rating'],
+      )!,
+      comment: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}comment'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $WorkerReviewRowsTable createAlias(String alias) {
+    return $WorkerReviewRowsTable(attachedDatabase, alias);
+  }
+}
+
+class WorkerReviewRow extends DataClass implements Insertable<WorkerReviewRow> {
+  final int id;
+
+  /// Смена, после которой поставлена оценка. Как и в отзывах о компании,
+  /// привязка к смене — доказательство, что человек действительно работал.
+  final int shiftId;
+
+  /// Кого оценивают.
+  final int workerId;
+
+  /// Кто оценивает — заказчик.
+  final int authorId;
+  final int rating;
+  final String? comment;
+  final DateTime createdAt;
+  const WorkerReviewRow({
+    required this.id,
+    required this.shiftId,
+    required this.workerId,
+    required this.authorId,
+    required this.rating,
+    this.comment,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['shift_id'] = Variable<int>(shiftId);
+    map['worker_id'] = Variable<int>(workerId);
+    map['author_id'] = Variable<int>(authorId);
+    map['rating'] = Variable<int>(rating);
+    if (!nullToAbsent || comment != null) {
+      map['comment'] = Variable<String>(comment);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  WorkerReviewRowsCompanion toCompanion(bool nullToAbsent) {
+    return WorkerReviewRowsCompanion(
+      id: Value(id),
+      shiftId: Value(shiftId),
+      workerId: Value(workerId),
+      authorId: Value(authorId),
+      rating: Value(rating),
+      comment: comment == null && nullToAbsent
+          ? const Value.absent()
+          : Value(comment),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory WorkerReviewRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WorkerReviewRow(
+      id: serializer.fromJson<int>(json['id']),
+      shiftId: serializer.fromJson<int>(json['shiftId']),
+      workerId: serializer.fromJson<int>(json['workerId']),
+      authorId: serializer.fromJson<int>(json['authorId']),
+      rating: serializer.fromJson<int>(json['rating']),
+      comment: serializer.fromJson<String?>(json['comment']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'shiftId': serializer.toJson<int>(shiftId),
+      'workerId': serializer.toJson<int>(workerId),
+      'authorId': serializer.toJson<int>(authorId),
+      'rating': serializer.toJson<int>(rating),
+      'comment': serializer.toJson<String?>(comment),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  WorkerReviewRow copyWith({
+    int? id,
+    int? shiftId,
+    int? workerId,
+    int? authorId,
+    int? rating,
+    Value<String?> comment = const Value.absent(),
+    DateTime? createdAt,
+  }) => WorkerReviewRow(
+    id: id ?? this.id,
+    shiftId: shiftId ?? this.shiftId,
+    workerId: workerId ?? this.workerId,
+    authorId: authorId ?? this.authorId,
+    rating: rating ?? this.rating,
+    comment: comment.present ? comment.value : this.comment,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  WorkerReviewRow copyWithCompanion(WorkerReviewRowsCompanion data) {
+    return WorkerReviewRow(
+      id: data.id.present ? data.id.value : this.id,
+      shiftId: data.shiftId.present ? data.shiftId.value : this.shiftId,
+      workerId: data.workerId.present ? data.workerId.value : this.workerId,
+      authorId: data.authorId.present ? data.authorId.value : this.authorId,
+      rating: data.rating.present ? data.rating.value : this.rating,
+      comment: data.comment.present ? data.comment.value : this.comment,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WorkerReviewRow(')
+          ..write('id: $id, ')
+          ..write('shiftId: $shiftId, ')
+          ..write('workerId: $workerId, ')
+          ..write('authorId: $authorId, ')
+          ..write('rating: $rating, ')
+          ..write('comment: $comment, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, shiftId, workerId, authorId, rating, comment, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WorkerReviewRow &&
+          other.id == this.id &&
+          other.shiftId == this.shiftId &&
+          other.workerId == this.workerId &&
+          other.authorId == this.authorId &&
+          other.rating == this.rating &&
+          other.comment == this.comment &&
+          other.createdAt == this.createdAt);
+}
+
+class WorkerReviewRowsCompanion extends UpdateCompanion<WorkerReviewRow> {
+  final Value<int> id;
+  final Value<int> shiftId;
+  final Value<int> workerId;
+  final Value<int> authorId;
+  final Value<int> rating;
+  final Value<String?> comment;
+  final Value<DateTime> createdAt;
+  const WorkerReviewRowsCompanion({
+    this.id = const Value.absent(),
+    this.shiftId = const Value.absent(),
+    this.workerId = const Value.absent(),
+    this.authorId = const Value.absent(),
+    this.rating = const Value.absent(),
+    this.comment = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  WorkerReviewRowsCompanion.insert({
+    this.id = const Value.absent(),
+    required int shiftId,
+    required int workerId,
+    required int authorId,
+    required int rating,
+    this.comment = const Value.absent(),
+    required DateTime createdAt,
+  }) : shiftId = Value(shiftId),
+       workerId = Value(workerId),
+       authorId = Value(authorId),
+       rating = Value(rating),
+       createdAt = Value(createdAt);
+  static Insertable<WorkerReviewRow> custom({
+    Expression<int>? id,
+    Expression<int>? shiftId,
+    Expression<int>? workerId,
+    Expression<int>? authorId,
+    Expression<int>? rating,
+    Expression<String>? comment,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (shiftId != null) 'shift_id': shiftId,
+      if (workerId != null) 'worker_id': workerId,
+      if (authorId != null) 'author_id': authorId,
+      if (rating != null) 'rating': rating,
+      if (comment != null) 'comment': comment,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  WorkerReviewRowsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? shiftId,
+    Value<int>? workerId,
+    Value<int>? authorId,
+    Value<int>? rating,
+    Value<String?>? comment,
+    Value<DateTime>? createdAt,
+  }) {
+    return WorkerReviewRowsCompanion(
+      id: id ?? this.id,
+      shiftId: shiftId ?? this.shiftId,
+      workerId: workerId ?? this.workerId,
+      authorId: authorId ?? this.authorId,
+      rating: rating ?? this.rating,
+      comment: comment ?? this.comment,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (shiftId.present) {
+      map['shift_id'] = Variable<int>(shiftId.value);
+    }
+    if (workerId.present) {
+      map['worker_id'] = Variable<int>(workerId.value);
+    }
+    if (authorId.present) {
+      map['author_id'] = Variable<int>(authorId.value);
+    }
+    if (rating.present) {
+      map['rating'] = Variable<int>(rating.value);
+    }
+    if (comment.present) {
+      map['comment'] = Variable<String>(comment.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WorkerReviewRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('shiftId: $shiftId, ')
+          ..write('workerId: $workerId, ')
+          ..write('authorId: $authorId, ')
+          ..write('rating: $rating, ')
+          ..write('comment: $comment, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3678,6 +4138,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $SupportTicketRowsTable(this);
   late final $SupportMessageRowsTable supportMessageRows =
       $SupportMessageRowsTable(this);
+  late final $WorkerReviewRowsTable workerReviewRows = $WorkerReviewRowsTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3691,6 +4154,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     documentRows,
     supportTicketRows,
     supportMessageRows,
+    workerReviewRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -3714,6 +4178,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('support_message_rows', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'shift_rows',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('worker_review_rows', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -3794,6 +4265,26 @@ final class $$ShiftRowsTableReferences
     ).filter((f) => f.shiftId.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_reviewRowsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$WorkerReviewRowsTable, List<WorkerReviewRow>>
+  _workerReviewRowsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.workerReviewRows,
+    aliasName: 'shift_rows__id__worker_review_rows__shift_id',
+  );
+
+  $$WorkerReviewRowsTableProcessedTableManager get workerReviewRowsRefs {
+    final manager = $$WorkerReviewRowsTableTableManager(
+      $_db,
+      $_db.workerReviewRows,
+    ).filter((f) => f.shiftId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _workerReviewRowsRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -3935,6 +4426,31 @@ class $$ShiftRowsTableFilterComposer
           }) => $$ReviewRowsTableFilterComposer(
             $db: $db,
             $table: $db.reviewRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> workerReviewRowsRefs(
+    Expression<bool> Function($$WorkerReviewRowsTableFilterComposer f) f,
+  ) {
+    final $$WorkerReviewRowsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.workerReviewRows,
+      getReferencedColumn: (t) => t.shiftId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkerReviewRowsTableFilterComposer(
+            $db: $db,
+            $table: $db.workerReviewRows,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -4165,6 +4681,31 @@ class $$ShiftRowsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> workerReviewRowsRefs<T extends Object>(
+    Expression<T> Function($$WorkerReviewRowsTableAnnotationComposer a) f,
+  ) {
+    final $$WorkerReviewRowsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.workerReviewRows,
+      getReferencedColumn: (t) => t.shiftId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkerReviewRowsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.workerReviewRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$ShiftRowsTableTableManager
@@ -4183,6 +4724,7 @@ class $$ShiftRowsTableTableManager
           PrefetchHooks Function({
             bool applicationRowsRefs,
             bool reviewRowsRefs,
+            bool workerReviewRowsRefs,
           })
         > {
   $$ShiftRowsTableTableManager(_$AppDatabase db, $ShiftRowsTable table)
@@ -4281,12 +4823,17 @@ class $$ShiftRowsTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({applicationRowsRefs = false, reviewRowsRefs = false}) {
+              ({
+                applicationRowsRefs = false,
+                reviewRowsRefs = false,
+                workerReviewRowsRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (applicationRowsRefs) db.applicationRows,
                     if (reviewRowsRefs) db.reviewRows,
+                    if (workerReviewRowsRefs) db.workerReviewRows,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -4333,6 +4880,27 @@ class $$ShiftRowsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (workerReviewRowsRefs)
+                        await $_getPrefetchedData<
+                          ShiftRow,
+                          $ShiftRowsTable,
+                          WorkerReviewRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ShiftRowsTableReferences
+                              ._workerReviewRowsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ShiftRowsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).workerReviewRowsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.shiftId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -4353,7 +4921,11 @@ typedef $$ShiftRowsTableProcessedTableManager =
       $$ShiftRowsTableUpdateCompanionBuilder,
       (ShiftRow, $$ShiftRowsTableReferences),
       ShiftRow,
-      PrefetchHooks Function({bool applicationRowsRefs, bool reviewRowsRefs})
+      PrefetchHooks Function({
+        bool applicationRowsRefs,
+        bool reviewRowsRefs,
+        bool workerReviewRowsRefs,
+      })
     >;
 typedef $$ApplicationRowsTableCreateCompanionBuilder =
     ApplicationRowsCompanion Function({
@@ -6302,6 +6874,360 @@ typedef $$SupportMessageRowsTableProcessedTableManager =
       SupportMessageRow,
       PrefetchHooks Function({bool ticketId})
     >;
+typedef $$WorkerReviewRowsTableCreateCompanionBuilder =
+    WorkerReviewRowsCompanion Function({
+      Value<int> id,
+      required int shiftId,
+      required int workerId,
+      required int authorId,
+      required int rating,
+      Value<String?> comment,
+      required DateTime createdAt,
+    });
+typedef $$WorkerReviewRowsTableUpdateCompanionBuilder =
+    WorkerReviewRowsCompanion Function({
+      Value<int> id,
+      Value<int> shiftId,
+      Value<int> workerId,
+      Value<int> authorId,
+      Value<int> rating,
+      Value<String?> comment,
+      Value<DateTime> createdAt,
+    });
+
+final class $$WorkerReviewRowsTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $WorkerReviewRowsTable, WorkerReviewRow> {
+  $$WorkerReviewRowsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ShiftRowsTable _shiftIdTable(_$AppDatabase db) =>
+      db.shiftRows.createAlias('worker_review_rows__shift_id__shift_rows__id');
+
+  $$ShiftRowsTableProcessedTableManager get shiftId {
+    final $_column = $_itemColumn<int>('shift_id')!;
+
+    final manager = $$ShiftRowsTableTableManager(
+      $_db,
+      $_db.shiftRows,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_shiftIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$WorkerReviewRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $WorkerReviewRowsTable> {
+  $$WorkerReviewRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get workerId => $composableBuilder(
+    column: $table.workerId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get authorId => $composableBuilder(
+    column: $table.authorId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get rating => $composableBuilder(
+    column: $table.rating,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get comment => $composableBuilder(
+    column: $table.comment,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ShiftRowsTableFilterComposer get shiftId {
+    final $$ShiftRowsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftId,
+      referencedTable: $db.shiftRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ShiftRowsTableFilterComposer(
+            $db: $db,
+            $table: $db.shiftRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$WorkerReviewRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $WorkerReviewRowsTable> {
+  $$WorkerReviewRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get workerId => $composableBuilder(
+    column: $table.workerId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get authorId => $composableBuilder(
+    column: $table.authorId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get rating => $composableBuilder(
+    column: $table.rating,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get comment => $composableBuilder(
+    column: $table.comment,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ShiftRowsTableOrderingComposer get shiftId {
+    final $$ShiftRowsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftId,
+      referencedTable: $db.shiftRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ShiftRowsTableOrderingComposer(
+            $db: $db,
+            $table: $db.shiftRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$WorkerReviewRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $WorkerReviewRowsTable> {
+  $$WorkerReviewRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get workerId =>
+      $composableBuilder(column: $table.workerId, builder: (column) => column);
+
+  GeneratedColumn<int> get authorId =>
+      $composableBuilder(column: $table.authorId, builder: (column) => column);
+
+  GeneratedColumn<int> get rating =>
+      $composableBuilder(column: $table.rating, builder: (column) => column);
+
+  GeneratedColumn<String> get comment =>
+      $composableBuilder(column: $table.comment, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$ShiftRowsTableAnnotationComposer get shiftId {
+    final $$ShiftRowsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftId,
+      referencedTable: $db.shiftRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ShiftRowsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.shiftRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$WorkerReviewRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $WorkerReviewRowsTable,
+          WorkerReviewRow,
+          $$WorkerReviewRowsTableFilterComposer,
+          $$WorkerReviewRowsTableOrderingComposer,
+          $$WorkerReviewRowsTableAnnotationComposer,
+          $$WorkerReviewRowsTableCreateCompanionBuilder,
+          $$WorkerReviewRowsTableUpdateCompanionBuilder,
+          (WorkerReviewRow, $$WorkerReviewRowsTableReferences),
+          WorkerReviewRow,
+          PrefetchHooks Function({bool shiftId})
+        > {
+  $$WorkerReviewRowsTableTableManager(
+    _$AppDatabase db,
+    $WorkerReviewRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WorkerReviewRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WorkerReviewRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$WorkerReviewRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> shiftId = const Value.absent(),
+                Value<int> workerId = const Value.absent(),
+                Value<int> authorId = const Value.absent(),
+                Value<int> rating = const Value.absent(),
+                Value<String?> comment = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => WorkerReviewRowsCompanion(
+                id: id,
+                shiftId: shiftId,
+                workerId: workerId,
+                authorId: authorId,
+                rating: rating,
+                comment: comment,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int shiftId,
+                required int workerId,
+                required int authorId,
+                required int rating,
+                Value<String?> comment = const Value.absent(),
+                required DateTime createdAt,
+              }) => WorkerReviewRowsCompanion.insert(
+                id: id,
+                shiftId: shiftId,
+                workerId: workerId,
+                authorId: authorId,
+                rating: rating,
+                comment: comment,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$WorkerReviewRowsTable, WorkerReviewRow>(table),
+                  $$WorkerReviewRowsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({shiftId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (shiftId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.shiftId,
+                        referencedTable: $$WorkerReviewRowsTableReferences
+                            ._shiftIdTable(db),
+                        referencedColumn: $$WorkerReviewRowsTableReferences
+                            ._shiftIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$WorkerReviewRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $WorkerReviewRowsTable,
+      WorkerReviewRow,
+      $$WorkerReviewRowsTableFilterComposer,
+      $$WorkerReviewRowsTableOrderingComposer,
+      $$WorkerReviewRowsTableAnnotationComposer,
+      $$WorkerReviewRowsTableCreateCompanionBuilder,
+      $$WorkerReviewRowsTableUpdateCompanionBuilder,
+      (WorkerReviewRow, $$WorkerReviewRowsTableReferences),
+      WorkerReviewRow,
+      PrefetchHooks Function({bool shiftId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6322,4 +7248,6 @@ class $AppDatabaseManager {
       $$SupportTicketRowsTableTableManager(_db, _db.supportTicketRows);
   $$SupportMessageRowsTableTableManager get supportMessageRows =>
       $$SupportMessageRowsTableTableManager(_db, _db.supportMessageRows);
+  $$WorkerReviewRowsTableTableManager get workerReviewRows =>
+      $$WorkerReviewRowsTableTableManager(_db, _db.workerReviewRows);
 }

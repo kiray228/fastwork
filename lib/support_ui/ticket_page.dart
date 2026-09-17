@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/support_repository.dart';
 import '../support.dart';
 import '../theme/app_colors.dart';
+import '../widgets/skeleton.dart';
 
 /// Переписка внутри одного обращения.
 ///
@@ -68,7 +69,7 @@ class _TicketPageState extends State<TicketPage> {
         children: [
           Expanded(
             child: list == null
-                ? const Center(child: CircularProgressIndicator())
+                ? const TileListSkeleton(count: 3)
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                     itemCount: list.length,

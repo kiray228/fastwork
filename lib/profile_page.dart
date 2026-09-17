@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'data/repositories.dart';
 import 'data/session.dart';
 import 'documents_page.dart';
+import 'my_reviews_page.dart';
 import 'support_ui/support_page.dart';
 import 'theme/app_colors.dart';
 import 'user.dart';
 import 'wallet_page.dart';
 import 'widgets/common.dart';
+import 'widgets/nav.dart';
 
 /// Профиль пользователя.
 class ProfilePage extends StatelessWidget {
@@ -72,9 +74,7 @@ class ProfilePage extends StatelessWidget {
                     title: 'Выплаты',
                     trailing: 'Вознаграждение',
                     onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => WalletPage(repository: repos.shifts),
-                      ),
+                      appRoute(WalletPage(repository: repos.shifts)),
                     ),
                   ),
                 if (!user.isManager)
@@ -83,10 +83,26 @@ class ProfilePage extends StatelessWidget {
                     title: 'Документы',
                     trailing: user.isVerified ? 'Проверены' : 'Не проверены',
                     onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => DocumentsPage(
+                      appRoute(
+                        DocumentsPage(
                           repository: repos.documents,
                           session: session,
+                        ),
+                      ),
+                    ),
+                  ),
+                if (!user.isManager)
+                  _MenuRow(
+                    icon: Icons.star_outline_rounded,
+                    title: 'Отзывы обо мне',
+                    trailing: user.hasRatedShifts
+                        ? '${user.ratingCount}'
+                        : 'Пока нет',
+                    onTap: () => Navigator.of(context).push(
+                      appRoute(
+                        MyReviewsPage(
+                          session: session,
+                          repository: repos.shifts,
                         ),
                       ),
                     ),
@@ -100,9 +116,7 @@ class ProfilePage extends StatelessWidget {
                   icon: Icons.chat_bubble_outline_rounded,
                   title: 'Поддержка',
                   onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => SupportPage(repository: repos.support),
-                    ),
+                    appRoute(SupportPage(repository: repos.support)),
                   ),
                 ),
               ],
@@ -214,7 +228,9 @@ class _Stats extends StatelessWidget {
           child: _StatTile(
             icon: Icons.star_rounded,
             value: user.rating.toStringAsFixed(1),
-            label: 'Рейтинг',
+            // Пока оценок нет, честнее сказать «стартовый»: это число
+            // никто не заработал, оно просто стоит по умолчанию.
+            label: user.hasRatedShifts ? 'Рейтинг' : 'Стартовый',
             color: AppColors.accent,
           ),
         ),

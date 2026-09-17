@@ -199,6 +199,56 @@ class FakeShiftRepository implements ShiftRepository {
             ]
           : const [];
 
+  /// Оценки исполнителей, поставленные заказчиком.
+  final List<WorkerReview> _workerReviews = [];
+  final Set<String> _rated = {}; // 'shiftId:workerId'
+  int _nextWorkerReviewId = 1;
+
+  @override
+  Future<List<PendingRating>> workersToRate(int managerId) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    return _shifts
+        .where((s) =>
+            s.createdBy == managerId &&
+            s.workDate.isBefore(today) &&
+            !_rated.contains('${s.id}:1'))
+        .map((s) => PendingRating(
+              shiftId: s.id,
+              shiftTitle: s.title,
+              workDate: s.workDate,
+              workerId: 1,
+              workerName: 'Ернар Калдыбеков',
+              workerRating: userRating,
+            ))
+        .toList();
+  }
+
+  @override
+  Future<void> rateWorker({
+    required int shiftId,
+    required int workerId,
+    required int rating,
+    String? comment,
+  }) async {
+    _rated.add('$shiftId:$workerId');
+    final shift = await shiftById(shiftId);
+    _workerReviews.add(WorkerReview(
+      id: _nextWorkerReviewId++,
+      shiftId: shiftId,
+      shiftTitle: shift?.title ?? 'Смена',
+      company: shift?.company ?? '',
+      rating: rating,
+      comment: comment,
+      createdAt: DateTime.now(),
+    ));
+  }
+
+  @override
+  Future<List<WorkerReview>> reviewsAbout(int workerId) async =>
+      List.unmodifiable(_workerReviews);
+
   @override
   Future<void> prepareDemoHistory(int userId) async {
     // В памяти истории нет — тестам она не нужна.

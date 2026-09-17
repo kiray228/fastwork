@@ -153,6 +153,40 @@ class ReviewRows extends Table {
       ];
 }
 
+/// Отзывы заказчика об исполнителе.
+///
+/// Зеркало предыдущей таблицы, но в другую сторону: там исполнитель
+/// оценивал место работы, здесь место работы оценивает исполнителя.
+///
+/// Почему это отдельная таблица, а не колонка `target_type` в общей?
+/// Потому что тогда внешний ключ стал бы невозможен: одна и та же колонка
+/// ссылалась бы то на смены, то на пользователей, и база перестала бы
+/// следить за целостностью. Две честные таблицы лучше одной хитрой.
+class WorkerReviewRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+
+  /// Смена, после которой поставлена оценка. Как и в отзывах о компании,
+  /// привязка к смене — доказательство, что человек действительно работал.
+  IntColumn get shiftId =>
+      integer().references(ShiftRows, #id, onDelete: KeyAction.cascade)();
+
+  /// Кого оценивают.
+  IntColumn get workerId => integer()();
+
+  /// Кто оценивает — заказчик.
+  IntColumn get authorId => integer()();
+
+  IntColumn get rating => integer()(); // 1..5
+  TextColumn get comment => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  /// Один заказчик оценивает одного исполнителя за одну смену один раз.
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {shiftId, workerId, authorId},
+      ];
+}
+
 /// Мелкие настройки приложения: ключ — значение.
 /// Здесь храним, кто сейчас вошёл, чтобы не спрашивать при каждом запуске.
 class AppSettings extends Table {
@@ -211,6 +245,7 @@ class ApplicationStatus {
     DocumentRows,
     SupportTicketRows,
     SupportMessageRows,
+    WorkerReviewRows,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -230,7 +265,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Версия схемы. Каждое изменение таблиц поднимает номер на единицу.
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -259,6 +294,9 @@ class AppDatabase extends _$AppDatabase {
             await m.createTable(documentRows);
             await m.createTable(supportTicketRows);
             await m.createTable(supportMessageRows);
+          }
+          if (from < 6) {
+            await m.createTable(workerReviewRows);
           }
         },
         beforeOpen: (details) async {

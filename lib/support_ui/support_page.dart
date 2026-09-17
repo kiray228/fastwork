@@ -5,6 +5,8 @@ import '../shift.dart';
 import '../support.dart';
 import '../theme/app_colors.dart';
 import '../widgets/common.dart';
+import '../widgets/nav.dart';
+import '../widgets/skeleton.dart';
 import 'ticket_page.dart';
 
 /// Список обращений в поддержку.
@@ -34,11 +36,8 @@ class _SupportPageState extends State<SupportPage> {
 
   Future<void> _openTicket(SupportTicket ticket) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => TicketPage(
-          ticket: ticket,
-          repository: widget.repository,
-        ),
+      appRoute(
+        TicketPage(ticket: ticket, repository: widget.repository),
       ),
     );
     await _load();
@@ -111,7 +110,7 @@ class _SupportPageState extends State<SupportPage> {
         label: const Text('Написать'),
       ),
       body: switch (list) {
-        null => const Center(child: CircularProgressIndicator()),
+        null => const TileListSkeleton(count: 3),
         [] => const EmptyState(
             icon: Icons.support_agent_rounded,
             title: 'Обращений пока нет',
@@ -121,9 +120,12 @@ class _SupportPageState extends State<SupportPage> {
         final items => ListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
             itemCount: items.length,
-            itemBuilder: (context, index) => _TicketTile(
-              ticket: items[index],
-              onTap: () => _openTicket(items[index]),
+            itemBuilder: (context, index) => AnimatedEntrance(
+              index: index,
+              child: _TicketTile(
+                ticket: items[index],
+                onTap: () => _openTicket(items[index]),
+              ),
             ),
           ),
       },

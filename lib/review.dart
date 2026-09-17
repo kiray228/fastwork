@@ -35,3 +35,52 @@ class CompanyInfo {
     required this.reviews,
   });
 }
+
+/// Отзыв заказчика об исполнителе.
+///
+/// Отличается от отзыва о компании тем, что здесь важно не только кто
+/// написал, но и **за какую смену** — исполнитель должен понимать,
+/// о каком дне речь.
+class WorkerReview {
+  final int id;
+  final int shiftId;
+  final String shiftTitle;
+  final String company;
+  final int rating; // 1..5
+  final String? comment;
+  final DateTime createdAt;
+
+  const WorkerReview({
+    required this.id,
+    required this.shiftId,
+    required this.shiftTitle,
+    required this.company,
+    required this.rating,
+    required this.comment,
+    required this.createdAt,
+  });
+}
+
+/// Исполнитель, которого заказчик ещё не оценил после отработанной смены.
+///
+/// Это не строка какой-то таблицы, а **результат запроса**: смена,
+/// которая уже прошла, плюс человек, который на неё был записан, минус
+/// те, кого уже оценили. Такие «склеенные» объекты и есть обычный
+/// результат работы с базой — таблицы отдельно, ответы отдельно.
+class PendingRating {
+  final int shiftId;
+  final String shiftTitle;
+  final DateTime workDate;
+  final int workerId;
+  final String workerName;
+  final double workerRating;
+
+  const PendingRating({
+    required this.shiftId,
+    required this.shiftTitle,
+    required this.workDate,
+    required this.workerId,
+    required this.workerName,
+    required this.workerRating,
+  });
+}

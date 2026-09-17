@@ -5,7 +5,10 @@ import '../data/shift_repository.dart';
 import '../shift.dart';
 import '../theme/app_colors.dart';
 import '../user.dart';
+import '../widgets/async_state.dart';
 import '../widgets/common.dart';
+import '../widgets/nav.dart';
+import '../widgets/skeleton.dart';
 
 /// Смены, созданные заказчиком, и кто на них записался.
 class ManagerShiftsPage extends StatefulWidget {
@@ -23,7 +26,7 @@ class ManagerShiftsPage extends StatefulWidget {
 }
 
 class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
-  List<Shift>? shifts;
+  Async<List<Shift>> state = const Loading();
 
   @override
   void initState() {
@@ -32,19 +35,17 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
   }
 
   Future<void> _load() async {
-    final loaded =
-        await widget.repository.shiftsCreatedBy(widget.session.workerId);
+    final result = await load(
+      () => widget.repository.shiftsCreatedBy(widget.session.workerId),
+    );
     if (!mounted) return;
-    setState(() => shifts = loaded);
+    setState(() => state = result);
   }
 
   Future<void> _openApplicants(Shift shift) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => _ApplicantsPage(
-          shift: shift,
-          repository: widget.repository,
-        ),
+      appRoute(
+        _ApplicantsPage(shift: shift, repository: widget.repository),
       ),
     );
     await _load();
@@ -52,29 +53,40 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final list = shifts;
-
     return Scaffold(
       appBar: AppBar(title: const Text('Мои смены')),
-      body: switch (list) {
-        null => const Center(child: CircularProgressIndicator()),
-        [] => const EmptyState(
-            icon: Icons.post_add_rounded,
-            title: 'Смен пока нет',
-            subtitle: 'Создайте первую смену на вкладке «Создать»',
-          ),
-        final items => RefreshIndicator(
-            onRefresh: _load,
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-              itemCount: items.length,
-              itemBuilder: (context, index) => _ManagerShiftCard(
-                shift: items[index],
-                onTap: () => _openApplicants(items[index]),
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 260),
+        child: switch (state) {
+          Loading() => const ShiftListSkeleton(count: 2),
+          Failed(:final error) => ErrorView(
+              message: describeError(error),
+              onRetry: () {
+                setState(() => state = const Loading());
+                _load();
+              },
+            ),
+          Ready(value: []) => const EmptyState(
+              icon: Icons.post_add_rounded,
+              title: 'Смен пока нет',
+              subtitle: 'Создайте первую смену на вкладке «Создать»',
+            ),
+          Ready(:final value) => RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                itemCount: value.length,
+                itemBuilder: (context, index) => AnimatedEntrance(
+                  index: index,
+                  child: _ManagerShiftCard(
+                    shift: value[index],
+                    onTap: () => _openApplicants(value[index]),
+                  ),
+                ),
               ),
             ),
-          ),
-      },
+        },
+      ),
     );
   }
 }
@@ -196,7 +208,7 @@ class _ApplicantsPage extends StatefulWidget {
 }
 
 class _ApplicantsPageState extends State<_ApplicantsPage> {
-  List<AppUser>? people;
+  Async<List<AppUser>> state = const Loading();
 
   @override
   void initState() {
@@ -205,30 +217,42 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
   }
 
   Future<void> _load() async {
-    final loaded = await widget.repository.applicantsFor(widget.shift.id);
+    final result =
+        await load(() => widget.repository.applicantsFor(widget.shift.id));
     if (!mounted) return;
-    setState(() => people = loaded);
+    setState(() => state = result);
   }
 
   @override
   Widget build(BuildContext context) {
-    final list = people;
-
     return Scaffold(
       appBar: AppBar(title: const Text('Записались')),
-      body: switch (list) {
-        null => const Center(child: CircularProgressIndicator()),
-        [] => const EmptyState(
-            icon: Icons.person_search_rounded,
-            title: 'Пока никто не записался',
-            subtitle: 'Смена опубликована — исполнители её видят',
-          ),
-        final items => ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            itemCount: items.length,
-            itemBuilder: (context, index) => _ApplicantTile(user: items[index]),
-          ),
-      },
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 260),
+        child: switch (state) {
+          Loading() => const TileListSkeleton(count: 3),
+          Failed(:final error) => ErrorView(
+              message: describeError(error),
+              onRetry: () {
+                setState(() => state = const Loading());
+                _load();
+              },
+            ),
+          Ready(value: []) => const EmptyState(
+              icon: Icons.person_search_rounded,
+              title: 'Пока никто не записался',
+              subtitle: 'Смена опубликована — исполнители её видят',
+            ),
+          Ready(:final value) => ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              itemCount: value.length,
+              itemBuilder: (context, index) => AnimatedEntrance(
+                index: index,
+                child: _ApplicantTile(user: value[index]),
+              ),
+            ),
+        },
+      ),
     );
   }
 }
