@@ -11,6 +11,7 @@ void main() {
     required int rate,
   }) =>
       Shift(
+        workDate: DateTime(2026, 9, 17),
         title: 'тест',
         company: 'тест',
         address: 'тест',
@@ -52,8 +53,26 @@ void main() {
     expect(formatMoney(s.totalPay), '4 400 ₸');
   });
 
+  test('isSameDay сравнивает только дату, без времени', () {
+    final utro = DateTime(2026, 9, 17, 8, 30);
+    final vecher = DateTime(2026, 9, 17, 23, 59);
+    final zavtra = DateTime(2026, 9, 18, 0, 1);
+
+    expect(isSameDay(utro, vecher), isTrue);
+    expect(isSameDay(vecher, zavtra), isFalse);
+  });
+
+  test('среди демо-смен есть смены на сегодня', () {
+    final now = DateTime.now();
+    final segodnya =
+        buildDemoShifts().where((s) => isSameDay(s.workDate, now)).toList();
+
+    expect(segodnya, isNotEmpty);
+  });
+
   test('мест нет, когда набрано столько же, сколько нужно', () {
-    const s = Shift(
+    final s = Shift(
+      workDate: DateTime(2026, 9, 17),
       title: 'тест',
       company: 'тест',
       address: 'тест',

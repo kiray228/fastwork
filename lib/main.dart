@@ -11,6 +11,7 @@ void main() {
 // ---------------------------------------------------------------------------
 
 class Shift {
+  final DateTime workDate; // в какой день смена
   final String title; // «Услуги грузчика»
   final String company; // «Заммлер Казахстан»
   final String address; // адрес точки
@@ -22,6 +23,7 @@ class Shift {
   final int workersHired; // сколько уже набрано
 
   const Shift({
+    required this.workDate,
     required this.title,
     required this.company,
     required this.address,
@@ -52,38 +54,76 @@ class Shift {
 }
 
 /// Выдуманные данные — те самые смены, что мы видели в прототипе.
-const demoShifts = <Shift>[
-  Shift(
-    title: 'Услуги сотрудника склада',
-    company: 'Золотое яблоко',
-    address: 'г. Алматы, ул. Султана Бейбарыса, 1',
-    startMinutes: 600, // 10:00
-    endMinutes: 1320, // 22:00
-    hourlyRate: 110000, // 1100 ₸
-    workersNeeded: 5,
-    workersHired: 2,
-  ),
-  Shift(
-    title: 'Услуги работника торгового зала',
-    company: 'Zara',
-    address: 'г. Алматы, ул. Розыбакиева, 247А',
-    startMinutes: 600, // 10:00
-    endMinutes: 1320, // 22:00
-    hourlyRate: 70000, // 700 ₸
-    workersNeeded: 3,
-    workersHired: 3, // мест нет
-  ),
-  Shift(
-    title: 'Услуги грузчика (ночная смена)',
-    company: 'Заммлер Казахстан',
-    address: 'г. Шымкент, Орманшы ж/м, Енбекшинский район',
-    startMinutes: 1080, // 18:00
-    endMinutes: 360, // 06:00 следующего дня
-    hourlyRate: 110000, // 1100 ₸
-    workersNeeded: 10,
-    workersHired: 4,
-  ),
-];
+///
+/// Даты считаем от сегодняшнего дня, чтобы список всегда был актуальным.
+/// Поэтому это функция, а не константа: `DateTime.now()` нельзя вычислить
+/// заранее, на этапе компиляции.
+List<Shift> buildDemoShifts() {
+  final today = DateTime.now();
+  DateTime day(int plus) => DateTime(today.year, today.month, today.day + plus);
+
+  return [
+    Shift(
+      workDate: day(0),
+      title: 'Услуги сотрудника склада',
+      company: 'Золотое яблоко',
+      address: 'г. Алматы, ул. Султана Бейбарыса, 1',
+      startMinutes: 600, // 10:00
+      endMinutes: 1320, // 22:00
+      hourlyRate: 110000, // 1100 ₸
+      workersNeeded: 5,
+      workersHired: 2,
+    ),
+    Shift(
+      workDate: day(0),
+      title: 'Услуги работника торгового зала',
+      company: 'Zara',
+      address: 'г. Алматы, ул. Розыбакиева, 247А',
+      startMinutes: 600,
+      endMinutes: 1320,
+      hourlyRate: 70000, // 700 ₸
+      workersNeeded: 3,
+      workersHired: 3, // мест нет
+    ),
+    Shift(
+      workDate: day(1),
+      title: 'Услуги грузчика (ночная смена)',
+      company: 'Заммлер Казахстан',
+      address: 'г. Шымкент, Орманшы ж/м, Енбекшинский район',
+      startMinutes: 1080, // 18:00
+      endMinutes: 360, // 06:00 следующего дня
+      hourlyRate: 110000,
+      workersNeeded: 10,
+      workersHired: 4,
+    ),
+    Shift(
+      workDate: day(1),
+      title: 'Услуги курьера',
+      company: 'Magnum',
+      address: 'г. Алматы, пр. Абая, 109',
+      startMinutes: 540, // 09:00
+      endMinutes: 780, // 13:00 — короткая, без обеда
+      hourlyRate: 90000, // 900 ₸
+      workersNeeded: 4,
+      workersHired: 1,
+    ),
+    Shift(
+      workDate: day(3),
+      title: 'Услуги промоутера',
+      company: 'Sinsay',
+      address: 'г. Шымкент, ТРЦ Mega Planet',
+      startMinutes: 660, // 11:00
+      endMinutes: 1140, // 19:00
+      hourlyRate: 80000, // 800 ₸
+      workersNeeded: 2,
+      workersHired: 0,
+    ),
+  ];
+}
+
+/// Один ли это день? Время суток нас не интересует, только дата.
+bool isSameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
 
 // ---------------------------------------------------------------------------
 // ФОРМАТИРОВАНИЕ
@@ -138,11 +178,43 @@ class ShiftsPage extends StatefulWidget {
 }
 
 class _ShiftsPageState extends State<ShiftsPage> {
+  /// Все смены, какие есть. Загружаем один раз при открытии экрана.
+  late final List<Shift> allShifts;
+
+  /// Сегодняшняя дата без времени. Считаем один раз, чтобы она не «поехала»,
+  /// если пользователь задержится в приложении до полуночи.
+  late final DateTime today;
+
   /// Какой день выбран. 0 — сегодня, 1 — завтра и так далее.
   int selectedDay = 0;
 
   @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    today = DateTime(now.year, now.month, now.day);
+    allShifts = buildDemoShifts();
+  }
+
+  /// Дата, которая сейчас выбрана в полосе.
+  DateTime dayAt(int index) =>
+      DateTime(today.year, today.month, today.day + index);
+
+  /// Смены только на выбранный день. Вот она — фильтрация.
+  /// `where` оставляет из списка те элементы, для которых условие истинно.
+  List<Shift> get visibleShifts => allShifts
+      .where((shift) => isSameDay(shift.workDate, dayAt(selectedDay)))
+      .toList();
+
+  /// Есть ли смены в этот день. Нужно, чтобы приглушить пустые даты —
+  /// ровно так же, как это сделано в прототипе.
+  bool hasShiftsOn(DateTime date) =>
+      allShifts.any((shift) => isSameDay(shift.workDate, date));
+
+  @override
   Widget build(BuildContext context) {
+    final shifts = visibleShifts;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('fastwork'),
@@ -151,18 +223,51 @@ class _ShiftsPageState extends State<ShiftsPage> {
       body: Column(
         children: [
           _DateStrip(
+            today: today,
             selectedDay: selectedDay,
+            hasShiftsOn: hasShiftsOn,
             // Когда пользователь нажал на дату — запоминаем её и просим
             // Flutter перерисовать экран. Это и есть «состояние экрана».
             onDaySelected: (day) => setState(() => selectedDay = day),
           ),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: demoShifts.length,
-              itemBuilder: (context, index) =>
-                  _ShiftCard(shift: demoShifts[index]),
-            ),
+            child: shifts.isEmpty
+                ? const _EmptyState()
+                : ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: shifts.length,
+                    itemBuilder: (context, index) =>
+                        _ShiftCard(shift: shifts[index]),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Что показать, когда на выбранный день смен нет.
+/// Пустой экран без объяснения выглядит как сломанное приложение.
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.event_busy, size: 64, color: colors.outline),
+          const SizedBox(height: 16),
+          const Text(
+            'На этот день смен нет',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Выберите другую дату',
+            style: TextStyle(color: colors.onSurfaceVariant),
           ),
         ],
       ),
@@ -172,17 +277,23 @@ class _ShiftsPageState extends State<ShiftsPage> {
 
 /// Горизонтальная полоса дат.
 class _DateStrip extends StatelessWidget {
+  final DateTime today;
   final int selectedDay;
   final ValueChanged<int> onDaySelected;
+  final bool Function(DateTime) hasShiftsOn;
 
-  const _DateStrip({required this.selectedDay, required this.onDaySelected});
+  const _DateStrip({
+    required this.today,
+    required this.selectedDay,
+    required this.onDaySelected,
+    required this.hasShiftsOn,
+  });
 
   static const _weekdays = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final today = DateTime.now();
 
     return SizedBox(
       height: 84,
@@ -191,8 +302,17 @@ class _DateStrip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12),
         itemCount: 14,
         itemBuilder: (context, index) {
-          final date = today.add(Duration(days: index));
+          final date = DateTime(today.year, today.month, today.day + index);
           final isSelected = index == selectedDay;
+          final hasShifts = hasShiftsOn(date);
+
+          // Цвет текста: выбранный день — белым, день без смен — бледным,
+          // обычный — основным.
+          final textColor = isSelected
+              ? colors.onPrimary
+              : hasShifts
+                  ? colors.onSurface
+                  : colors.onSurface.withValues(alpha: 0.35);
 
           return GestureDetector(
             onTap: () => onDaySelected(index),
@@ -200,7 +320,9 @@ class _DateStrip extends StatelessWidget {
               width: 60,
               margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
               decoration: BoxDecoration(
-                color: isSelected ? colors.primary : colors.surfaceContainerHighest,
+                color: isSelected
+                    ? colors.primary
+                    : colors.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Column(
@@ -208,10 +330,7 @@ class _DateStrip extends StatelessWidget {
                 children: [
                   Text(
                     _weekdays[date.weekday - 1],
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isSelected ? colors.onPrimary : colors.onSurfaceVariant,
-                    ),
+                    style: TextStyle(fontSize: 12, color: textColor),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -219,7 +338,7 @@ class _DateStrip extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: isSelected ? colors.onPrimary : colors.onSurface,
+                      color: textColor,
                     ),
                   ),
                 ],
