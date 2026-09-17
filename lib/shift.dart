@@ -19,6 +19,7 @@ class Shift {
   final int payoutDelayDays; // через сколько дней придёт вознаграждение
   final int cancelDeadlineHours; // за сколько часов до смены можно отменить
   final double? minRating; // порог допуска; null — ограничений нет
+  final int? createdBy; // какой заказчик создал смену
 
   /// Статус моего отклика на эту смену: `active`, `cancelled` или null,
   /// если я на неё не откликался. Приходит из базы вместе со сменой.
@@ -42,6 +43,7 @@ class Shift {
     this.payoutDelayDays = 1,
     this.cancelDeadlineHours = 10,
     this.minRating,
+    this.createdBy,
     this.myStatus,
   });
 
@@ -67,6 +69,7 @@ class Shift {
         payoutDelayDays: payoutDelayDays,
         cancelDeadlineHours: cancelDeadlineHours,
         minRating: minRating,
+        createdBy: createdBy,
         myStatus: clearMyStatus ? null : (myStatus ?? this.myStatus),
       );
 

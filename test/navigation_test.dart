@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fastwork/main.dart';
 import 'package:fastwork/data/auth_repository.dart';
+import 'package:fastwork/data/database.dart';
 import 'package:fastwork/data/fake_shift_repository.dart';
+import 'package:fastwork/data/repositories.dart';
 import 'package:fastwork/data/session.dart';
+import 'package:fastwork/data/support_repository.dart';
 import 'package:fastwork/user.dart';
 
 /// Проверяем экраны целиком — как будто пользователь тыкает пальцем,
@@ -12,13 +15,27 @@ import 'package:fastwork/user.dart';
 /// Вместо настоящей базы подставляем данные в памяти. Экраны разницы не
 /// замечают: они работают с интерфейсами хранилищ, а не с SQLite.
 void main() {
-  AppUser testUser({double rating = 4.0}) => AppUser(
+  AppUser testUser({double rating = 4.0, String role = UserRole.worker}) =>
+      AppUser(
         id: 1,
         phone: '77001234567',
         fullName: 'Ернар Калдыбеков',
         city: 'Алматы',
         rating: rating,
         isVerified: false,
+        role: role,
+        company: role == UserRole.manager ? 'Magnum' : null,
+      );
+
+  AppRepositories buildRepos({
+    FakeShiftRepository? shifts,
+    AppUser? signedIn,
+  }) =>
+      AppRepositories(
+        shifts: shifts ?? FakeShiftRepository(),
+        auth: FakeAuthRepository(signedIn: signedIn),
+        documents: FakeDocumentRepository(),
+        support: FakeSupportRepository(),
       );
 
   /// По умолчанию тестовый «экран» маленький — 800×600, и часть карточек
@@ -36,14 +53,19 @@ void main() {
     WidgetTester tester, {
     double rating = 4.0,
     FakeShiftRepository? shifts,
+    String role = UserRole.worker,
+    AppRepositories? repos,
   }) async {
     useTallPhone(tester);
-    final user = testUser(rating: rating);
+    final user = testUser(rating: rating, role: role);
     final session = AppSession()..setUser(user);
     await tester.pumpWidget(FastworkApp(
       session: session,
-      shifts: shifts ?? FakeShiftRepository(userRating: rating),
-      auth: FakeAuthRepository(signedIn: user),
+      repos: repos ??
+          buildRepos(
+            shifts: shifts ?? FakeShiftRepository(userRating: rating),
+            signedIn: user,
+          ),
     ));
     await tester.pumpAndSettle();
   }
@@ -53,8 +75,7 @@ void main() {
     useTallPhone(tester);
     await tester.pumpWidget(FastworkApp(
       session: AppSession(),
-      shifts: FakeShiftRepository(),
-      auth: FakeAuthRepository(),
+      repos: buildRepos(),
     ));
     await tester.pumpAndSettle();
   }
@@ -333,6 +354,143 @@ void main() {
         find.widgetWithText(FilledButton, 'Отправить отзыв'),
       );
       expect(send.onPressed, isNull);
+    });
+  });
+
+  group('роль заказчика', () {
+    testWidgets('регистрация заказчика требует название компании',
+        (tester) async {
+      await openAppSignedOut(tester);
+
+      await tester.tap(find.text('Нанимаю людей'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).at(0), '77005556677');
+      await tester.enterText(find.byType(TextField).at(1), 'Асем Оспанова');
+      await tester.tap(find.text('Создать аккаунт'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Укажите название компании'), findsOneWidget);
+    });
+
+    testWidgets('у заказчика другие вкладки', (tester) async {
+      await openApp(tester, role: UserRole.manager);
+
+      expect(find.text('Мои смены'), findsWidgets);
+      expect(find.text('Создать'), findsOneWidget);
+      // Вкладок исполнителя нет.
+      expect(find.text('Смены'), findsNothing);
+    });
+
+    testWidgets('заказчик создаёт смену и видит её у себя', (tester) async {
+      final shifts = FakeShiftRepository();
+      await openApp(
+        tester,
+        role: UserRole.manager,
+        repos: buildRepos(
+          shifts: shifts,
+          signedIn: testUser(role: UserRole.manager),
+        ),
+      );
+
+      expect(find.text('Смен пока нет'), findsOneWidget);
+
+      await tester.tap(find.text('Создать'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byType(TextField).at(0),
+        'Услуги грузчика',
+      );
+      await tester.enterText(
+        find.byType(TextField).at(1),
+        'г. Алматы, ул. Абая, 10',
+      );
+      await tester.tap(find.text('Опубликовать смену'));
+      await tester.pumpAndSettle();
+
+      // Вернулись на список — смена там.
+      expect(find.text('Услуги грузчика'), findsOneWidget);
+      expect(find.text('0 / 3'), findsOneWidget);
+    });
+
+    testWidgets('пустой адрес не даёт опубликовать смену', (tester) async {
+      await openApp(tester, role: UserRole.manager);
+
+      await tester.tap(find.text('Создать'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byType(TextField).at(0),
+        'Услуги грузчика',
+      );
+      await tester.tap(find.text('Опубликовать смену'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Укажите адрес'), findsOneWidget);
+    });
+  });
+
+  group('документы и поддержка', () {
+    testWidgets('загруженный документ уходит на проверку', (tester) async {
+      await openApp(tester);
+
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Документы'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Удостоверение личности'), findsOneWidget);
+      expect(find.text('Не загружен'), findsNWidgets(2));
+
+      await tester.tap(find.text('Загрузить').first);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, '123456789');
+      await tester.tap(find.text('Отправить'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('На проверке'), findsOneWidget);
+
+      // Через пару секунд оператор «проверяет» документ.
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+      expect(find.text('Принят'), findsOneWidget);
+    });
+
+    testWidgets('обращение в поддержку создаётся и открывается',
+        (tester) async {
+      await openApp(tester);
+
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Поддержка'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Обращений пока нет'), findsOneWidget);
+
+      await tester.tap(find.text('Написать'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'Нет выплаты');
+      await tester.enterText(
+        find.byType(TextField).at(1),
+        'Отработал смену, деньги не пришли',
+      );
+      await tester.tap(find.text('Отправить'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Нет выплаты'), findsOneWidget);
+
+      // Открываем переписку и пишем ещё одно сообщение.
+      await tester.tap(find.text('Нет выплаты'));
+      await tester.pumpAndSettle();
+      expect(find.text('Отработал смену, деньги не пришли'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField).last, 'Есть новости?');
+      await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Есть новости?'), findsOneWidget);
     });
   });
 

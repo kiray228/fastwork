@@ -28,6 +28,9 @@ class ShiftRows extends Table {
   TextColumn get employerComment => text().nullable()();
   IntColumn get payoutDelayDays => integer().withDefault(const Constant(1))();
 
+  /// Кто создал смену. null — учебные данные, созданные приложением.
+  IntColumn get createdBy => integer().nullable()();
+
   /// За сколько часов до начала смены ещё можно отменить запись.
   /// Добавлена во второй версии схемы — см. миграцию ниже.
   IntColumn get cancelDeadlineHours =>
@@ -55,6 +58,77 @@ class UserRows extends Table {
 
   BoolColumn get isVerified =>
       boolean().withDefault(const Constant(false))();
+
+  /// Роль: `worker` — исполнитель, `manager` — сотрудник компании.
+  /// Роль это **свойство** пользователя, а не отдельная таблица: поля у них
+  /// одинаковые, различается только поведение.
+  TextColumn get role =>
+      text().withDefault(const Constant(UserRole.worker))();
+
+  /// Название компании для менеджера. У исполнителя пусто.
+  TextColumn get company => text().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+}
+
+/// Роли пользователей.
+class UserRole {
+  UserRole._();
+
+  static const worker = 'worker';
+  static const manager = 'manager';
+}
+
+/// Документы исполнителя: удостоверение, санитарная книжка.
+class DocumentRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer()();
+  TextColumn get type => text()(); // id_card / medical_book
+  TextColumn get number => text()();
+  DateTimeColumn get expiresAt => dateTime().nullable()();
+
+  /// Состояние проверки: pending → approved или rejected.
+  TextColumn get status => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  /// Один документ каждого типа на человека.
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {userId, type},
+      ];
+}
+
+/// Статусы проверки документа.
+class DocumentStatus {
+  DocumentStatus._();
+
+  static const pending = 'pending';
+  static const approved = 'approved';
+  static const rejected = 'rejected';
+}
+
+/// Обращение в поддержку.
+class SupportTicketRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer()();
+  TextColumn get subject => text()();
+  TextColumn get status => text()(); // open / closed
+  DateTimeColumn get createdAt => dateTime()();
+}
+
+/// Сообщение внутри обращения.
+///
+/// Связь один-ко-многим: одно обращение — много сообщений.
+/// Внешний ключ лежит здесь, на стороне «многих».
+class SupportMessageRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get ticketId => integer()
+      .references(SupportTicketRows, #id, onDelete: KeyAction.cascade)();
+
+  /// Колонку нельзя назвать `text`: так называется метод drift, которым
+  /// объявляют текстовые колонки, и получилось бы обращение к самому себе.
+  TextColumn get body => text()();
+  BoolColumn get fromSupport => boolean()();
   DateTimeColumn get createdAt => dateTime()();
 }
 
@@ -128,7 +202,16 @@ class ApplicationStatus {
 // ---------------------------------------------------------------------------
 
 @DriftDatabase(
-  tables: [ShiftRows, ApplicationRows, UserRows, AppSettings, ReviewRows],
+  tables: [
+    ShiftRows,
+    ApplicationRows,
+    UserRows,
+    AppSettings,
+    ReviewRows,
+    DocumentRows,
+    SupportTicketRows,
+    SupportMessageRows,
+  ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
@@ -147,7 +230,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Версия схемы. Каждое изменение таблиц поднимает номер на единицу.
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -168,6 +251,14 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 4) {
             await m.createTable(reviewRows);
+          }
+          if (from < 5) {
+            await m.addColumn(shiftRows, shiftRows.createdBy);
+            await m.addColumn(userRows, userRows.role);
+            await m.addColumn(userRows, userRows.company);
+            await m.createTable(documentRows);
+            await m.createTable(supportTicketRows);
+            await m.createTable(supportMessageRows);
           }
         },
         beforeOpen: (details) async {

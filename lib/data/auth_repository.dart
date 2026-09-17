@@ -16,6 +16,8 @@ abstract class AuthRepository {
     required String phone,
     required String fullName,
     required String city,
+    String role = UserRole.worker,
+    String? company,
   });
 
   /// Запомнить, что вошёл этот пользователь.
@@ -59,6 +61,8 @@ class DbAuthRepository implements AuthRepository {
       city: row.city,
       rating: row.rating,
       isVerified: row.isVerified,
+      role: row.role,
+      company: row.company,
       completedShifts: rows.first.read<int>('c'),
     );
   }
@@ -96,12 +100,16 @@ class DbAuthRepository implements AuthRepository {
     required String phone,
     required String fullName,
     required String city,
+    String role = UserRole.worker,
+    String? company,
   }) async {
     final id = await db.into(db.userRows).insert(
           UserRowsCompanion.insert(
             phone: phone,
             fullName: fullName,
             city: city,
+            role: Value(role),
+            company: Value(company),
             createdAt: DateTime.now(),
           ),
         );
@@ -167,6 +175,8 @@ class FakeAuthRepository implements AuthRepository {
     required String phone,
     required String fullName,
     required String city,
+    String role = UserRole.worker,
+    String? company,
   }) async {
     final user = AppUser(
       id: _nextId++,
@@ -175,6 +185,8 @@ class FakeAuthRepository implements AuthRepository {
       city: city,
       rating: 4.0,
       isVerified: false,
+      role: role,
+      company: company,
     );
     _users.add(user);
     _current = user;

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'data/auth_repository.dart';
+import 'data/repositories.dart';
 import 'data/session.dart';
-import 'data/shift_repository.dart';
+import 'documents_page.dart';
+import 'support_ui/support_page.dart';
 import 'theme/app_colors.dart';
 import 'user.dart';
 import 'wallet_page.dart';
@@ -11,15 +12,9 @@ import 'widgets/common.dart';
 /// Профиль пользователя.
 class ProfilePage extends StatelessWidget {
   final AppSession session;
-  final AuthRepository auth;
-  final ShiftRepository shifts;
+  final AppRepositories repos;
 
-  const ProfilePage({
-    super.key,
-    required this.session,
-    required this.auth,
-    required this.shifts,
-  });
+  const ProfilePage({super.key, required this.session, required this.repos});
 
   Future<void> _signOut(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -45,7 +40,7 @@ class ProfilePage extends StatelessWidget {
     );
 
     if (confirmed != true) return;
-    await auth.signOut();
+    await repos.auth.signOut();
     session.setUser(null);
   }
 
@@ -63,39 +58,52 @@ class ProfilePage extends StatelessWidget {
         children: [
           _Header(user: user),
           const SizedBox(height: 14),
-          _Stats(user: user),
-          const SizedBox(height: 14),
+          if (!user.isManager) ...[
+            _Stats(user: user),
+            const SizedBox(height: 14),
+          ],
           SurfaceCard(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Column(
               children: [
-                _MenuRow(
-                  icon: Icons.payments_outlined,
-                  title: 'Выплаты',
-                  trailing: 'Вознаграждение',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => WalletPage(repository: shifts),
+                if (!user.isManager)
+                  _MenuRow(
+                    icon: Icons.payments_outlined,
+                    title: 'Выплаты',
+                    trailing: 'Вознаграждение',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => WalletPage(repository: repos.shifts),
+                      ),
                     ),
                   ),
-                ),
-                _MenuRow(
-                  icon: Icons.badge_outlined,
-                  title: 'Документы',
-                  trailing: user.isVerified ? 'Проверены' : 'Не проверены',
-                ),
-                const _MenuRow(
-                  icon: Icons.local_hospital_outlined,
-                  title: 'Санитарная книжка',
-                ),
+                if (!user.isManager)
+                  _MenuRow(
+                    icon: Icons.badge_outlined,
+                    title: 'Документы',
+                    trailing: user.isVerified ? 'Проверены' : 'Не проверены',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => DocumentsPage(
+                          repository: repos.documents,
+                          session: session,
+                        ),
+                      ),
+                    ),
+                  ),
                 _MenuRow(
                   icon: Icons.place_outlined,
                   title: 'Город',
                   trailing: user.city,
                 ),
-                const _MenuRow(
+                _MenuRow(
                   icon: Icons.chat_bubble_outline_rounded,
                   title: 'Поддержка',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => SupportPage(repository: repos.support),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -161,7 +169,13 @@ class _Header extends StatelessWidget {
             style: const TextStyle(fontSize: 13, color: AppColors.muted),
           ),
           const SizedBox(height: 12),
-          if (user.isVerified)
+          if (user.isManager)
+            TagChip(
+              text: user.company ?? 'Заказчик',
+              icon: Icons.business_rounded,
+              color: AppColors.brand,
+            )
+          else if (user.isVerified)
             const TagChip(
               text: 'Верифицирован',
               icon: Icons.verified_rounded,

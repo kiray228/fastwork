@@ -1,5 +1,6 @@
 import '../review.dart';
 import '../shift.dart';
+import '../user.dart';
 import 'database.dart';
 import 'shift_filter.dart';
 import 'shift_repository.dart';
@@ -143,6 +144,60 @@ class FakeShiftRepository implements ShiftRepository {
       createdAt: DateTime.now(),
     ));
   }
+
+  @override
+  Future<int> createShift({
+    required DateTime workDate,
+    required String title,
+    required String company,
+    required String address,
+    required int startMinutes,
+    required int endMinutes,
+    required int hourlyRate,
+    required int workersNeeded,
+    required int createdBy,
+    List<String> duties = const [],
+    String? dressCode,
+    double? minRating,
+  }) async {
+    final id = (_shifts.map((s) => s.id).fold<int>(0, (a, b) => a > b ? a : b)) + 1;
+    _shifts.add(Shift(
+      id: id,
+      workDate: workDate,
+      title: title,
+      company: company,
+      address: address,
+      startMinutes: startMinutes,
+      endMinutes: endMinutes,
+      hourlyRate: hourlyRate,
+      workersNeeded: workersNeeded,
+      workersHired: 0,
+      duties: duties,
+      dressCode: dressCode,
+      minRating: minRating,
+      createdBy: createdBy,
+    ));
+    return id;
+  }
+
+  @override
+  Future<List<Shift>> shiftsCreatedBy(int managerId) async =>
+      _shifts.where((s) => s.createdBy == managerId).map(_decorate).toList();
+
+  @override
+  Future<List<AppUser>> applicantsFor(int shiftId) async =>
+      _myStatuses[shiftId] == ApplicationStatus.active
+          ? [
+              const AppUser(
+                id: 1,
+                phone: '77001234567',
+                fullName: 'Ернар Калдыбеков',
+                city: 'Алматы',
+                rating: 4.0,
+                isVerified: false,
+              ),
+            ]
+          : const [];
 
   @override
   Future<void> prepareDemoHistory(int userId) async {

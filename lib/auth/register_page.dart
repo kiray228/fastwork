@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../data/auth_repository.dart';
+import '../data/database.dart';
 import '../data/session.dart';
 import '../theme/app_colors.dart';
 import '../user.dart';
@@ -24,7 +25,12 @@ class RegisterPage extends StatefulWidget {
 class _RegisterPageState extends State<RegisterPage> {
   final phoneController = TextEditingController();
   final nameController = TextEditingController();
+  final companyController = TextEditingController();
   String city = kCities.first;
+
+  /// Кто регистрируется: исполнитель или заказчик.
+  String role = UserRole.worker;
+  bool get isManager => role == UserRole.manager;
   bool busy = false;
   String? error;
 
@@ -32,6 +38,7 @@ class _RegisterPageState extends State<RegisterPage> {
   void dispose() {
     phoneController.dispose();
     nameController.dispose();
+    companyController.dispose();
     super.dispose();
   }
 
@@ -49,6 +56,10 @@ class _RegisterPageState extends State<RegisterPage> {
       setState(() => error = 'Введите имя и фамилию');
       return;
     }
+    if (isManager && companyController.text.trim().length < 2) {
+      setState(() => error = 'Укажите название компании');
+      return;
+    }
 
     setState(() {
       busy = true;
@@ -63,6 +74,8 @@ class _RegisterPageState extends State<RegisterPage> {
           phone: _digits,
           fullName: nameController.text.trim(),
           city: city,
+          role: role,
+          company: isManager ? companyController.text.trim() : null,
         );
 
     if (existing != null) await widget.auth.signIn(user);
@@ -100,7 +113,35 @@ class _RegisterPageState extends State<RegisterPage> {
                 height: 1.4,
               ),
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 20),
+
+            // Выбор роли. Роль это свойство пользователя, а не отдельная
+            // таблица: поля одинаковые, различается только то, что человек
+            // видит и может делать внутри приложения.
+            Row(
+              children: [
+                Expanded(
+                  child: _RoleCard(
+                    icon: Icons.person_search_rounded,
+                    title: 'Ищу подработку',
+                    selected: !isManager,
+                    onTap: () =>
+                        setState(() => role = UserRole.worker),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _RoleCard(
+                    icon: Icons.business_center_rounded,
+                    title: 'Нанимаю людей',
+                    selected: isManager,
+                    onTap: () =>
+                        setState(() => role = UserRole.manager),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
 
             _Field(
               label: 'Номер телефона',
@@ -121,6 +162,16 @@ class _RegisterPageState extends State<RegisterPage> {
               textCapitalization: TextCapitalization.words,
               onChanged: (_) => setState(() => error = null),
             ),
+            if (isManager) ...[
+              const SizedBox(height: 16),
+              _Field(
+                label: 'Название компании',
+                controller: companyController,
+                hint: 'Magnum',
+                textCapitalization: TextCapitalization.words,
+                onChanged: (_) => setState(() => error = null),
+              ),
+            ],
             const SizedBox(height: 16),
 
             const Text(
@@ -180,7 +231,9 @@ class _RegisterPageState extends State<RegisterPage> {
                         color: Colors.white,
                       ),
                     )
-                  : const Text('Начать работать'),
+                  : Text(
+                      isManager ? 'Создать аккаунт' : 'Начать работать',
+                    ),
             ),
             const SizedBox(height: 14),
             const Text(
@@ -188,6 +241,67 @@ class _RegisterPageState extends State<RegisterPage> {
               'и обработкой персональных данных.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 11.5, color: AppColors.muted, height: 1.4),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Карточка выбора роли.
+class _RoleCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _RoleCard({
+    required this.icon,
+    required this.title,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.brand.withValues(alpha: 0.12)
+              : (isDark ? AppColors.darkSurface : Colors.white),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected
+                ? AppColors.brand
+                : (isDark ? AppColors.darkBorder : AppColors.border),
+            width: selected ? 1.6 : 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              size: 26,
+              color: selected ? AppColors.brand : AppColors.muted,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: selected
+                    ? AppColors.brand
+                    : Theme.of(context).colorScheme.onSurface,
+              ),
             ),
           ],
         ),

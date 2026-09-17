@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../review.dart';
+import '../user.dart';
 import '../shift.dart';
 import 'database.dart';
 import 'session.dart';
@@ -64,6 +65,28 @@ abstract class ShiftRepository {
     required int rating,
     String? comment,
   });
+
+  /// Создать смену. Доступно роли «заказчик».
+  Future<int> createShift({
+    required DateTime workDate,
+    required String title,
+    required String company,
+    required String address,
+    required int startMinutes,
+    required int endMinutes,
+    required int hourlyRate,
+    required int workersNeeded,
+    required int createdBy,
+    List<String> duties,
+    String? dressCode,
+    double? minRating,
+  });
+
+  /// Смены, созданные этим заказчиком.
+  Future<List<Shift>> shiftsCreatedBy(int managerId);
+
+  /// Кто записался на смену — список для заказчика.
+  Future<List<AppUser>> applicantsFor(int shiftId);
 
   /// Учебные данные: пара уже отработанных смен для нового пользователя,
   /// чтобы архив, кошелёк и отзывы не пустовали. Вызывать можно сколько
@@ -144,6 +167,7 @@ class DbShiftRepository implements ShiftRepository {
         payoutDelayDays: row.read<int>('payout_delay_days'),
         cancelDeadlineHours: row.read<int>('cancel_deadline_hours'),
         minRating: row.readNullable<double>('min_rating'),
+        createdBy: row.readNullable<int>('created_by'),
       );
 
   static List<String> _splitDuties(String raw) =>
@@ -432,6 +456,84 @@ class DbShiftRepository implements ShiftRepository {
             ),
           );
     }
+  }
+
+  @override
+  Future<int> createShift({
+    required DateTime workDate,
+    required String title,
+    required String company,
+    required String address,
+    required int startMinutes,
+    required int endMinutes,
+    required int hourlyRate,
+    required int workersNeeded,
+    required int createdBy,
+    List<String> duties = const [],
+    String? dressCode,
+    double? minRating,
+  }) {
+    return db.into(db.shiftRows).insert(
+          ShiftRowsCompanion.insert(
+            workDate: workDate,
+            title: title,
+            company: company,
+            address: address,
+            startMinutes: startMinutes,
+            endMinutes: endMinutes,
+            hourlyRate: hourlyRate,
+            workersNeeded: workersNeeded,
+            createdBy: Value(createdBy),
+            duties: Value(duties.join('\n')),
+            dressCode: Value(dressCode),
+            minRating: Value(minRating),
+          ),
+        );
+  }
+
+  @override
+  Future<List<Shift>> shiftsCreatedBy(int managerId) async {
+    final rows = await db.customSelect(
+      '''
+      SELECT s.*, $_hiredSql, $_myStatusSql
+      FROM shift_rows s
+      WHERE s.created_by = ?
+      ORDER BY s.work_date DESC, s.start_minutes
+      ''',
+      variables: [Variable.withInt(managerId)],
+      readsFrom: {db.shiftRows, db.applicationRows},
+    ).get();
+
+    return rows.map(_toShift).toList();
+  }
+
+  @override
+  Future<List<AppUser>> applicantsFor(int shiftId) async {
+    // JOIN соединяет отклики с пользователями: в откликах лежит только
+    // номер работника, а имя и рейтинг — в таблице пользователей.
+    final rows = await db.customSelect(
+      '''
+      SELECT u.*
+      FROM application_rows a
+      JOIN user_rows u ON u.id = a.worker_id
+      WHERE a.shift_id = ? AND a.status = 'active'
+      ORDER BY u.rating DESC
+      ''',
+      variables: [Variable.withInt(shiftId)],
+      readsFrom: {db.applicationRows, db.userRows},
+    ).get();
+
+    return rows
+        .map((r) => AppUser(
+              id: r.read<int>('id'),
+              phone: r.read<String>('phone'),
+              fullName: r.read<String>('full_name'),
+              city: r.read<String>('city'),
+              rating: r.read<double>('rating'),
+              isVerified: r.read<bool>('is_verified'),
+              role: r.read<String>('role'),
+            ))
+        .toList();
   }
 
   /// Первое заполнение базы. Настоящих смен нам взять неоткуда,
