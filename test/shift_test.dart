@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fastwork/main.dart';
+import 'package:fastwork/shift.dart';
 
 /// Проверяем расчёт оплаты на настоящих цифрах из прототипа.
 /// Если наши формулы верны — суммы должны сойтись с теми, что показывает
@@ -11,6 +11,7 @@ void main() {
     required int rate,
   }) =>
       Shift(
+        id: 1,
         workDate: DateTime(2026, 9, 17),
         title: 'тест',
         company: 'тест',
@@ -72,6 +73,7 @@ void main() {
 
   test('мест нет, когда набрано столько же, сколько нужно', () {
     final s = Shift(
+      id: 1,
       workDate: DateTime(2026, 9, 17),
       title: 'тест',
       company: 'тест',
