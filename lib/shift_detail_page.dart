@@ -1,17 +1,85 @@
 import 'package:flutter/material.dart';
 
+import 'data/shift_repository.dart';
 import 'shift.dart';
 import 'theme/app_colors.dart';
 import 'widgets/common.dart';
 
 /// Экран «Подробнее»: одна смена целиком.
-class ShiftDetailPage extends StatelessWidget {
-  final Shift shift;
+class ShiftDetailPage extends StatefulWidget {
+  final int shiftId;
+  final ShiftRepository repository;
 
-  const ShiftDetailPage({super.key, required this.shift});
+  const ShiftDetailPage({
+    super.key,
+    required this.shiftId,
+    required this.repository,
+  });
+
+  @override
+  State<ShiftDetailPage> createState() => _ShiftDetailPageState();
+}
+
+class _ShiftDetailPageState extends State<ShiftDetailPage> {
+  Shift? shift;
+  bool busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final loaded = await widget.repository.shiftById(widget.shiftId);
+    if (!mounted) return;
+    setState(() => shift = loaded);
+  }
+
+  /// Оставить заявку. После записи обязательно перечитываем смену из базы:
+  /// число занятых мест изменилось, и показывать старое нельзя.
+  Future<void> _apply() async {
+    setState(() => busy = true);
+    await widget.repository.apply(widget.shiftId);
+    await _load();
+    if (!mounted) return;
+    setState(() => busy = false);
+
+    final current = shift;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          current != null && current.isApplied
+              ? 'Заявка отправлена'
+              : 'Не получилось: мест уже нет',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _cancel() async {
+    setState(() => busy = true);
+    await widget.repository.cancelApplication(widget.shiftId);
+    await _load();
+    if (!mounted) return;
+    setState(() => busy = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Заявка отменена')),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final current = shift;
+
+    if (current == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Смена')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Смена'),
@@ -28,10 +96,14 @@ class ShiftDetailPage extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
               children: [
-                _HeroCard(shift: shift),
+                if (current.isApplied) ...[
+                  const _AppliedBanner(),
+                  const SizedBox(height: 14),
+                ],
+                _HeroCard(shift: current),
                 const SizedBox(height: 14),
-                _PayCard(shift: shift),
-                if (shift.duties.isNotEmpty) ...[
+                _PayCard(shift: current),
+                if (current.duties.isNotEmpty) ...[
                   const SizedBox(height: 14),
                   SurfaceCard(
                     child: Column(
@@ -42,7 +114,7 @@ class ShiftDetailPage extends StatelessWidget {
                           title: 'Обязанности',
                         ),
                         const SizedBox(height: 12),
-                        for (final duty in shift.duties)
+                        for (final duty in current.duties)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 8),
                             child: Row(
@@ -74,38 +146,65 @@ class ShiftDetailPage extends StatelessWidget {
                     ),
                   ),
                 ],
-                if (shift.dressCode != null) ...[
+                if (current.dressCode != null) ...[
                   const SizedBox(height: 14),
                   _TextSection(
                     icon: Icons.checkroom_rounded,
                     title: 'Форма одежды',
-                    text: shift.dressCode!,
+                    text: current.dressCode!,
                   ),
                 ],
-                if (shift.employerComment != null) ...[
+                if (current.employerComment != null) ...[
                   const SizedBox(height: 14),
                   _TextSection(
                     icon: Icons.info_outline_rounded,
                     title: 'Комментарий заказчика',
-                    text: shift.employerComment!,
+                    text: current.employerComment!,
                   ),
                 ],
                 const SizedBox(height: 14),
-                _SlotsCard(shift: shift),
+                _SlotsCard(shift: current),
               ],
             ),
           ),
           _BottomBar(
-            shift: shift,
-            onApply: () {
-              // Настоящего отклика пока нет — базы данных ещё не подключили.
-              // Пока просто показываем сообщение, чтобы кнопка была живой.
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Заявка на «${shift.title}» отправлена'),
-                ),
-              );
-            },
+            shift: current,
+            busy: busy,
+            onApply: _apply,
+            onCancel: _cancel,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Плашка «вы записаны» вверху экрана.
+class _AppliedBanner extends StatelessWidget {
+  const _AppliedBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.brand.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.brand.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle_rounded,
+              color: AppColors.brand, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Вы записаны на эту смену',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontSize: 14,
+                    color: AppColors.brandDark,
+                  ),
+            ),
           ),
         ],
       ),
@@ -463,13 +562,35 @@ class _SlotsCard extends StatelessWidget {
 /// Закреплённый низ экрана: срок выплаты и кнопка отклика.
 class _BottomBar extends StatelessWidget {
   final Shift shift;
+  final bool busy;
   final VoidCallback onApply;
+  final VoidCallback onCancel;
 
-  const _BottomBar({required this.shift, required this.onApply});
+  const _BottomBar({
+    required this.shift,
+    required this.busy,
+    required this.onApply,
+    required this.onCancel,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Что показывать на кнопке, зависит от состояния смены.
+    final String label;
+    final VoidCallback? action;
+
+    if (shift.isApplied) {
+      label = 'Отменить заявку';
+      action = onCancel;
+    } else if (shift.hasFreeSlots) {
+      label = 'Оставить заявку';
+      action = onApply;
+    } else {
+      label = 'Мест нет';
+      action = null;
+    }
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -522,10 +643,24 @@ class _BottomBar extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: shift.hasFreeSlots ? onApply : null,
-                child: Text(
-                  shift.hasFreeSlots ? 'Оставить заявку' : 'Мест нет',
-                ),
+                onPressed: busy ? null : action,
+                style: shift.isApplied
+                    ? FilledButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        foregroundColor: AppColors.body,
+                        side: const BorderSide(color: AppColors.border),
+                      )
+                    : null,
+                child: busy
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(label),
               ),
             ),
           ],

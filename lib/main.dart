@@ -1,14 +1,40 @@
 import 'package:flutter/material.dart';
 
-import 'shifts_page.dart';
+import 'data/database.dart';
+import 'data/fake_shift_repository.dart';
+import 'data/shift_repository.dart';
+import 'home_shell.dart';
 import 'theme/app_theme.dart';
 
-void main() {
-  runApp(const FastworkApp());
+Future<void> main() async {
+  // Нужно, если до запуска приложения мы обращаемся к диску или к системе.
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Открываем базу данных и, если она пустая, кладём в неё демо-смены.
+  ShiftRepository repository;
+  try {
+    final database = AppDatabase();
+    final dbRepository = DbShiftRepository(database);
+    await dbRepository.seedIfEmpty();
+    repository = dbRepository;
+  } catch (error, stack) {
+    // Если база не открылась (например, браузер запретил хранилище) —
+    // приложение не должно падать белым экраном. Работаем на данных
+    // в памяти: пользователь всё увидит, просто ничего не сохранится.
+    debugPrint('Не удалось открыть базу данных: $error');
+    debugPrint('$stack');
+    repository = FakeShiftRepository();
+  }
+
+  runApp(FastworkApp(repository: repository));
 }
 
 class FastworkApp extends StatelessWidget {
-  const FastworkApp({super.key});
+  /// Хранилище передаётся снаружи. Приложение не создаёт базу само —
+  /// поэтому в тестах вместо SQLite можно подсунуть данные в памяти.
+  final ShiftRepository repository;
+
+  const FastworkApp({super.key, required this.repository});
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +58,7 @@ class FastworkApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const ShiftsPage(),
+      home: HomeShell(repository: repository),
     );
   }
 }

@@ -18,6 +18,10 @@ class Shift {
   final String? employerComment; // свободный текст заказчика
   final int payoutDelayDays; // через сколько дней придёт вознаграждение
 
+  /// Статус моего отклика на эту смену: `active`, `cancelled` или null,
+  /// если я на неё не откликался. Приходит из базы вместе со сменой.
+  final String? myStatus;
+
   const Shift({
     required this.id,
     required this.workDate,
@@ -34,7 +38,31 @@ class Shift {
     this.dressCode,
     this.employerComment,
     this.payoutDelayDays = 1,
+    this.myStatus,
   });
+
+  /// Копия смены с изменёнными полями. Сам объект менять нельзя —
+  /// все его поля `final`. Это защищает от случайных правок «издалека»:
+  /// если что-то поменялось, значит кто-то явно создал новый объект.
+  Shift copyWith({int? workersHired, String? myStatus, bool clearMyStatus = false}) =>
+      Shift(
+        id: id,
+        workDate: workDate,
+        title: title,
+        company: company,
+        address: address,
+        startMinutes: startMinutes,
+        endMinutes: endMinutes,
+        breakMinutes: breakMinutes,
+        hourlyRate: hourlyRate,
+        workersNeeded: workersNeeded,
+        workersHired: workersHired ?? this.workersHired,
+        duties: duties,
+        dressCode: dressCode,
+        employerComment: employerComment,
+        payoutDelayDays: payoutDelayDays,
+        myStatus: clearMyStatus ? null : (myStatus ?? this.myStatus),
+      );
 
   /// Сколько всего длится смена.
   /// Если конец «меньше» начала — значит смена ночная и переходит через
@@ -55,6 +83,12 @@ class Shift {
 
   /// Есть ли ещё свободные места.
   bool get hasFreeSlots => freeSlots > 0;
+
+  /// Я уже записан на эту смену.
+  bool get isApplied => myStatus == 'active';
+
+  /// Можно ли откликнуться: места есть и я ещё не записан.
+  bool get canApply => hasFreeSlots && !isApplied;
 
   /// Вычитается ли обед на этой смене.
   bool get hasUnpaidBreak => durationMinutes > 300;

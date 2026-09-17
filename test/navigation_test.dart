@@ -1,68 +1,106 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fastwork/main.dart';
+import 'package:fastwork/data/fake_shift_repository.dart';
 
-/// Проверяем, что нажатие на карточку действительно открывает экран
-/// «Подробнее». Такой тест запускает настоящие виджеты — как будто
-/// пользователь тыкает пальцем, только очень быстро.
+/// Проверяем экраны целиком — как будто пользователь тыкает пальцем,
+/// только очень быстро.
+///
+/// Вместо настоящей базы подставляем данные в памяти. Экраны разницы не
+/// замечают: они работают с интерфейсом хранилища, а не с SQLite.
+/// Поэтому тесты идут за доли секунды и ничего не пишут на диск.
 void main() {
   /// По умолчанию тестовый «экран» маленький — 800×600, и часть карточек
   /// в него не влезает. А списки во Flutter создают только те элементы,
-  /// что видны на экране, — поэтому ненайденная кнопка означала бы не
-  /// ошибку, а просто «её ещё не нарисовали».
-  /// Задаём размер повыше, чтобы поместились обе карточки.
+  /// что видны, — поэтому ненайденная кнопка означала бы не ошибку,
+  /// а просто «её ещё не нарисовали».
   void useTallPhone(WidgetTester tester) {
     tester.view.devicePixelRatio = 1.0;
-    tester.view.physicalSize = const Size(420, 1800);
+    tester.view.physicalSize = const Size(420, 2000);
     addTearDown(tester.view.reset);
   }
 
-  testWidgets('нажатие на «Подробнее» открывает экран смены', (tester) async {
+  Future<void> openApp(WidgetTester tester) async {
     useTallPhone(tester);
-    await tester.pumpWidget(const FastworkApp());
+    await tester.pumpWidget(FastworkApp(repository: FakeShiftRepository()));
     await tester.pumpAndSettle();
+  }
 
-    // На главном экране есть карточки с кнопкой.
+  testWidgets('нажатие на «Подробнее» открывает экран смены', (tester) async {
+    await openApp(tester);
+
     expect(find.text('Подробнее'), findsWidgets);
 
-    // Нажимаем первую кнопку и ждём, пока проиграется анимация перехода.
     await tester.tap(find.text('Подробнее').first);
     await tester.pumpAndSettle();
 
-    // Оказались на экране смены: видим блок вознаграждения и кнопку заявки.
     expect(find.text('Вознаграждение'), findsOneWidget);
     expect(find.text('Оставить заявку'), findsOneWidget);
   });
 
   testWidgets('кнопка «Мест нет» не открывает экран смены', (tester) async {
-    useTallPhone(tester);
-    await tester.pumpWidget(const FastworkApp());
-    await tester.pumpAndSettle();
+    await openApp(tester);
 
     // У смены Zara мест нет — кнопка неактивна.
     final soldOut = find.widgetWithText(FilledButton, 'Мест нет');
     expect(soldOut, findsOneWidget);
 
-    // warnIfMissed: false — мы специально жмём по выключенной кнопке,
-    // и Flutter не должен ругаться, что нажатие «не попало».
+    // warnIfMissed: false — мы специально жмём по выключенной кнопке.
     await tester.tap(soldOut, warnIfMissed: false);
     await tester.pumpAndSettle();
 
-    // Никуда не перешли: блока вознаграждения нет.
     expect(find.text('Вознаграждение'), findsNothing);
   });
 
-  testWidgets('выбор дня без смен показывает пустое состояние',
-      (tester) async {
-    useTallPhone(tester);
-    await tester.pumpWidget(const FastworkApp());
-    await tester.pumpAndSettle();
+  testWidgets('день без смен показывает пустое состояние', (tester) async {
+    await openApp(tester);
 
-    // Послезавтра смен нет — это третья плашка в полосе дат (индекс 2).
+    // Послезавтра смен нет.
     final dayAfterTomorrow = DateTime.now().add(const Duration(days: 2));
     await tester.tap(find.text('${dayAfterTomorrow.day}').first);
     await tester.pumpAndSettle();
 
     expect(find.text('На этот день смен нет'), findsOneWidget);
+  });
+
+  testWidgets('заявка сохраняется и меняет состояние экрана', (tester) async {
+    await openApp(tester);
+
+    // Открываем первую смену: 5 мест, 2 заняты — свободно 3.
+    await tester.tap(find.text('Подробнее').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Свободно мест: 3'), findsOneWidget);
+
+    // Оставляем заявку.
+    await tester.tap(find.text('Оставить заявку'));
+    await tester.pumpAndSettle();
+
+    // Появилась плашка, кнопка сменилась, свободных мест стало меньше.
+    expect(find.text('Вы записаны на эту смену'), findsOneWidget);
+    expect(find.text('Отменить заявку'), findsOneWidget);
+    expect(find.text('Свободно мест: 2'), findsOneWidget);
+  });
+
+  testWidgets('смена с заявкой появляется в разделе «Мои»', (tester) async {
+    await openApp(tester);
+
+    await tester.tap(find.text('Подробнее').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Оставить заявку'));
+    await tester.pumpAndSettle();
+
+    // Возвращаемся назад и открываем вкладку «Мои».
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Мои'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Мои подработки'), findsOneWidget);
+    expect(find.text('Золотое яблоко'), findsOneWidget);
+
+    // В архиве при этом пусто.
+    await tester.tap(find.text('Архив'));
+    await tester.pumpAndSettle();
+    expect(find.text('Пока пусто'), findsOneWidget);
   });
 }
