@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'data/shift_repository.dart';
 import 'shift.dart';
 import 'theme/app_colors.dart';
+import 'widgets/booking_confirm_sheet.dart';
 import 'widgets/common.dart';
 
 /// Экран «Подробнее»: одна смена целиком.
@@ -36,36 +37,84 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     setState(() => shift = loaded);
   }
 
-  /// Оставить заявку. После записи обязательно перечитываем смену из базы:
-  /// число занятых мест изменилось, и показывать старое нельзя.
-  Future<void> _apply() async {
+  /// Записаться на смену.
+  ///
+  /// Сначала показываем условия и ждём подтверждения — запись это
+  /// обязательство, а не «заявка на рассмотрение». Только после согласия
+  /// пишем в базу и перечитываем смену: занятых мест стало больше.
+  Future<void> _book() async {
+    final current = shift;
+    if (current == null) return;
+
+    final confirmed = await showBookingConfirmSheet(context, current);
+    if (!confirmed || !mounted) return;
+
     setState(() => busy = true);
-    await widget.repository.apply(widget.shiftId);
+    final result = await widget.repository.apply(widget.shiftId);
     await _load();
     if (!mounted) return;
     setState(() => busy = false);
 
-    final current = shift;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          current != null && current.isApplied
-              ? 'Заявка отправлена'
-              : 'Не получилось: мест уже нет',
-        ),
-      ),
+    _showResult(
+      switch (result) {
+        BookingResult.ok => 'Вы записаны на смену',
+        BookingResult.noSlots => 'Не получилось: мест уже нет',
+        BookingResult.alreadyBooked => 'Вы уже записаны на эту смену',
+        _ => 'Не получилось записаться',
+      },
     );
   }
 
+  /// Отменить запись — тоже с подтверждением, но коротким.
   Future<void> _cancel() async {
+    final current = shift;
+    if (current == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Отменить запись?'),
+        content: Text(
+          'Место освободится, и его сможет занять другой исполнитель.\n\n'
+          'Записаться заново можно будет, только если место останется '
+          'свободным.',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Оставить запись'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.accent),
+            child: const Text('Отменить'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
     setState(() => busy = true);
-    await widget.repository.cancelApplication(widget.shiftId);
+    final result = await widget.repository.cancelApplication(widget.shiftId);
     await _load();
     if (!mounted) return;
     setState(() => busy = false);
 
+    _showResult(
+      switch (result) {
+        BookingResult.ok => 'Запись отменена',
+        BookingResult.tooLateToCancel =>
+          'Срок отмены прошёл — запись отменить нельзя',
+        _ => 'Не получилось отменить',
+      },
+    );
+  }
+
+  void _showResult(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Заявка отменена')),
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -97,7 +146,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
               children: [
                 if (current.isApplied) ...[
-                  const _AppliedBanner(),
+                  _AppliedBanner(shift: current),
                   const SizedBox(height: 14),
                 ],
                 _HeroCard(shift: current),
@@ -170,7 +219,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
           _BottomBar(
             shift: current,
             busy: busy,
-            onApply: _apply,
+            onBook: _book,
             onCancel: _cancel,
           ),
         ],
@@ -181,29 +230,52 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
 
 /// Плашка «вы записаны» вверху экрана.
 class _AppliedBanner extends StatelessWidget {
-  const _AppliedBanner();
+  final Shift shift;
+
+  const _AppliedBanner({required this.shift});
 
   @override
   Widget build(BuildContext context) {
+    final canCancel = shift.canCancelAt(DateTime.now());
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.brand.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.brand.withValues(alpha: 0.35)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.check_circle_rounded,
-              color: AppColors.brand, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Вы записаны на эту смену',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontSize: 14,
-                    color: AppColors.brandDark,
-                  ),
+          Row(
+            children: [
+              const Icon(Icons.check_circle_rounded,
+                  color: AppColors.brand, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Вы записаны на эту смену',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontSize: 14,
+                        color: AppColors.brandDark,
+                      ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            canCancel
+                ? 'Отменить запись можно до '
+                    '${formatDateTime(shift.cancelDeadline)}'
+                : 'Срок отмены прошёл. Обязательно выйдите на смену — '
+                    'неявка снижает рейтинг.',
+            style: TextStyle(
+              fontSize: 12.5,
+              height: 1.35,
+              color: canCancel ? AppColors.body : AppColors.accent,
+              fontWeight: canCancel ? FontWeight.w500 : FontWeight.w700,
             ),
           ),
         ],
@@ -563,33 +635,42 @@ class _SlotsCard extends StatelessWidget {
 class _BottomBar extends StatelessWidget {
   final Shift shift;
   final bool busy;
-  final VoidCallback onApply;
+  final VoidCallback onBook;
   final VoidCallback onCancel;
 
   const _BottomBar({
     required this.shift,
     required this.busy,
-    required this.onApply,
+    required this.onBook,
     required this.onCancel,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final canCancel = shift.canCancelAt(DateTime.now());
 
     // Что показывать на кнопке, зависит от состояния смены.
     final String label;
     final VoidCallback? action;
+    final bool outlined;
 
-    if (shift.isApplied) {
-      label = 'Отменить заявку';
+    if (shift.isApplied && canCancel) {
+      label = 'Отменить запись';
       action = onCancel;
+      outlined = true;
+    } else if (shift.isApplied) {
+      label = 'Отмена уже недоступна';
+      action = null;
+      outlined = false;
     } else if (shift.hasFreeSlots) {
-      label = 'Оставить заявку';
-      action = onApply;
+      label = 'Записаться на смену';
+      action = onBook;
+      outlined = false;
     } else {
       label = 'Мест нет';
       action = null;
+      outlined = false;
     }
 
     return Container(
@@ -644,7 +725,7 @@ class _BottomBar extends StatelessWidget {
               width: double.infinity,
               child: FilledButton(
                 onPressed: busy ? null : action,
-                style: shift.isApplied
+                style: outlined
                     ? FilledButton.styleFrom(
                         backgroundColor: Colors.transparent,
                         foregroundColor: AppColors.body,

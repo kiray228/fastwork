@@ -27,6 +27,11 @@ class ShiftRows extends Table {
   TextColumn get dressCode => text().nullable()();
   TextColumn get employerComment => text().nullable()();
   IntColumn get payoutDelayDays => integer().withDefault(const Constant(1))();
+
+  /// За сколько часов до начала смены ещё можно отменить запись.
+  /// Добавлена во второй версии схемы — см. миграцию ниже.
+  IntColumn get cancelDeadlineHours =>
+      integer().withDefault(const Constant(10))();
 }
 
 /// Таблица откликов — связка между сменой и работником.
@@ -83,14 +88,23 @@ class AppDatabase extends _$AppDatabase {
         ),
       );
 
-  /// Версия схемы. Когда мы добавим колонку, номер вырастет до 2,
-  /// и здесь появится описание миграции — как перевести базу
-  /// пользователя со старой версии на новую, не потеряв его данные.
+  /// Версия схемы. Мы добавили колонку — значит версия выросла с 1 до 2.
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
+        onUpgrade: (m, from, to) async {
+          // Вот она, настоящая миграция.
+          //
+          // У пользователя на телефоне уже стоит база версии 1 с его
+          // записями. Пересоздать её нельзя — он потеряет свои данные.
+          // Поэтому мы не создаём базу заново, а дописываем недостающую
+          // колонку в существующую таблицу.
+          if (from < 2) {
+            await m.addColumn(shiftRows, shiftRows.cancelDeadlineHours);
+          }
+        },
         beforeOpen: (details) async {
           // Без этой строки SQLite не проверяет внешние ключи.
           await customStatement('PRAGMA foreign_keys = ON');

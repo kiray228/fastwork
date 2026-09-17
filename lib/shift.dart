@@ -17,6 +17,7 @@ class Shift {
   final String? dressCode; // требования к одежде
   final String? employerComment; // свободный текст заказчика
   final int payoutDelayDays; // через сколько дней придёт вознаграждение
+  final int cancelDeadlineHours; // за сколько часов до смены можно отменить
 
   /// Статус моего отклика на эту смену: `active`, `cancelled` или null,
   /// если я на неё не откликался. Приходит из базы вместе со сменой.
@@ -38,6 +39,7 @@ class Shift {
     this.dressCode,
     this.employerComment,
     this.payoutDelayDays = 1,
+    this.cancelDeadlineHours = 10,
     this.myStatus,
   });
 
@@ -61,6 +63,7 @@ class Shift {
         dressCode: dressCode,
         employerComment: employerComment,
         payoutDelayDays: payoutDelayDays,
+        cancelDeadlineHours: cancelDeadlineHours,
         myStatus: clearMyStatus ? null : (myStatus ?? this.myStatus),
       );
 
@@ -87,8 +90,26 @@ class Shift {
   /// Я уже записан на эту смену.
   bool get isApplied => myStatus == 'active';
 
-  /// Можно ли откликнуться: места есть и я ещё не записан.
+  /// Можно ли записаться: места есть и я ещё не записан.
   bool get canApply => hasFreeSlots && !isApplied;
+
+  /// Момент начала смены — дата и время вместе.
+  DateTime get startsAt => DateTime(
+        workDate.year,
+        workDate.month,
+        workDate.day,
+      ).add(Duration(minutes: startMinutes));
+
+  /// Крайний срок отмены: за `cancelDeadlineHours` до начала смены.
+  DateTime get cancelDeadline =>
+      startsAt.subtract(Duration(hours: cancelDeadlineHours));
+
+  /// Можно ли ещё отменить запись.
+  ///
+  /// Время передаём параметром, а не берём из `DateTime.now()` внутри.
+  /// Так это правило можно проверить тестом на любую дату — иначе тест
+  /// зависел бы от того, когда его запустили.
+  bool canCancelAt(DateTime now) => now.isBefore(cancelDeadline);
 
   /// Вычитается ли обед на этой смене.
   bool get hasUnpaidBreak => durationMinutes > 300;
@@ -259,3 +280,9 @@ List<Shift> buildDemoShifts() {
     ),
   ];
 }
+
+/// «17 сен, 08:00» — для крайнего срока отмены.
+String formatDateTime(DateTime dt) =>
+    '${dt.day} ${monthsShort[dt.month - 1]}, '
+    '${dt.hour.toString().padLeft(2, '0')}:'
+    '${dt.minute.toString().padLeft(2, '0')}';

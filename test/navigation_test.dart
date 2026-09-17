@@ -35,7 +35,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Вознаграждение'), findsOneWidget);
-    expect(find.text('Оставить заявку'), findsOneWidget);
+    expect(find.text('Записаться на смену'), findsOneWidget);
   });
 
   testWidgets('кнопка «Мест нет» не открывает экран смены', (tester) async {
@@ -63,7 +63,26 @@ void main() {
     expect(find.text('На этот день смен нет'), findsOneWidget);
   });
 
-  testWidgets('заявка сохраняется и меняет состояние экрана', (tester) async {
+  testWidgets('запись требует подтверждения условий', (tester) async {
+    await openApp(tester);
+
+    await tester.tap(find.text('Подробнее').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Записаться на смену'));
+    await tester.pumpAndSettle();
+
+    // Открылось окно с условиями.
+    expect(find.text('Подтвердите запись'), findsOneWidget);
+    expect(find.text('Вы обязуетесь'), findsOneWidget);
+
+    // Пока галочка не поставлена — подтвердить нельзя.
+    final confirm = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Подтверждаю'),
+    );
+    expect(confirm.onPressed, isNull);
+  });
+
+  testWidgets('подтверждённая запись сохраняется', (tester) async {
     await openApp(tester);
 
     // Открываем первую смену: 5 мест, 2 заняты — свободно 3.
@@ -71,22 +90,46 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Свободно мест: 3'), findsOneWidget);
 
-    // Оставляем заявку.
-    await tester.tap(find.text('Оставить заявку'));
+    // Записываемся: окно условий, галочка, подтверждение.
+    await tester.tap(find.text('Записаться на смену'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Checkbox));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Подтверждаю'));
     await tester.pumpAndSettle();
 
-    // Появилась плашка, кнопка сменилась, свободных мест стало меньше.
+    // Появилась плашка и свободных мест стало меньше.
     expect(find.text('Вы записаны на эту смену'), findsOneWidget);
-    expect(find.text('Отменить заявку'), findsOneWidget);
     expect(find.text('Свободно мест: 2'), findsOneWidget);
+
+    // Смена сегодня, до начала меньше 10 часов — отмена уже недоступна.
+    expect(find.text('Отмена уже недоступна'), findsOneWidget);
   });
 
-  testWidgets('смена с заявкой появляется в разделе «Мои»', (tester) async {
+  testWidgets('отказ в окне условий ничего не меняет', (tester) async {
     await openApp(tester);
 
     await tester.tap(find.text('Подробнее').first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Оставить заявку'));
+    await tester.tap(find.text('Записаться на смену'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Назад'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Вы записаны на эту смену'), findsNothing);
+    expect(find.text('Свободно мест: 3'), findsOneWidget);
+  });
+
+  testWidgets('записанная смена появляется в разделе «Мои»', (tester) async {
+    await openApp(tester);
+
+    await tester.tap(find.text('Подробнее').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Записаться на смену'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Checkbox));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Подтверждаю'));
     await tester.pumpAndSettle();
 
     // Возвращаемся назад и открываем вкладку «Мои».

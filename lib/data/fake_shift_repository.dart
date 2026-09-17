@@ -47,17 +47,26 @@ class FakeShiftRepository implements ShiftRepository {
   }
 
   @override
-  Future<void> apply(int shiftId) async {
+  Future<BookingResult> apply(int shiftId) async {
     final shift = await shiftById(shiftId);
-    if (shift == null || !shift.hasFreeSlots) return;
+    if (shift == null) return BookingResult.notFound;
+    if (shift.isApplied) return BookingResult.alreadyBooked;
+    if (!shift.hasFreeSlots) return BookingResult.noSlots;
+
     _myStatuses[shiftId] = ApplicationStatus.active;
+    return BookingResult.ok;
   }
 
   @override
-  Future<void> cancelApplication(int shiftId) async {
-    if (_myStatuses.containsKey(shiftId)) {
-      _myStatuses[shiftId] = ApplicationStatus.cancelled;
+  Future<BookingResult> cancelApplication(int shiftId) async {
+    final shift = await shiftById(shiftId);
+    if (shift == null) return BookingResult.notFound;
+    if (!shift.canCancelAt(DateTime.now())) {
+      return BookingResult.tooLateToCancel;
     }
+
+    _myStatuses[shiftId] = ApplicationStatus.cancelled;
+    return BookingResult.ok;
   }
 
   @override

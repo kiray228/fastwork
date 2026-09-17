@@ -164,6 +164,17 @@ class $ShiftRowsTable extends ShiftRows
     requiredDuringInsert: false,
     defaultValue: const Constant(1),
   );
+  static const VerificationMeta _cancelDeadlineHoursMeta =
+      const VerificationMeta('cancelDeadlineHours');
+  @override
+  late final GeneratedColumn<int> cancelDeadlineHours = GeneratedColumn<int>(
+    'cancel_deadline_hours',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(10),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -180,6 +191,7 @@ class $ShiftRowsTable extends ShiftRows
     dressCode,
     employerComment,
     payoutDelayDays,
+    cancelDeadlineHours,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -305,6 +317,15 @@ class $ShiftRowsTable extends ShiftRows
         ),
       );
     }
+    if (data.containsKey('cancel_deadline_hours')) {
+      context.handle(
+        _cancelDeadlineHoursMeta,
+        cancelDeadlineHours.isAcceptableOrUnknown(
+          data['cancel_deadline_hours']!,
+          _cancelDeadlineHoursMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -370,6 +391,10 @@ class $ShiftRowsTable extends ShiftRows
         DriftSqlType.int,
         data['${effectivePrefix}payout_delay_days'],
       )!,
+      cancelDeadlineHours: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cancel_deadline_hours'],
+      )!,
     );
   }
 
@@ -394,6 +419,10 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
   final String? dressCode;
   final String? employerComment;
   final int payoutDelayDays;
+
+  /// За сколько часов до начала смены ещё можно отменить запись.
+  /// Добавлена во второй версии схемы — см. миграцию ниже.
+  final int cancelDeadlineHours;
   const ShiftRow({
     required this.id,
     required this.workDate,
@@ -409,6 +438,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     this.dressCode,
     this.employerComment,
     required this.payoutDelayDays,
+    required this.cancelDeadlineHours,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -431,6 +461,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       map['employer_comment'] = Variable<String>(employerComment);
     }
     map['payout_delay_days'] = Variable<int>(payoutDelayDays);
+    map['cancel_deadline_hours'] = Variable<int>(cancelDeadlineHours);
     return map;
   }
 
@@ -454,6 +485,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
           ? const Value.absent()
           : Value(employerComment),
       payoutDelayDays: Value(payoutDelayDays),
+      cancelDeadlineHours: Value(cancelDeadlineHours),
     );
   }
 
@@ -477,6 +509,9 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       dressCode: serializer.fromJson<String?>(json['dressCode']),
       employerComment: serializer.fromJson<String?>(json['employerComment']),
       payoutDelayDays: serializer.fromJson<int>(json['payoutDelayDays']),
+      cancelDeadlineHours: serializer.fromJson<int>(
+        json['cancelDeadlineHours'],
+      ),
     );
   }
   @override
@@ -497,6 +532,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       'dressCode': serializer.toJson<String?>(dressCode),
       'employerComment': serializer.toJson<String?>(employerComment),
       'payoutDelayDays': serializer.toJson<int>(payoutDelayDays),
+      'cancelDeadlineHours': serializer.toJson<int>(cancelDeadlineHours),
     };
   }
 
@@ -515,6 +551,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     Value<String?> dressCode = const Value.absent(),
     Value<String?> employerComment = const Value.absent(),
     int? payoutDelayDays,
+    int? cancelDeadlineHours,
   }) => ShiftRow(
     id: id ?? this.id,
     workDate: workDate ?? this.workDate,
@@ -532,6 +569,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
         ? employerComment.value
         : this.employerComment,
     payoutDelayDays: payoutDelayDays ?? this.payoutDelayDays,
+    cancelDeadlineHours: cancelDeadlineHours ?? this.cancelDeadlineHours,
   );
   ShiftRow copyWithCompanion(ShiftRowsCompanion data) {
     return ShiftRow(
@@ -563,6 +601,9 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       payoutDelayDays: data.payoutDelayDays.present
           ? data.payoutDelayDays.value
           : this.payoutDelayDays,
+      cancelDeadlineHours: data.cancelDeadlineHours.present
+          ? data.cancelDeadlineHours.value
+          : this.cancelDeadlineHours,
     );
   }
 
@@ -582,7 +623,8 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
           ..write('duties: $duties, ')
           ..write('dressCode: $dressCode, ')
           ..write('employerComment: $employerComment, ')
-          ..write('payoutDelayDays: $payoutDelayDays')
+          ..write('payoutDelayDays: $payoutDelayDays, ')
+          ..write('cancelDeadlineHours: $cancelDeadlineHours')
           ..write(')'))
         .toString();
   }
@@ -603,6 +645,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     dressCode,
     employerComment,
     payoutDelayDays,
+    cancelDeadlineHours,
   );
   @override
   bool operator ==(Object other) =>
@@ -621,7 +664,8 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
           other.duties == this.duties &&
           other.dressCode == this.dressCode &&
           other.employerComment == this.employerComment &&
-          other.payoutDelayDays == this.payoutDelayDays);
+          other.payoutDelayDays == this.payoutDelayDays &&
+          other.cancelDeadlineHours == this.cancelDeadlineHours);
 }
 
 class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
@@ -639,6 +683,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
   final Value<String?> dressCode;
   final Value<String?> employerComment;
   final Value<int> payoutDelayDays;
+  final Value<int> cancelDeadlineHours;
   const ShiftRowsCompanion({
     this.id = const Value.absent(),
     this.workDate = const Value.absent(),
@@ -654,6 +699,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     this.dressCode = const Value.absent(),
     this.employerComment = const Value.absent(),
     this.payoutDelayDays = const Value.absent(),
+    this.cancelDeadlineHours = const Value.absent(),
   });
   ShiftRowsCompanion.insert({
     this.id = const Value.absent(),
@@ -670,6 +716,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     this.dressCode = const Value.absent(),
     this.employerComment = const Value.absent(),
     this.payoutDelayDays = const Value.absent(),
+    this.cancelDeadlineHours = const Value.absent(),
   }) : workDate = Value(workDate),
        title = Value(title),
        company = Value(company),
@@ -693,6 +740,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     Expression<String>? dressCode,
     Expression<String>? employerComment,
     Expression<int>? payoutDelayDays,
+    Expression<int>? cancelDeadlineHours,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -709,6 +757,8 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
       if (dressCode != null) 'dress_code': dressCode,
       if (employerComment != null) 'employer_comment': employerComment,
       if (payoutDelayDays != null) 'payout_delay_days': payoutDelayDays,
+      if (cancelDeadlineHours != null)
+        'cancel_deadline_hours': cancelDeadlineHours,
     });
   }
 
@@ -727,6 +777,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     Value<String?>? dressCode,
     Value<String?>? employerComment,
     Value<int>? payoutDelayDays,
+    Value<int>? cancelDeadlineHours,
   }) {
     return ShiftRowsCompanion(
       id: id ?? this.id,
@@ -743,6 +794,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
       dressCode: dressCode ?? this.dressCode,
       employerComment: employerComment ?? this.employerComment,
       payoutDelayDays: payoutDelayDays ?? this.payoutDelayDays,
+      cancelDeadlineHours: cancelDeadlineHours ?? this.cancelDeadlineHours,
     );
   }
 
@@ -791,6 +843,9 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     if (payoutDelayDays.present) {
       map['payout_delay_days'] = Variable<int>(payoutDelayDays.value);
     }
+    if (cancelDeadlineHours.present) {
+      map['cancel_deadline_hours'] = Variable<int>(cancelDeadlineHours.value);
+    }
     return map;
   }
 
@@ -810,7 +865,8 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
           ..write('duties: $duties, ')
           ..write('dressCode: $dressCode, ')
           ..write('employerComment: $employerComment, ')
-          ..write('payoutDelayDays: $payoutDelayDays')
+          ..write('payoutDelayDays: $payoutDelayDays, ')
+          ..write('cancelDeadlineHours: $cancelDeadlineHours')
           ..write(')'))
         .toString();
   }
@@ -1218,6 +1274,7 @@ typedef $$ShiftRowsTableCreateCompanionBuilder = ShiftRowsCompanion Function({
   Value<String?> dressCode,
   Value<String?> employerComment,
   Value<int> payoutDelayDays,
+  Value<int> cancelDeadlineHours,
 });
 typedef $$ShiftRowsTableUpdateCompanionBuilder = ShiftRowsCompanion Function({
   Value<int> id,
@@ -1234,6 +1291,7 @@ typedef $$ShiftRowsTableUpdateCompanionBuilder = ShiftRowsCompanion Function({
   Value<String?> dressCode,
   Value<String?> employerComment,
   Value<int> payoutDelayDays,
+  Value<int> cancelDeadlineHours,
 });
 
 final class $$ShiftRowsTableReferences
@@ -1337,6 +1395,11 @@ class $$ShiftRowsTableFilterComposer
 
   ColumnFilters<int> get payoutDelayDays => $composableBuilder(
     column: $table.payoutDelayDays,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cancelDeadlineHours => $composableBuilder(
+    column: $table.cancelDeadlineHours,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1444,6 +1507,11 @@ class $$ShiftRowsTableOrderingComposer
     column: $table.payoutDelayDays,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get cancelDeadlineHours => $composableBuilder(
+    column: $table.cancelDeadlineHours,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ShiftRowsTableAnnotationComposer
@@ -1508,6 +1576,11 @@ class $$ShiftRowsTableAnnotationComposer
 
   GeneratedColumn<int> get payoutDelayDays => $composableBuilder(
     column: $table.payoutDelayDays,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get cancelDeadlineHours => $composableBuilder(
+    column: $table.cancelDeadlineHours,
     builder: (column) => column,
   );
 
@@ -1579,6 +1652,7 @@ class $$ShiftRowsTableTableManager
                 Value<String?> dressCode = const Value.absent(),
                 Value<String?> employerComment = const Value.absent(),
                 Value<int> payoutDelayDays = const Value.absent(),
+                Value<int> cancelDeadlineHours = const Value.absent(),
               }) => ShiftRowsCompanion(
                 id: id,
                 workDate: workDate,
@@ -1594,6 +1668,7 @@ class $$ShiftRowsTableTableManager
                 dressCode: dressCode,
                 employerComment: employerComment,
                 payoutDelayDays: payoutDelayDays,
+                cancelDeadlineHours: cancelDeadlineHours,
               ),
           createCompanionCallback:
               ({
@@ -1611,6 +1686,7 @@ class $$ShiftRowsTableTableManager
                 Value<String?> dressCode = const Value.absent(),
                 Value<String?> employerComment = const Value.absent(),
                 Value<int> payoutDelayDays = const Value.absent(),
+                Value<int> cancelDeadlineHours = const Value.absent(),
               }) => ShiftRowsCompanion.insert(
                 id: id,
                 workDate: workDate,
@@ -1626,6 +1702,7 @@ class $$ShiftRowsTableTableManager
                 dressCode: dressCode,
                 employerComment: employerComment,
                 payoutDelayDays: payoutDelayDays,
+                cancelDeadlineHours: cancelDeadlineHours,
               ),
           withReferenceMapper: (p0) => p0
               .map(

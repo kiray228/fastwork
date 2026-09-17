@@ -17,6 +17,18 @@ const currentWorkerId = 1;
 // описания, а не от конкретной базы. Заменим базу — экраны не изменятся.
 // ---------------------------------------------------------------------------
 
+/// Чем закончилась попытка записаться или отменить запись.
+///
+/// Вместо `true`/`false` — перечисление: оно объясняет **почему** не
+/// получилось, и экран может показать понятную причину.
+enum BookingResult {
+  ok,
+  noSlots, // мест уже нет
+  alreadyBooked, // уже записан
+  tooLateToCancel, // срок отмены прошёл
+  notFound,
+}
+
 abstract class ShiftRepository {
   /// Смены на конкретный день.
   Future<List<Shift>> shiftsOn(DateTime date);
@@ -27,11 +39,11 @@ abstract class ShiftRepository {
   /// Одна смена по её номеру (после отклика нужно перечитать свежие данные).
   Future<Shift?> shiftById(int id);
 
-  /// Откликнуться на смену.
-  Future<void> apply(int shiftId);
+  /// Записаться на смену.
+  Future<BookingResult> apply(int shiftId);
 
-  /// Отменить свой отклик.
-  Future<void> cancelApplication(int shiftId);
+  /// Отменить свою запись.
+  Future<BookingResult> cancelApplication(int shiftId);
 
   /// Мои смены. `archived: false` — вкладка «В работе», `true` — «Архив».
   Future<List<Shift>> myShifts({required bool archived});
@@ -77,6 +89,7 @@ class DbShiftRepository implements ShiftRepository {
         dressCode: row.readNullable<String>('dress_code'),
         employerComment: row.readNullable<String>('employer_comment'),
         payoutDelayDays: row.read<int>('payout_delay_days'),
+        cancelDeadlineHours: row.read<int>('cancel_deadline_hours'),
       );
 
   static List<String> _splitDuties(String raw) =>
@@ -127,13 +140,15 @@ class DbShiftRepository implements ShiftRepository {
   }
 
   @override
-  Future<void> apply(int shiftId) async {
-    // Транзакция: проверка свободных мест и запись отклика выполняются
-    // как одно неделимое действие. Иначе двое могли бы занять одно место
+  Future<BookingResult> apply(int shiftId) async {
+    // Транзакция: проверка свободных мест и запись выполняются как одно
+    // неделимое действие. Иначе двое могли бы занять одно место
     // одновременно — та самая «гонка», о которой говорили.
-    await db.transaction(() async {
+    return db.transaction(() async {
       final shift = await shiftById(shiftId);
-      if (shift == null) return;
+      if (shift == null) return BookingResult.notFound;
+      if (shift.isApplied) return BookingResult.alreadyBooked;
+      if (!shift.hasFreeSlots) return BookingResult.noSlots;
 
       final existing = await (db.select(db.applicationRows)
             ..where((a) =>
@@ -142,19 +157,14 @@ class DbShiftRepository implements ShiftRepository {
           .getSingleOrNull();
 
       if (existing != null) {
-        // Отклик уже был — просто возвращаем его в активные.
-        if (existing.status != ApplicationStatus.active) {
-          if (!shift.hasFreeSlots) return;
-          await (db.update(db.applicationRows)
-                ..where((a) => a.id.equals(existing.id)))
-              .write(const ApplicationRowsCompanion(
-            status: Value(ApplicationStatus.active),
-          ));
-        }
-        return;
+        // Запись уже была и её отменяли — возвращаем в активные.
+        await (db.update(db.applicationRows)
+              ..where((a) => a.id.equals(existing.id)))
+            .write(const ApplicationRowsCompanion(
+          status: Value(ApplicationStatus.active),
+        ));
+        return BookingResult.ok;
       }
-
-      if (!shift.hasFreeSlots) return;
 
       await db.into(db.applicationRows).insert(
             ApplicationRowsCompanion.insert(
@@ -164,17 +174,29 @@ class DbShiftRepository implements ShiftRepository {
               createdAt: DateTime.now(),
             ),
           );
+      return BookingResult.ok;
     });
   }
 
   @override
-  Future<void> cancelApplication(int shiftId) async {
+  Future<BookingResult> cancelApplication(int shiftId) async {
+    final shift = await shiftById(shiftId);
+    if (shift == null) return BookingResult.notFound;
+
+    // Правило: отменить можно только до крайнего срока.
+    // Проверка стоит здесь, а не на экране: экранов может стать несколько,
+    // а правило должно быть одно.
+    if (!shift.canCancelAt(DateTime.now())) {
+      return BookingResult.tooLateToCancel;
+    }
+
     await (db.update(db.applicationRows)
           ..where((a) =>
               a.shiftId.equals(shiftId) & a.workerId.equals(currentWorkerId)))
         .write(const ApplicationRowsCompanion(
       status: Value(ApplicationStatus.cancelled),
     ));
+    return BookingResult.ok;
   }
 
   @override
@@ -226,6 +248,7 @@ class DbShiftRepository implements ShiftRepository {
               dressCode: Value(demo.dressCode),
               employerComment: Value(demo.employerComment),
               payoutDelayDays: Value(demo.payoutDelayDays),
+              cancelDeadlineHours: Value(demo.cancelDeadlineHours),
             ),
           );
 
