@@ -31,6 +31,7 @@ id PK, name TEXT UNIQUE, is_active INTEGER
 | name | TEXT | «Magnum», «KFC» |
 | bin | TEXT UNIQUE | БИН юрлица |
 | logo_path | TEXT NULL | логотип на карточке смены |
+| description | TEXT NULL | «Транспортная логистическая компания» |
 | contract_status | TEXT | `pending` / `active` / `suspended` |
 | created_at | INTEGER | |
 
@@ -46,6 +47,7 @@ id PK, name TEXT UNIQUE, is_active INTEGER
 | title | TEXT |
 | address | TEXT |
 | lat, lon | REAL |
+| rating | REAL NULL | кэш среднего по location_reviews |
 
 > Связь 1:М — у сети много точек. Смена привязана к **точке**, а не к
 > компании: работать человек выходит по конкретному адресу.
@@ -100,11 +102,17 @@ id PK, name TEXT UNIQUE, icon_code INTEGER
 | work_date | INTEGER | дата смены — по ней ищут |
 | start_minutes | INTEGER | минут от полуночи |
 | end_minutes | INTEGER | |
-| break_minutes | INTEGER | неоплачиваемый перерыв, по умолчанию 60 |
+| break_minutes | INTEGER | неоплачиваемый перерыв; **правило**: 60 при длительности > 5 ч, иначе 0 |
 | hourly_rate | INTEGER | ставка в тиынах за час |
 | workers_needed | INTEGER | сколько человек нужно |
 | min_rating | REAL NULL | порог допуска, NULL = без ограничений |
 | cancel_deadline_hours | INTEGER | по умолчанию 10 |
+| duties | TEXT | список обязанностей |
+| dress_code | TEXT NULL | требования к одежде |
+| employer_comment | TEXT NULL | свободный текст заказчика |
+| payout_delay_days | INTEGER | через сколько дней вознаграждение |
+| attendance_method | TEXT | `faceid` / `qr` / `manual` |
+| auto_close_at | INTEGER NULL | когда смена закроется автоматически |
 | status | TEXT | `draft`/`moderation`/`published`/`in_progress`/`done`/`cancelled` |
 | created_at | INTEGER | |
 
@@ -193,13 +201,49 @@ id PK, user_id FK UNIQUE, balance_available INTEGER, balance_held INTEGER
 > системы; вывод уходит во внешний банк, занимает время и может не пройти.
 > Поэтому у вывода своя таблица со своим статусом.
 
-### reviews — отзывы
-id PK, shift_id FK, author_id FK → users, target_id FK → users,
+### worker_reviews — отзывы о исполнителе
+id PK, shift_id FK, author_id FK → users (менеджер), worker_id FK → users,
+rating INTEGER (1..5), comment TEXT NULL, created_at,
+UNIQUE(shift_id, worker_id)
+
+> Из них считается `users.rating`, а он работает как **допуск**:
+> смена с `min_rating = 4.5` не покажется исполнителю с рейтингом ниже.
+
+### location_reviews — отзывы о филиале
+id PK, location_id FK, shift_id FK, author_id FK → users (исполнитель),
 rating INTEGER (1..5), comment TEXT NULL, created_at,
 UNIQUE(shift_id, author_id)
 
-> Из рейтинга считается `users.rating`, а он работает как **допуск**:
-> смена с `min_rating = 4.5` не покажется исполнителю с рейтингом ниже.
+> Прототип показывает «Отзывы о филиале» — оценивают **точку**, а не
+> компанию и не человека. Из них считается `locations.rating`.
+>
+> **Почему две таблицы, а не одна с `target_type` + `target_id`?**
+> Полиморфная ссылка не может быть внешним ключом: БД не проверит, что
+> объект существует, и в базу попадёт отзыв на несуществующий филиал.
+> Мы потеряем ссылочную целостность — то самое, ради чего брали
+> реляционную БД. Две честные таблицы лучше одной универсальной.
+
+### attendance — факт присутствия на смене
+| Колонка | Тип | Заметки |
+|---|---|---|
+| id | INTEGER PK | |
+| application_id | INTEGER FK → applications.id UNIQUE | |
+| checked_in_at | INTEGER NULL | фактический вход |
+| checked_out_at | INTEGER NULL | фактический выход |
+| confirmed_minutes | INTEGER NULL | подтверждённые оплачиваемые минуты |
+| source | TEXT | `faceid` / `qr` / `manual` / `external` |
+
+> Сумма на карточке — **плановая оценка**. Платят за подтверждённое время
+> в рабочей зоне. У крупных клиентов отметки живут во внешней системе,
+> поэтому `source = external` и данные приходят интеграцией.
+
+### disputes — оспаривание оплаты
+id PK, application_id FK, user_id FK, reason TEXT,
+status TEXT (`open`/`resolved`/`rejected`/`expired`),
+created_at, resolved_at NULL
+
+> Окно подачи ограничено: только на следующий день после смены.
+> Пропущенный срок необратим — статус `expired`.
 
 ### work_acts — акты выполненных работ (АВР)
 | Колонка | Тип | Заметки |
@@ -265,7 +309,8 @@ companies ──1:М──► locations ──1:М──► shifts ◄──М:1
                                        │
                                        ├──1:М──► shift_required_documents
                                        ├──1:М──► applications ──М:1──► users (worker)
-                                       ├──1:М──► reviews ──► users (author/target)
+                                       ├──1:М──► worker_reviews ──► users
+                                       ├──1:М──► location_reviews ──► locations
                                        └──1:М──► transactions ──М:1──► wallets ──1:1──► users
 companies ──1:М──► users (manager)
 users ──1:М──► documents ──► users (reviewed_by, оператор)
@@ -273,6 +318,8 @@ users ──1:М──► payouts
 users ──1:М──► referrals ──► users (приглашённый)
 users ──М:М──► promo_codes (через promo_code_uses)
 applications ──1:1──► work_acts
+applications ──1:1──► attendance
+applications ──1:М──► disputes
 users ──1:М──► support_tickets ──1:М──► support_messages
 ```
 
@@ -287,7 +334,9 @@ users ──1:М──► support_tickets ──1:М──► support_messages
 5. Менеджер принимает → `accepted`; набралось `workers_needed` — набор закрыт
 6. Отмена исполнителем разрешена не позднее `cancel_deadline_hours` до начала
 7. Начало смены → `in_progress`, деньги компании переходят в `hold`
-8. Смена закрыта → `done` → `release`: исполнителям `available`, платформе `fee`
+8. Отметки входа/выхода → `attendance`; смена закрывается автоматически по
+   `auto_close_at` → `done` → `release` по **подтверждённым** часам:
+   исполнителям `available`, платформе `fee`
 9. Исполнитель **подписывает АВР** — без этого выплата не проводится
 10. Взаимные отзывы → пересчёт `users.rating`
 11. Исполнитель заказывает `payout` на карту
@@ -301,7 +350,8 @@ users ──1:М──► support_tickets ──1:М──► support_messages
 | `shifts(city_id, work_date, status)` | главный запрос ленты: город + дата + опубликованные |
 | `applications(shift_id, status)` | подсчёт занятых мест |
 | `applications(worker_id, status)` | экран «Мои подработки» |
-| `reviews(target_id)` | пересчёт рейтинга |
+| `worker_reviews(worker_id)` | пересчёт рейтинга исполнителя |
+| `location_reviews(location_id)` | рейтинг филиала |
 | `transactions(wallet_id, created_at)` | история операций |
 
 > Первый индекс — **составной**, из трёх колонок. Порядок колонок в нём
@@ -318,6 +368,8 @@ users ──1:М──► support_tickets ──1:М──► support_messages
 | Число свободных мест | считается `COUNT(*)` по активным откликам |
 | Уровень («Новичок») | выводится из числа выполненных смен |
 | Смена через полночь | выводится из сравнения `end` и `start` |
+| Длительность перерыва | правило: 60 мин при смене > 5 часов |
+| Итоговая выплата | считается по `attendance.confirmed_minutes` |
 
 ## 7. Что остаётся за пределами приложения
 
