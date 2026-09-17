@@ -208,7 +208,7 @@ class _ApplicantsPage extends StatefulWidget {
 }
 
 class _ApplicantsPageState extends State<_ApplicantsPage> {
-  Async<List<AppUser>> state = const Loading();
+  Async<List<ShiftApplicant>> state = const Loading();
 
   @override
   void initState() {
@@ -221,6 +221,22 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
         await load(() => widget.repository.applicantsFor(widget.shift.id));
     if (!mounted) return;
     setState(() => state = result);
+  }
+
+  Future<void> _confirm(ShiftApplicant applicant) async {
+    await widget.repository.confirmAttendance(
+      shiftId: widget.shift.id,
+      workerId: applicant.user.id,
+    );
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Смена засчитана: ${applicant.user.fullName}'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    await _load();
   }
 
   @override
@@ -245,11 +261,20 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
             ),
           Ready(:final value) => ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-              itemCount: value.length,
-              itemBuilder: (context, index) => AnimatedEntrance(
-                index: index,
-                child: _ApplicantTile(user: value[index]),
-              ),
+              itemCount: value.length + 1,
+              itemBuilder: (context, index) {
+                if (index == 0) return _AttendanceHint(shift: widget.shift);
+                final item = value[index - 1];
+                return AnimatedEntrance(
+                  index: index,
+                  child: _ApplicantTile(
+                    applicant: item,
+                    onConfirm: item.isCheckedIn && !item.isConfirmed
+                        ? () => _confirm(item)
+                        : null,
+                  ),
+                );
+              },
             ),
         },
       ),
@@ -257,77 +282,173 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
   }
 }
 
-class _ApplicantTile extends StatelessWidget {
-  final AppUser user;
+/// Объяснение, откуда берутся отметки.
+class _AttendanceHint extends StatelessWidget {
+  final Shift shift;
 
-  const _ApplicantTile({required this.user});
+  const _AttendanceHint({required this.shift});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 14),
       child: SurfaceCard(
         padding: const EdgeInsets.all(14),
         child: Row(
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [AppColors.brand, AppColors.brandDark],
-                ),
-              ),
+            const Icon(Icons.how_to_reg_outlined,
+                size: 18, color: AppColors.brand),
+            const SizedBox(width: 10),
+            Expanded(
               child: Text(
-                user.initials,
+                'Исполнитель отмечается сам в день смены. Подтвердите '
+                'выход — только после этого смена идёт в оплату.',
                 style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 12.5,
+                  height: 1.35,
+                  color: AppColors.muted,
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    user.fullName,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontSize: 14),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ApplicantTile extends StatelessWidget {
+  final ShiftApplicant applicant;
+  final VoidCallback? onConfirm;
+
+  const _ApplicantTile({required this.applicant, this.onConfirm});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = applicant.user;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: SurfaceCard(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [AppColors.brand, AppColors.brandDark],
+                    ),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
+                  child: Text(
+                    user.initials,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.star_rounded,
-                          size: 14, color: AppColors.accent),
-                      const SizedBox(width: 3),
                       Text(
-                        user.rating.toStringAsFixed(1),
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        user.fullName,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontSize: 14),
                       ),
-                      const SizedBox(width: 10),
-                      Text(
-                        user.isVerified ? 'Верифицирован' : 'Без проверки',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: user.isVerified
-                              ? AppColors.brand
-                              : AppColors.muted,
-                        ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.star_rounded,
+                              size: 14, color: AppColors.accent),
+                          const SizedBox(width: 3),
+                          Text(
+                            user.rating.toStringAsFixed(1),
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          // Flexible не даёт подписи вытолкнуть ярлык
+                          // состояния за край карточки.
+                          Flexible(
+                            child: Text(
+                              user.isVerified
+                                  ? 'Верифицирован'
+                                  : 'Без проверки',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: user.isVerified
+                                    ? AppColors.brand
+                                    : AppColors.muted,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
+                ),
+                if (applicant.isConfirmed)
+                  const TagChip(
+                    text: 'Отработал',
+                    icon: Icons.check_circle_outline_rounded,
+                    color: AppColors.brand,
+                  )
+                else if (applicant.isCheckedIn)
+                  const TagChip(
+                    text: 'На месте',
+                    icon: Icons.location_on_outlined,
+                    color: AppColors.accent,
+                  )
+                else
+                  const TagChip(text: 'Записан'),
+              ],
+            ),
+            if (applicant.checkedInAt != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Icon(Icons.schedule_rounded,
+                      size: 14, color: AppColors.muted),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Отметился в '
+                    '${formatTime(applicant.checkedInAt!.hour * 60 + applicant.checkedInAt!.minute)}',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.muted,
+                    ),
+                  ),
                 ],
               ),
-            ),
+            ],
+            if (onConfirm != null) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onConfirm,
+                  icon: const Icon(Icons.check_rounded, size: 18),
+                  label: const Text('Подтвердить выход'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(44),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

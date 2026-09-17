@@ -81,3 +81,23 @@ const kCities = [
   'Актобе',
   'Тараз',
 ];
+
+/// Записавшийся на смену — глазами заказчика.
+///
+/// Это не строка таблицы, а склейка двух: человек из `user_rows` плюс его
+/// отклик из `application_rows`. Заказчику нужно и то, и другое сразу:
+/// кто пришёл и в каком состоянии его запись.
+class ShiftApplicant {
+  final AppUser user;
+  final String status;
+  final DateTime? checkedInAt;
+
+  const ShiftApplicant({
+    required this.user,
+    required this.status,
+    required this.checkedInAt,
+  });
+
+  bool get isCheckedIn => checkedInAt != null;
+  bool get isConfirmed => status == 'completed';
+}

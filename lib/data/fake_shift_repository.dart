@@ -20,16 +20,26 @@ class FakeShiftRepository implements ShiftRepository {
   /// Рейтинг «текущего пользователя» — по нему проверяется допуск.
   double userRating;
 
-  FakeShiftRepository({List<Shift>? shifts, this.userRating = 4.0})
-      : _shifts = shifts ?? buildDemoShifts();
+  /// Город «текущего пользователя» — по нему фильтруется лента.
+  String city;
+
+  FakeShiftRepository({
+    List<Shift>? shifts,
+    this.userRating = 4.0,
+    this.city = 'Алматы',
+  }) : _shifts = shifts ?? buildDemoShifts();
 
   Shift _decorate(Shift s) {
     final status = _myStatuses[s.id];
-    final extra = status == ApplicationStatus.active ? 1 : 0;
+    final extra = (status == ApplicationStatus.active ||
+            status == ApplicationStatus.completed)
+        ? 1
+        : 0;
     return s.copyWith(
       workersHired: s.workersHired + extra,
       myStatus: status,
       clearMyStatus: status == null,
+      myCheckedInAt: _checkIns[s.id],
     );
   }
 
@@ -39,7 +49,7 @@ class FakeShiftRepository implements ShiftRepository {
     ShiftFilter filter = const ShiftFilter(),
   }) async {
     final list = _shifts
-        .where((s) => isSameDay(s.workDate, date))
+        .where((s) => isSameDay(s.workDate, date) && s.city == city)
         .map(_decorate)
         .toList();
     return applyFilter(list, filter);
@@ -47,12 +57,18 @@ class FakeShiftRepository implements ShiftRepository {
 
   @override
   Future<Set<DateTime>> daysWithShifts() async => _shifts
+      .where((s) => s.city == city)
       .map((s) => DateTime(s.workDate.year, s.workDate.month, s.workDate.day))
       .toSet();
 
   @override
   Future<List<String>> companies() async {
-    final names = _shifts.map((s) => s.company).toSet().toList()..sort();
+    final names = _shifts
+        .where((s) => s.city == city)
+        .map((s) => s.company)
+        .toSet()
+        .toList()
+      ..sort();
     return names;
   }
 
@@ -76,6 +92,30 @@ class FakeShiftRepository implements ShiftRepository {
     return BookingResult.ok;
   }
 
+  /// Отметки о выходе: номер смены -> когда отметился.
+  final Map<int, DateTime> _checkIns = {};
+
+  @override
+  Future<BookingResult> checkIn(int shiftId) async {
+    final shift = await shiftById(shiftId);
+    if (shift == null) return BookingResult.notFound;
+    if (shift.isCheckedIn) return BookingResult.alreadyBooked;
+    if (!shift.canCheckInAt(DateTime.now())) {
+      return BookingResult.tooEarlyToCheckIn;
+    }
+
+    _checkIns[shiftId] = DateTime.now();
+    return BookingResult.ok;
+  }
+
+  @override
+  Future<void> confirmAttendance({
+    required int shiftId,
+    required int workerId,
+  }) async {
+    _myStatuses[shiftId] = ApplicationStatus.completed;
+  }
+
   @override
   Future<BookingResult> cancelApplication(int shiftId) async {
     final shift = await shiftById(shiftId);
@@ -93,13 +133,10 @@ class FakeShiftRepository implements ShiftRepository {
 
   @override
   Future<List<Shift>> completedShifts() async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
+    // Дата больше ни при чём: смена считается отработанной только
+    // после подтверждения заказчика.
     return _shifts
-        .where((s) =>
-            _myStatuses[s.id] == ApplicationStatus.active &&
-            s.workDate.isBefore(today))
+        .where((s) => _myStatuses[s.id] == ApplicationStatus.completed)
         .map(_decorate)
         .toList();
   }
@@ -156,6 +193,7 @@ class FakeShiftRepository implements ShiftRepository {
     required int hourlyRate,
     required int workersNeeded,
     required int createdBy,
+    required String city,
     List<String> duties = const [],
     String? dressCode,
     double? minRating,
@@ -167,6 +205,7 @@ class FakeShiftRepository implements ShiftRepository {
       title: title,
       company: company,
       address: address,
+      city: city,
       startMinutes: startMinutes,
       endMinutes: endMinutes,
       hourlyRate: hourlyRate,
@@ -185,19 +224,28 @@ class FakeShiftRepository implements ShiftRepository {
       _shifts.where((s) => s.createdBy == managerId).map(_decorate).toList();
 
   @override
-  Future<List<AppUser>> applicantsFor(int shiftId) async =>
-      _myStatuses[shiftId] == ApplicationStatus.active
-          ? [
-              const AppUser(
-                id: 1,
-                phone: '77001234567',
-                fullName: 'Ернар Калдыбеков',
-                city: 'Алматы',
-                rating: 4.0,
-                isVerified: false,
-              ),
-            ]
-          : const [];
+  Future<List<ShiftApplicant>> applicantsFor(int shiftId) async {
+    final status = _myStatuses[shiftId];
+    if (status != ApplicationStatus.active &&
+        status != ApplicationStatus.completed) {
+      return const [];
+    }
+
+    return [
+      ShiftApplicant(
+        user: AppUser(
+          id: 1,
+          phone: '77001234567',
+          fullName: 'Ернар Калдыбеков',
+          city: 'Алматы',
+          rating: userRating,
+          isVerified: false,
+        ),
+        status: status!,
+        checkedInAt: _checkIns[shiftId],
+      ),
+    ];
+  }
 
   /// Оценки исполнителей, поставленные заказчиком.
   final List<WorkerReview> _workerReviews = [];
@@ -213,6 +261,7 @@ class FakeShiftRepository implements ShiftRepository {
         .where((s) =>
             s.createdBy == managerId &&
             s.workDate.isBefore(today) &&
+            _myStatuses[s.id] == ApplicationStatus.completed &&
             !_rated.contains('${s.id}:1'))
         .map((s) => PendingRating(
               shiftId: s.id,

@@ -133,15 +133,48 @@ void main() {
     expect(asc.first.totalPay, lessThan(asc.last.totalPay));
   });
 
-  test('отработанные смены попадают в заработок', () async {
+  test('в заработок идёт только подтверждённая смена', () async {
     expect(await repo.completedShifts(), isEmpty);
 
     await repo.apply(6); // смена три дня назад
+    // Дата прошла, но заказчик выход не подтвердил — значит, не работал.
+    expect(await repo.completedShifts(), isEmpty);
+
+    await repo.confirmAttendance(shiftId: 6, workerId: 1);
     final done = await repo.completedShifts();
 
     expect(done.map((s) => s.id), [6]);
     // 10:00–22:00 минус час обеда по 1100 ₸ = 12 100 ₸
     expect(done.first.totalPay, 1210000);
+  });
+
+  test('отметиться можно только в день смены', () async {
+    // Смена №5 — через три дня.
+    await repo.apply(5);
+    expect(await repo.checkIn(5), BookingResult.tooEarlyToCheckIn);
+
+    final shift = (await repo.shiftById(5))!;
+    expect(shift.isCheckedIn, isFalse);
+  });
+
+  test('на чужую смену отметиться нельзя', () async {
+    // Записи нет — значит, и отмечаться не на чем.
+    expect(await repo.checkIn(1), BookingResult.tooEarlyToCheckIn);
+  });
+
+  test('подтверждение заказчика закрывает смену', () async {
+    await repo.apply(6);
+
+    final before = (await repo.shiftById(6))!;
+    expect(before.isApplied, isTrue);
+    expect(before.isCompleted, isFalse);
+
+    await repo.confirmAttendance(shiftId: 6, workerId: 1);
+
+    final after = (await repo.shiftById(6))!;
+    expect(after.isCompleted, isTrue);
+    // Место всё ещё занято: человек не освободил его, а отработал.
+    expect(after.freeSlots, before.freeSlots);
   });
 
   test('отзыв формирует оценку компании', () async {

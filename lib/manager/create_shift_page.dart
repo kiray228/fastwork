@@ -126,6 +126,9 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
       hourlyRate: rate * 100, // в тиынах
       workersNeeded: workers,
       createdBy: widget.session.workerId,
+      // Город берём из профиля заказчика: смену увидят исполнители
+      // того же города.
+      city: widget.session.city,
       duties: dutiesController.text
           .split('\n')
           .map((line) => line.trim())

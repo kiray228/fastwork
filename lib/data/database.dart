@@ -18,6 +18,10 @@ class ShiftRows extends Table {
   TextColumn get title => text()();
   TextColumn get company => text()();
   TextColumn get address => text()();
+
+  /// Город. Лента показывает смены только того города, который выбрал
+  /// человек: подработка в другом городе ему не нужна.
+  TextColumn get city => text().withDefault(const Constant('Алматы'))();
   IntColumn get startMinutes => integer()();
   IntColumn get endMinutes => integer()();
   IntColumn get breakMinutes => integer().withDefault(const Constant(60))();
@@ -214,6 +218,13 @@ class ApplicationRows extends Table {
   TextColumn get status => text()(); // active / cancelled / completed
   DateTimeColumn get createdAt => dateTime()();
 
+  /// Когда исполнитель отметился на месте. null — ещё не отмечался.
+  ///
+  /// Хранить именно **время**, а не галочку «отметился», выгоднее:
+  /// из времени всегда можно получить галочку (`!= null`), а из галочки
+  /// время уже не вернёшь. Общее правило: храни самое подробное.
+  DateTimeColumn get checkedInAt => dateTime().nullable()();
+
   /// Один работник не может откликнуться на одну смену дважды.
   /// Это проверяет сама база — обойти нельзя.
   @override
@@ -222,7 +233,19 @@ class ApplicationRows extends Table {
       ];
 }
 
-/// Статусы отклика. Архив — это не отдельная таблица, а другой статус.
+/// Статусы отклика — это жизненный путь одной записи на смену.
+///
+/// ```
+///   active  ──отменил──────────────────────►  cancelled
+///      │
+///      └──отметился и заказчик подтвердил──►  completed
+/// ```
+///
+/// Важно: `completed` ставит **заказчик**, а не календарь. Прошедшая
+/// дата не значит, что человек работал, — он мог не прийти. Пока смена
+/// не подтверждена, она не идёт ни в заработок, ни в число отработанных.
+///
+/// Архив — это не отдельная таблица, а всё, что вышло из `active`.
 class ApplicationStatus {
   ApplicationStatus._();
 
@@ -265,7 +288,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Версия схемы. Каждое изменение таблиц поднимает номер на единицу.
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -297,6 +320,10 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 6) {
             await m.createTable(workerReviewRows);
+          }
+          if (from < 7) {
+            await m.addColumn(shiftRows, shiftRows.city);
+            await m.addColumn(applicationRows, applicationRows.checkedInAt);
           }
         },
         beforeOpen: (details) async {

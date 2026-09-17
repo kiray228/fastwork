@@ -17,6 +17,7 @@ enum BookingResult {
   alreadyBooked, // уже записан
   ratingTooLow, // рейтинг ниже порога заказчика
   tooLateToCancel, // срок отмены прошёл
+  tooEarlyToCheckIn, // отметиться можно только в день смены
   notFound,
 }
 
@@ -77,6 +78,7 @@ abstract class ShiftRepository {
     required int hourlyRate,
     required int workersNeeded,
     required int createdBy,
+    required String city,
     List<String> duties,
     String? dressCode,
     double? minRating,
@@ -86,7 +88,17 @@ abstract class ShiftRepository {
   Future<List<Shift>> shiftsCreatedBy(int managerId);
 
   /// Кто записался на смену — список для заказчика.
-  Future<List<AppUser>> applicantsFor(int shiftId);
+  Future<List<ShiftApplicant>> applicantsFor(int shiftId);
+
+  /// Отметиться на смене: «я на месте».
+  Future<BookingResult> checkIn(int shiftId);
+
+  /// Заказчик подтверждает, что человек отработал.
+  /// Только после этого смена идёт в заработок и в рейтинг.
+  Future<void> confirmAttendance({
+    required int shiftId,
+    required int workerId,
+  });
 
   /// Кого заказчику осталось оценить: люди с его уже прошедших смен,
   /// которым он ещё не поставил оценку.
@@ -150,16 +162,20 @@ class DbShiftRepository implements ShiftRepository {
   int get _workerId => session.workerId;
 
   /// Подзапрос: сколько человек уже набрано на смену.
-  /// Считаем только активные отклики — отменённые место не занимают.
+  /// Место занимают и записавшиеся, и те, чей выход уже подтверждён.
   static const _hiredSql = '''
     (SELECT COUNT(*) FROM application_rows a
-      WHERE a.shift_id = s.id AND a.status = 'active') AS hired''';
+      WHERE a.shift_id = s.id
+        AND a.status IN ('active', 'completed')) AS hired''';
 
-  /// Подзапрос: записан ли на эту смену текущий пользователь.
-  String get _myStatusSql => '''
+  /// Подзапросы про мою запись: её состояние и время отметки.
+  String get _mineSql => '''
     (SELECT a2.status FROM application_rows a2
       WHERE a2.shift_id = s.id AND a2.worker_id = $_workerId)
-      AS my_status''';
+      AS my_status,
+    (SELECT a3.checked_in_at FROM application_rows a3
+      WHERE a3.shift_id = s.id AND a3.worker_id = $_workerId)
+      AS my_checked_in_at''';
 
   /// Превращаем строку из базы в объект `Shift`, с которым работают экраны.
   Shift _toShift(QueryRow row) => Shift(
@@ -168,6 +184,7 @@ class DbShiftRepository implements ShiftRepository {
         title: row.read<String>('title'),
         company: row.read<String>('company'),
         address: row.read<String>('address'),
+        city: row.read<String>('city'),
         startMinutes: row.read<int>('start_minutes'),
         endMinutes: row.read<int>('end_minutes'),
         breakMinutes: row.read<int>('break_minutes'),
@@ -176,6 +193,7 @@ class DbShiftRepository implements ShiftRepository {
         // Вот оно: «набрано» не читается из колонки, а приходит из COUNT.
         workersHired: row.read<int>('hired'),
         myStatus: row.readNullable<String>('my_status'),
+        myCheckedInAt: row.readNullable<DateTime>('my_checked_in_at'),
         duties: _splitDuties(row.read<String>('duties')),
         dressCode: row.readNullable<String>('dress_code'),
         employerComment: row.readNullable<String>('employer_comment'),
@@ -197,13 +215,18 @@ class DbShiftRepository implements ShiftRepository {
     final to = from.add(const Duration(days: 1));
 
     // Настоящий SQL-запрос — тот самый, про который читали в теории.
+    // Город в условии: подработка в другом городе человеку не нужна.
     final rows = await db.customSelect(
       '''
-      SELECT s.*, $_hiredSql, $_myStatusSql
+      SELECT s.*, $_hiredSql, $_mineSql
       FROM shift_rows s
-      WHERE s.work_date >= ? AND s.work_date < ?
+      WHERE s.work_date >= ? AND s.work_date < ? AND s.city = ?
       ''',
-      variables: [Variable.withDateTime(from), Variable.withDateTime(to)],
+      variables: [
+        Variable.withDateTime(from),
+        Variable.withDateTime(to),
+        Variable.withString(session.city),
+      ],
       readsFrom: {db.shiftRows, db.applicationRows},
     ).get();
 
@@ -213,7 +236,8 @@ class DbShiftRepository implements ShiftRepository {
   @override
   Future<Set<DateTime>> daysWithShifts() async {
     final rows = await db.customSelect(
-      'SELECT DISTINCT work_date FROM shift_rows',
+      'SELECT DISTINCT work_date FROM shift_rows WHERE city = ?',
+      variables: [Variable.withString(session.city)],
       readsFrom: {db.shiftRows},
     ).get();
 
@@ -226,7 +250,8 @@ class DbShiftRepository implements ShiftRepository {
   @override
   Future<List<String>> companies() async {
     final rows = await db.customSelect(
-      'SELECT DISTINCT company FROM shift_rows ORDER BY company',
+      'SELECT DISTINCT company FROM shift_rows WHERE city = ? ORDER BY company',
+      variables: [Variable.withString(session.city)],
       readsFrom: {db.shiftRows},
     ).get();
     return rows.map((r) => r.read<String>('company')).toList();
@@ -235,7 +260,7 @@ class DbShiftRepository implements ShiftRepository {
   @override
   Future<Shift?> shiftById(int id) async {
     final rows = await db.customSelect(
-      'SELECT s.*, $_hiredSql, $_myStatusSql FROM shift_rows s WHERE s.id = ?',
+      'SELECT s.*, $_hiredSql, $_mineSql FROM shift_rows s WHERE s.id = ?',
       variables: [Variable.withInt(id)],
       readsFrom: {db.shiftRows, db.applicationRows},
     ).get();
@@ -311,13 +336,15 @@ class DbShiftRepository implements ShiftRepository {
     final today = DateTime(now.year, now.month, now.day);
 
     // «Архив» — не отдельная таблица, а другое условие в том же запросе.
+    // В работе: запись жива и день ещё не прошёл.
+    // В архиве: всё остальное — отменённые, подтверждённые, просроченные.
     final condition = archived
         ? "(a.status != 'active' OR s.work_date < ?)"
         : "(a.status = 'active' AND s.work_date >= ?)";
 
     final rows = await db.customSelect(
       '''
-      SELECT s.*, $_hiredSql, $_myStatusSql
+      SELECT s.*, $_hiredSql, $_mineSql
       FROM application_rows a
       JOIN shift_rows s ON s.id = a.shift_id
       WHERE a.worker_id = $_workerId AND $condition
@@ -332,24 +359,55 @@ class DbShiftRepository implements ShiftRepository {
 
   @override
   Future<List<Shift>> completedShifts() async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
+    // Раньше здесь было «запись жива и дата прошла». Это было неправдой:
+    // прошедшая дата не значит, что человек работал — он мог не прийти.
+    // Теперь в заработок идёт только то, что подтвердил заказчик.
     final rows = await db.customSelect(
       '''
-      SELECT s.*, $_hiredSql, $_myStatusSql
+      SELECT s.*, $_hiredSql, $_mineSql
       FROM application_rows a
       JOIN shift_rows s ON s.id = a.shift_id
-      WHERE a.worker_id = $_workerId
-        AND a.status = 'active'
-        AND s.work_date < ?
+      WHERE a.worker_id = $_workerId AND a.status = 'completed'
       ORDER BY s.work_date DESC
       ''',
-      variables: [Variable.withDateTime(today)],
       readsFrom: {db.shiftRows, db.applicationRows},
     ).get();
 
     return rows.map(_toShift).toList();
+  }
+
+  @override
+  Future<BookingResult> checkIn(int shiftId) async {
+    final shift = await shiftById(shiftId);
+    if (shift == null) return BookingResult.notFound;
+    if (shift.isCheckedIn) return BookingResult.alreadyBooked;
+
+    // Правило «отметиться можно только в день смены» живёт в модели,
+    // рядом с остальными правилами про время. Здесь его только спрашивают.
+    if (!shift.canCheckInAt(DateTime.now())) {
+      return BookingResult.tooEarlyToCheckIn;
+    }
+
+    await (db.update(db.applicationRows)
+          ..where((a) =>
+              a.shiftId.equals(shiftId) & a.workerId.equals(_workerId)))
+        .write(ApplicationRowsCompanion(
+      checkedInAt: Value(DateTime.now()),
+    ));
+    return BookingResult.ok;
+  }
+
+  @override
+  Future<void> confirmAttendance({
+    required int shiftId,
+    required int workerId,
+  }) async {
+    await (db.update(db.applicationRows)
+          ..where((a) =>
+              a.shiftId.equals(shiftId) & a.workerId.equals(workerId)))
+        .write(const ApplicationRowsCompanion(
+      status: Value(ApplicationStatus.completed),
+    ));
   }
 
   @override
@@ -480,8 +538,12 @@ class DbShiftRepository implements ShiftRepository {
             ApplicationRowsCompanion.insert(
               shiftId: id,
               workerId: userId,
-              status: ApplicationStatus.active,
+              // Учебная история — уже подтверждённые смены: человек
+              // отметился, заказчик подтвердил. Иначе они не попали бы
+              // ни в заработок, ни в число отработанных.
+              status: ApplicationStatus.completed,
               createdAt: date,
+              checkedInAt: Value(date.add(const Duration(hours: 10))),
             ),
           );
     }
@@ -498,6 +560,7 @@ class DbShiftRepository implements ShiftRepository {
     required int hourlyRate,
     required int workersNeeded,
     required int createdBy,
+    required String city,
     List<String> duties = const [],
     String? dressCode,
     double? minRating,
@@ -508,6 +571,7 @@ class DbShiftRepository implements ShiftRepository {
             title: title,
             company: company,
             address: address,
+            city: Value(city),
             startMinutes: startMinutes,
             endMinutes: endMinutes,
             hourlyRate: hourlyRate,
@@ -524,7 +588,7 @@ class DbShiftRepository implements ShiftRepository {
   Future<List<Shift>> shiftsCreatedBy(int managerId) async {
     final rows = await db.customSelect(
       '''
-      SELECT s.*, $_hiredSql, $_myStatusSql
+      SELECT s.*, $_hiredSql, $_mineSql
       FROM shift_rows s
       WHERE s.created_by = ?
       ORDER BY s.work_date DESC, s.start_minutes
@@ -537,12 +601,15 @@ class DbShiftRepository implements ShiftRepository {
   }
 
   @override
-  Future<List<AppUser>> applicantsFor(int shiftId) async {
+  Future<List<ShiftApplicant>> applicantsFor(int shiftId) async {
     // JOIN соединяет отклики с пользователями: в откликах лежит только
     // номер работника, а имя и рейтинг — в таблице пользователей.
+    // Из отклика заодно берём состояние и время отметки.
     final rows = await db.customSelect(
       '''
       SELECT u.*,
+             a.status          AS application_status,
+             a.checked_in_at   AS checked_in_at,
              COALESCE(
                (SELECT AVG(w.rating) FROM worker_review_rows w
                  WHERE w.worker_id = u.id),
@@ -550,7 +617,7 @@ class DbShiftRepository implements ShiftRepository {
              ) AS live_rating
       FROM application_rows a
       JOIN user_rows u ON u.id = a.worker_id
-      WHERE a.shift_id = ? AND a.status = 'active'
+      WHERE a.shift_id = ? AND a.status IN ('active', 'completed')
       ORDER BY live_rating DESC
       ''',
       variables: [Variable.withInt(shiftId)],
@@ -558,14 +625,18 @@ class DbShiftRepository implements ShiftRepository {
     ).get();
 
     return rows
-        .map((r) => AppUser(
-              id: r.read<int>('id'),
-              phone: r.read<String>('phone'),
-              fullName: r.read<String>('full_name'),
-              city: r.read<String>('city'),
-              rating: r.read<double>('live_rating'),
-              isVerified: r.read<bool>('is_verified'),
-              role: r.read<String>('role'),
+        .map((r) => ShiftApplicant(
+              user: AppUser(
+                id: r.read<int>('id'),
+                phone: r.read<String>('phone'),
+                fullName: r.read<String>('full_name'),
+                city: r.read<String>('city'),
+                rating: r.read<double>('live_rating'),
+                isVerified: r.read<bool>('is_verified'),
+                role: r.read<String>('role'),
+              ),
+              status: r.read<String>('application_status'),
+              checkedInAt: r.readNullable<DateTime>('checked_in_at'),
             ))
         .toList();
   }
@@ -593,7 +664,8 @@ class DbShiftRepository implements ShiftRepository {
                u.rating
              ) AS worker_rating
       FROM shift_rows s
-      JOIN application_rows a ON a.shift_id = s.id AND a.status = 'active'
+      JOIN application_rows a ON a.shift_id = s.id
+                             AND a.status = 'completed'
       JOIN user_rows u ON u.id = a.worker_id
       WHERE s.created_by = ?
         AND s.work_date < ?
@@ -703,6 +775,7 @@ class DbShiftRepository implements ShiftRepository {
               title: demo.title,
               company: demo.company,
               address: demo.address,
+              city: Value(demo.city),
               startMinutes: demo.startMinutes,
               endMinutes: demo.endMinutes,
               breakMinutes: Value(demo.breakMinutes),

@@ -64,6 +64,16 @@ class $ShiftRowsTable extends ShiftRows
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _cityMeta = const VerificationMeta('city');
+  @override
+  late final GeneratedColumn<String> city = GeneratedColumn<String>(
+    'city',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('Алматы'),
+  );
   static const VerificationMeta _startMinutesMeta = const VerificationMeta(
     'startMinutes',
   );
@@ -204,6 +214,7 @@ class $ShiftRowsTable extends ShiftRows
     title,
     company,
     address,
+    city,
     startMinutes,
     endMinutes,
     breakMinutes,
@@ -263,6 +274,12 @@ class $ShiftRowsTable extends ShiftRows
       );
     } else if (isInserting) {
       context.missing(_addressMeta);
+    }
+    if (data.containsKey('city')) {
+      context.handle(
+        _cityMeta,
+        city.isAcceptableOrUnknown(data['city']!, _cityMeta),
+      );
     }
     if (data.containsKey('start_minutes')) {
       context.handle(
@@ -391,6 +408,10 @@ class $ShiftRowsTable extends ShiftRows
         DriftSqlType.string,
         data['${effectivePrefix}address'],
       )!,
+      city: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}city'],
+      )!,
       startMinutes: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}start_minutes'],
@@ -454,6 +475,10 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
   final String title;
   final String company;
   final String address;
+
+  /// Город. Лента показывает смены только того города, который выбрал
+  /// человек: подработка в другом городе ему не нужна.
+  final String city;
   final int startMinutes;
   final int endMinutes;
   final int breakMinutes;
@@ -480,6 +505,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     required this.title,
     required this.company,
     required this.address,
+    required this.city,
     required this.startMinutes,
     required this.endMinutes,
     required this.breakMinutes,
@@ -501,6 +527,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     map['title'] = Variable<String>(title);
     map['company'] = Variable<String>(company);
     map['address'] = Variable<String>(address);
+    map['city'] = Variable<String>(city);
     map['start_minutes'] = Variable<int>(startMinutes);
     map['end_minutes'] = Variable<int>(endMinutes);
     map['break_minutes'] = Variable<int>(breakMinutes);
@@ -531,6 +558,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       title: Value(title),
       company: Value(company),
       address: Value(address),
+      city: Value(city),
       startMinutes: Value(startMinutes),
       endMinutes: Value(endMinutes),
       breakMinutes: Value(breakMinutes),
@@ -565,6 +593,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       title: serializer.fromJson<String>(json['title']),
       company: serializer.fromJson<String>(json['company']),
       address: serializer.fromJson<String>(json['address']),
+      city: serializer.fromJson<String>(json['city']),
       startMinutes: serializer.fromJson<int>(json['startMinutes']),
       endMinutes: serializer.fromJson<int>(json['endMinutes']),
       breakMinutes: serializer.fromJson<int>(json['breakMinutes']),
@@ -590,6 +619,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       'title': serializer.toJson<String>(title),
       'company': serializer.toJson<String>(company),
       'address': serializer.toJson<String>(address),
+      'city': serializer.toJson<String>(city),
       'startMinutes': serializer.toJson<int>(startMinutes),
       'endMinutes': serializer.toJson<int>(endMinutes),
       'breakMinutes': serializer.toJson<int>(breakMinutes),
@@ -611,6 +641,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     String? title,
     String? company,
     String? address,
+    String? city,
     int? startMinutes,
     int? endMinutes,
     int? breakMinutes,
@@ -629,6 +660,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     title: title ?? this.title,
     company: company ?? this.company,
     address: address ?? this.address,
+    city: city ?? this.city,
     startMinutes: startMinutes ?? this.startMinutes,
     endMinutes: endMinutes ?? this.endMinutes,
     breakMinutes: breakMinutes ?? this.breakMinutes,
@@ -651,6 +683,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       title: data.title.present ? data.title.value : this.title,
       company: data.company.present ? data.company.value : this.company,
       address: data.address.present ? data.address.value : this.address,
+      city: data.city.present ? data.city.value : this.city,
       startMinutes: data.startMinutes.present
           ? data.startMinutes.value
           : this.startMinutes,
@@ -690,6 +723,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
           ..write('title: $title, ')
           ..write('company: $company, ')
           ..write('address: $address, ')
+          ..write('city: $city, ')
           ..write('startMinutes: $startMinutes, ')
           ..write('endMinutes: $endMinutes, ')
           ..write('breakMinutes: $breakMinutes, ')
@@ -713,6 +747,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     title,
     company,
     address,
+    city,
     startMinutes,
     endMinutes,
     breakMinutes,
@@ -735,6 +770,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
           other.title == this.title &&
           other.company == this.company &&
           other.address == this.address &&
+          other.city == this.city &&
           other.startMinutes == this.startMinutes &&
           other.endMinutes == this.endMinutes &&
           other.breakMinutes == this.breakMinutes &&
@@ -755,6 +791,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
   final Value<String> title;
   final Value<String> company;
   final Value<String> address;
+  final Value<String> city;
   final Value<int> startMinutes;
   final Value<int> endMinutes;
   final Value<int> breakMinutes;
@@ -773,6 +810,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     this.title = const Value.absent(),
     this.company = const Value.absent(),
     this.address = const Value.absent(),
+    this.city = const Value.absent(),
     this.startMinutes = const Value.absent(),
     this.endMinutes = const Value.absent(),
     this.breakMinutes = const Value.absent(),
@@ -792,6 +830,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     required String title,
     required String company,
     required String address,
+    this.city = const Value.absent(),
     required int startMinutes,
     required int endMinutes,
     this.breakMinutes = const Value.absent(),
@@ -818,6 +857,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     Expression<String>? title,
     Expression<String>? company,
     Expression<String>? address,
+    Expression<String>? city,
     Expression<int>? startMinutes,
     Expression<int>? endMinutes,
     Expression<int>? breakMinutes,
@@ -837,6 +877,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
       if (title != null) 'title': title,
       if (company != null) 'company': company,
       if (address != null) 'address': address,
+      if (city != null) 'city': city,
       if (startMinutes != null) 'start_minutes': startMinutes,
       if (endMinutes != null) 'end_minutes': endMinutes,
       if (breakMinutes != null) 'break_minutes': breakMinutes,
@@ -859,6 +900,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     Value<String>? title,
     Value<String>? company,
     Value<String>? address,
+    Value<String>? city,
     Value<int>? startMinutes,
     Value<int>? endMinutes,
     Value<int>? breakMinutes,
@@ -878,6 +920,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
       title: title ?? this.title,
       company: company ?? this.company,
       address: address ?? this.address,
+      city: city ?? this.city,
       startMinutes: startMinutes ?? this.startMinutes,
       endMinutes: endMinutes ?? this.endMinutes,
       breakMinutes: breakMinutes ?? this.breakMinutes,
@@ -910,6 +953,9 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     }
     if (address.present) {
       map['address'] = Variable<String>(address.value);
+    }
+    if (city.present) {
+      map['city'] = Variable<String>(city.value);
     }
     if (startMinutes.present) {
       map['start_minutes'] = Variable<int>(startMinutes.value);
@@ -958,6 +1004,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
           ..write('title: $title, ')
           ..write('company: $company, ')
           ..write('address: $address, ')
+          ..write('city: $city, ')
           ..write('startMinutes: $startMinutes, ')
           ..write('endMinutes: $endMinutes, ')
           ..write('breakMinutes: $breakMinutes, ')
@@ -1039,6 +1086,17 @@ class $ApplicationRowsTable extends ApplicationRows
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _checkedInAtMeta = const VerificationMeta(
+    'checkedInAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> checkedInAt = GeneratedColumn<DateTime>(
+    'checked_in_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1046,6 +1104,7 @@ class $ApplicationRowsTable extends ApplicationRows
     workerId,
     status,
     createdAt,
+    checkedInAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1094,6 +1153,15 @@ class $ApplicationRowsTable extends ApplicationRows
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('checked_in_at')) {
+      context.handle(
+        _checkedInAtMeta,
+        checkedInAt.isAcceptableOrUnknown(
+          data['checked_in_at']!,
+          _checkedInAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1127,6 +1195,10 @@ class $ApplicationRowsTable extends ApplicationRows
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      checkedInAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}checked_in_at'],
+      ),
     );
   }
 
@@ -1145,12 +1217,20 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
   final int workerId;
   final String status;
   final DateTime createdAt;
+
+  /// Когда исполнитель отметился на месте. null — ещё не отмечался.
+  ///
+  /// Хранить именно **время**, а не галочку «отметился», выгоднее:
+  /// из времени всегда можно получить галочку (`!= null`), а из галочки
+  /// время уже не вернёшь. Общее правило: храни самое подробное.
+  final DateTime? checkedInAt;
   const ApplicationRow({
     required this.id,
     required this.shiftId,
     required this.workerId,
     required this.status,
     required this.createdAt,
+    this.checkedInAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1160,6 +1240,9 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
     map['worker_id'] = Variable<int>(workerId);
     map['status'] = Variable<String>(status);
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || checkedInAt != null) {
+      map['checked_in_at'] = Variable<DateTime>(checkedInAt);
+    }
     return map;
   }
 
@@ -1170,6 +1253,9 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
       workerId: Value(workerId),
       status: Value(status),
       createdAt: Value(createdAt),
+      checkedInAt: checkedInAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(checkedInAt),
     );
   }
 
@@ -1184,6 +1270,7 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
       workerId: serializer.fromJson<int>(json['workerId']),
       status: serializer.fromJson<String>(json['status']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      checkedInAt: serializer.fromJson<DateTime?>(json['checkedInAt']),
     );
   }
   @override
@@ -1195,6 +1282,7 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
       'workerId': serializer.toJson<int>(workerId),
       'status': serializer.toJson<String>(status),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'checkedInAt': serializer.toJson<DateTime?>(checkedInAt),
     };
   }
 
@@ -1204,12 +1292,14 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
     int? workerId,
     String? status,
     DateTime? createdAt,
+    Value<DateTime?> checkedInAt = const Value.absent(),
   }) => ApplicationRow(
     id: id ?? this.id,
     shiftId: shiftId ?? this.shiftId,
     workerId: workerId ?? this.workerId,
     status: status ?? this.status,
     createdAt: createdAt ?? this.createdAt,
+    checkedInAt: checkedInAt.present ? checkedInAt.value : this.checkedInAt,
   );
   ApplicationRow copyWithCompanion(ApplicationRowsCompanion data) {
     return ApplicationRow(
@@ -1218,6 +1308,9 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
       workerId: data.workerId.present ? data.workerId.value : this.workerId,
       status: data.status.present ? data.status.value : this.status,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      checkedInAt: data.checkedInAt.present
+          ? data.checkedInAt.value
+          : this.checkedInAt,
     );
   }
 
@@ -1228,13 +1321,15 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
           ..write('shiftId: $shiftId, ')
           ..write('workerId: $workerId, ')
           ..write('status: $status, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('checkedInAt: $checkedInAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, shiftId, workerId, status, createdAt);
+  int get hashCode =>
+      Object.hash(id, shiftId, workerId, status, createdAt, checkedInAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1243,7 +1338,8 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
           other.shiftId == this.shiftId &&
           other.workerId == this.workerId &&
           other.status == this.status &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.checkedInAt == this.checkedInAt);
 }
 
 class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
@@ -1252,12 +1348,14 @@ class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
   final Value<int> workerId;
   final Value<String> status;
   final Value<DateTime> createdAt;
+  final Value<DateTime?> checkedInAt;
   const ApplicationRowsCompanion({
     this.id = const Value.absent(),
     this.shiftId = const Value.absent(),
     this.workerId = const Value.absent(),
     this.status = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.checkedInAt = const Value.absent(),
   });
   ApplicationRowsCompanion.insert({
     this.id = const Value.absent(),
@@ -1265,6 +1363,7 @@ class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
     required int workerId,
     required String status,
     required DateTime createdAt,
+    this.checkedInAt = const Value.absent(),
   }) : shiftId = Value(shiftId),
        workerId = Value(workerId),
        status = Value(status),
@@ -1275,6 +1374,7 @@ class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
     Expression<int>? workerId,
     Expression<String>? status,
     Expression<DateTime>? createdAt,
+    Expression<DateTime>? checkedInAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1282,6 +1382,7 @@ class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
       if (workerId != null) 'worker_id': workerId,
       if (status != null) 'status': status,
       if (createdAt != null) 'created_at': createdAt,
+      if (checkedInAt != null) 'checked_in_at': checkedInAt,
     });
   }
 
@@ -1291,6 +1392,7 @@ class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
     Value<int>? workerId,
     Value<String>? status,
     Value<DateTime>? createdAt,
+    Value<DateTime?>? checkedInAt,
   }) {
     return ApplicationRowsCompanion(
       id: id ?? this.id,
@@ -1298,6 +1400,7 @@ class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
       workerId: workerId ?? this.workerId,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
+      checkedInAt: checkedInAt ?? this.checkedInAt,
     );
   }
 
@@ -1319,6 +1422,9 @@ class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (checkedInAt.present) {
+      map['checked_in_at'] = Variable<DateTime>(checkedInAt.value);
+    }
     return map;
   }
 
@@ -1329,7 +1435,8 @@ class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
           ..write('shiftId: $shiftId, ')
           ..write('workerId: $workerId, ')
           ..write('status: $status, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('checkedInAt: $checkedInAt')
           ..write(')'))
         .toString();
   }
@@ -4195,6 +4302,7 @@ typedef $$ShiftRowsTableCreateCompanionBuilder = ShiftRowsCompanion Function({
   required String title,
   required String company,
   required String address,
+  Value<String> city,
   required int startMinutes,
   required int endMinutes,
   Value<int> breakMinutes,
@@ -4214,6 +4322,7 @@ typedef $$ShiftRowsTableUpdateCompanionBuilder = ShiftRowsCompanion Function({
   Value<String> title,
   Value<String> company,
   Value<String> address,
+  Value<String> city,
   Value<int> startMinutes,
   Value<int> endMinutes,
   Value<int> breakMinutes,
@@ -4322,6 +4431,11 @@ class $$ShiftRowsTableFilterComposer
 
   ColumnFilters<String> get address => $composableBuilder(
     column: $table.address,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get city => $composableBuilder(
+    column: $table.city,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4495,6 +4609,11 @@ class $$ShiftRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get city => $composableBuilder(
+    column: $table.city,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get startMinutes => $composableBuilder(
     column: $table.startMinutes,
     builder: (column) => ColumnOrderings(column),
@@ -4579,6 +4698,9 @@ class $$ShiftRowsTableAnnotationComposer
 
   GeneratedColumn<String> get address =>
       $composableBuilder(column: $table.address, builder: (column) => column);
+
+  GeneratedColumn<String> get city =>
+      $composableBuilder(column: $table.city, builder: (column) => column);
 
   GeneratedColumn<int> get startMinutes => $composableBuilder(
     column: $table.startMinutes,
@@ -4745,6 +4867,7 @@ class $$ShiftRowsTableTableManager
                 Value<String> title = const Value.absent(),
                 Value<String> company = const Value.absent(),
                 Value<String> address = const Value.absent(),
+                Value<String> city = const Value.absent(),
                 Value<int> startMinutes = const Value.absent(),
                 Value<int> endMinutes = const Value.absent(),
                 Value<int> breakMinutes = const Value.absent(),
@@ -4763,6 +4886,7 @@ class $$ShiftRowsTableTableManager
                 title: title,
                 company: company,
                 address: address,
+                city: city,
                 startMinutes: startMinutes,
                 endMinutes: endMinutes,
                 breakMinutes: breakMinutes,
@@ -4783,6 +4907,7 @@ class $$ShiftRowsTableTableManager
                 required String title,
                 required String company,
                 required String address,
+                Value<String> city = const Value.absent(),
                 required int startMinutes,
                 required int endMinutes,
                 Value<int> breakMinutes = const Value.absent(),
@@ -4801,6 +4926,7 @@ class $$ShiftRowsTableTableManager
                 title: title,
                 company: company,
                 address: address,
+                city: city,
                 startMinutes: startMinutes,
                 endMinutes: endMinutes,
                 breakMinutes: breakMinutes,
@@ -4934,6 +5060,7 @@ typedef $$ApplicationRowsTableCreateCompanionBuilder =
       required int workerId,
       required String status,
       required DateTime createdAt,
+      Value<DateTime?> checkedInAt,
     });
 typedef $$ApplicationRowsTableUpdateCompanionBuilder =
     ApplicationRowsCompanion Function({
@@ -4942,6 +5069,7 @@ typedef $$ApplicationRowsTableUpdateCompanionBuilder =
       Value<int> workerId,
       Value<String> status,
       Value<DateTime> createdAt,
+      Value<DateTime?> checkedInAt,
     });
 
 final class $$ApplicationRowsTableReferences
@@ -5000,6 +5128,11 @@ class $$ApplicationRowsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<DateTime> get checkedInAt => $composableBuilder(
+    column: $table.checkedInAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$ShiftRowsTableFilterComposer get shiftId {
     final $$ShiftRowsTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -5053,6 +5186,11 @@ class $$ApplicationRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get checkedInAt => $composableBuilder(
+    column: $table.checkedInAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$ShiftRowsTableOrderingComposer get shiftId {
     final $$ShiftRowsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -5097,6 +5235,11 @@ class $$ApplicationRowsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get checkedInAt => $composableBuilder(
+    column: $table.checkedInAt,
+    builder: (column) => column,
+  );
 
   $$ShiftRowsTableAnnotationComposer get shiftId {
     final $$ShiftRowsTableAnnotationComposer composer = $composerBuilder(
@@ -5157,12 +5300,14 @@ class $$ApplicationRowsTableTableManager
                 Value<int> workerId = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> checkedInAt = const Value.absent(),
               }) => ApplicationRowsCompanion(
                 id: id,
                 shiftId: shiftId,
                 workerId: workerId,
                 status: status,
                 createdAt: createdAt,
+                checkedInAt: checkedInAt,
               ),
           createCompanionCallback:
               ({
@@ -5171,12 +5316,14 @@ class $$ApplicationRowsTableTableManager
                 required int workerId,
                 required String status,
                 required DateTime createdAt,
+                Value<DateTime?> checkedInAt = const Value.absent(),
               }) => ApplicationRowsCompanion.insert(
                 id: id,
                 shiftId: shiftId,
                 workerId: workerId,
                 status: status,
                 createdAt: createdAt,
+                checkedInAt: checkedInAt,
               ),
           withReferenceMapper: (p0) => p0
               .map(

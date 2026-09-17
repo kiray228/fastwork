@@ -7,6 +7,7 @@ class Shift {
   final String title; // «Услуги грузчика»
   final String company; // «Заммлер Казахстан»
   final String address; // адрес точки
+  final String city; // город смены
   final int startMinutes; // начало смены, минут от полуночи. 10:00 = 600
   final int endMinutes; // конец смены
   final int breakMinutes; // неоплачиваемый перерыв
@@ -21,9 +22,12 @@ class Shift {
   final double? minRating; // порог допуска; null — ограничений нет
   final int? createdBy; // какой заказчик создал смену
 
-  /// Статус моего отклика на эту смену: `active`, `cancelled` или null,
-  /// если я на неё не откликался. Приходит из базы вместе со сменой.
+  /// Статус моего отклика на эту смену: `active`, `cancelled`,
+  /// `completed` или null, если я на неё не откликался.
   final String? myStatus;
+
+  /// Когда я отметился на этой смене. null — ещё не отмечался.
+  final DateTime? myCheckedInAt;
 
   const Shift({
     required this.id,
@@ -45,18 +49,26 @@ class Shift {
     this.minRating,
     this.createdBy,
     this.myStatus,
+    this.myCheckedInAt,
+    this.city = 'Алматы',
   });
 
   /// Копия смены с изменёнными полями. Сам объект менять нельзя —
   /// все его поля `final`. Это защищает от случайных правок «издалека»:
   /// если что-то поменялось, значит кто-то явно создал новый объект.
-  Shift copyWith({int? workersHired, String? myStatus, bool clearMyStatus = false}) =>
+  Shift copyWith({
+    int? workersHired,
+    String? myStatus,
+    bool clearMyStatus = false,
+    DateTime? myCheckedInAt,
+  }) =>
       Shift(
         id: id,
         workDate: workDate,
         title: title,
         company: company,
         address: address,
+        city: city,
         startMinutes: startMinutes,
         endMinutes: endMinutes,
         breakMinutes: breakMinutes,
@@ -71,6 +83,7 @@ class Shift {
         minRating: minRating,
         createdBy: createdBy,
         myStatus: clearMyStatus ? null : (myStatus ?? this.myStatus),
+        myCheckedInAt: myCheckedInAt ?? this.myCheckedInAt,
       );
 
   /// Сколько всего длится смена.
@@ -96,8 +109,39 @@ class Shift {
   /// Я уже записан на эту смену.
   bool get isApplied => myStatus == 'active';
 
+  /// Смена подтверждена заказчиком — я на ней действительно работал.
+  bool get isCompleted => myStatus == 'completed';
+
+  /// Место занято мной: и запись, и подтверждённая работа считаются.
+  bool get isMine => isApplied || isCompleted;
+
+  /// Я отметился, что пришёл.
+  bool get isCheckedIn => myCheckedInAt != null;
+
+  /// Момент, с которого можно отметиться: за час до начала.
+  /// Раньше смысла нет, а опоздавшим на час запирать кнопку жестоко —
+  /// поэтому верхняя граница не начало смены, а конец дня.
+  DateTime get checkInOpensAt => startsAt.subtract(const Duration(hours: 1));
+
+  /// Можно ли отметиться прямо сейчас.
+  ///
+  /// Время снова передаём параметром, а не берём внутри: только так
+  /// правило можно проверить тестом на любую дату.
+  bool canCheckInAt(DateTime now) =>
+      isApplied &&
+      !isCheckedIn &&
+      isSameDay(now, workDate) &&
+      !now.isBefore(checkInOpensAt);
+
+  /// Смена уже прошла — по календарю, а не по подтверждению.
+  bool isPastOn(DateTime now) =>
+      workDate.isBefore(DateTime(now.year, now.month, now.day));
+
+  /// Прошла, я был записан, но заказчик так и не подтвердил выход.
+  bool isUnconfirmedOn(DateTime now) => isPastOn(now) && isApplied;
+
   /// Можно ли записаться: места есть и я ещё не записан.
-  bool get canApply => hasFreeSlots && !isApplied;
+  bool get canApply => hasFreeSlots && !isMine;
 
   /// Проходит ли исполнитель по рейтингу.
   /// Рейтинг здесь не украшение профиля, а **допуск**: часть заказчиков

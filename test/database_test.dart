@@ -62,11 +62,17 @@ void main() {
       hourlyRate: 100000,
       workersNeeded: 2,
       createdBy: manager.id,
+      city: 'Алматы',
     );
 
     // Записывается исполнитель — значит, в сессии должен быть он.
     session.setUser(worker);
     expect(await shifts.apply(shiftId), BookingResult.ok);
+
+    // Смена уже прошла, и заказчик подтвердил выход. Без подтверждения
+    // она не считается отработанной — ни для оценки, ни для заработка.
+    session.setUser(manager);
+    await shifts.confirmAttendance(shiftId: shiftId, workerId: worker.id);
 
     return (shiftId, worker.id, manager.id);
   }
@@ -146,12 +152,14 @@ void main() {
       hourlyRate: 100000,
       workersNeeded: 1,
       createdBy: managerId,
+      city: 'Алматы',
     );
 
     session.setUser(await auth.refresh(workerId));
     expect(await shifts.apply(secondShift), BookingResult.ok);
 
     session.setUser(await auth.refresh(managerId));
+    await shifts.confirmAttendance(shiftId: secondShift, workerId: workerId);
     await shifts.rateWorker(
       shiftId: secondShift,
       workerId: workerId,
@@ -206,7 +214,111 @@ void main() {
 
     final people = await shifts.applicantsFor(shiftId);
     expect(people, hasLength(1));
-    expect(people.first.fullName, 'Ернар Калдыбеков');
-    expect(people.first.rating, 5.0);
+    expect(people.first.user.fullName, 'Ернар Калдыбеков');
+    expect(people.first.user.rating, 5.0);
+  });
+
+  test('лента показывает только смены города, который выбрал человек',
+      () async {
+    final manager = await auth.register(
+      phone: '77000000501',
+      fullName: 'Айгуль Досова',
+      city: 'Алматы',
+      role: UserRole.manager,
+      company: 'Magnum',
+    );
+    final worker = await auth.register(
+      phone: '77000000502',
+      fullName: 'Ернар Калдыбеков',
+      city: 'Астана',
+    );
+
+    final today = daysAgo(0);
+    for (final (title, city) in [
+      ('Смена в Алматы', 'Алматы'),
+      ('Смена в Астане', 'Астана'),
+    ]) {
+      await shifts.createShift(
+        workDate: today,
+        title: title,
+        company: 'Magnum',
+        address: 'адрес',
+        startMinutes: 600,
+        endMinutes: 1200,
+        hourlyRate: 100000,
+        workersNeeded: 1,
+        createdBy: manager.id,
+        city: city,
+      );
+    }
+
+    // Человек из Астаны видит только свой город.
+    session.setUser(worker);
+    final feed = await shifts.shiftsOn(today);
+    expect(feed.map((s) => s.title), ['Смена в Астане']);
+
+    // И компании для фильтра тоже считаются по его городу.
+    expect(await shifts.companies(), ['Magnum']);
+
+    // А человек из Алматы — свой.
+    session.setUser(await auth.refresh(manager.id));
+    final other = await shifts.shiftsOn(today);
+    expect(other.map((s) => s.title), ['Смена в Алматы']);
+  });
+
+  test('отметка о выходе сохраняется в базе', () async {
+    final manager = await auth.register(
+      phone: '77000000601',
+      fullName: 'Айгуль Досова',
+      city: 'Алматы',
+      role: UserRole.manager,
+      company: 'Magnum',
+    );
+    final worker = await auth.register(
+      phone: '77000000602',
+      fullName: 'Ернар Калдыбеков',
+      city: 'Алматы',
+    );
+
+    // Смена идёт прямо сейчас — иначе отметка была бы закрыта по времени.
+    final now = DateTime.now();
+    final shiftId = await shifts.createShift(
+      workDate: daysAgo(0),
+      title: 'Услуги фасовщика',
+      company: 'Magnum',
+      address: 'адрес',
+      startMinutes: now.hour * 60 + now.minute,
+      endMinutes: 1439,
+      hourlyRate: 100000,
+      workersNeeded: 1,
+      createdBy: manager.id,
+      city: 'Алматы',
+    );
+
+    session.setUser(worker);
+    await shifts.apply(shiftId);
+    expect(await shifts.checkIn(shiftId), BookingResult.ok);
+
+    final shift = (await shifts.shiftById(shiftId))!;
+    expect(shift.isCheckedIn, isTrue);
+
+    // Дважды отметиться нельзя.
+    expect(await shifts.checkIn(shiftId), BookingResult.alreadyBooked);
+
+    // Заказчик видит отметку в списке записавшихся.
+    final people = await shifts.applicantsFor(shiftId);
+    expect(people.first.isCheckedIn, isTrue);
+    expect(people.first.isConfirmed, isFalse);
+
+    await shifts.confirmAttendance(shiftId: shiftId, workerId: worker.id);
+    final after = await shifts.applicantsFor(shiftId);
+    expect(after.first.isConfirmed, isTrue);
+  });
+
+  test('счётчик смен считает только подтверждённые', () async {
+    final (_, workerId, _) = await workedShift();
+
+    // В helper выход подтверждён — смена засчитана.
+    expect((await auth.refresh(workerId))!.completedShifts, 1);
   });
 }

@@ -19,6 +19,9 @@ class AppSession extends ChangeNotifier {
   /// Рейтинг текущего пользователя — по нему решается допуск к сменам.
   double get rating => _user?.rating ?? 0;
 
+  /// Город текущего пользователя — по нему фильтруется лента.
+  String get city => _user?.city ?? '';
+
   void setUser(AppUser? value) {
     _user = value;
     notifyListeners();

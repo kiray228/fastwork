@@ -18,6 +18,67 @@ class ProfilePage extends StatelessWidget {
 
   const ProfilePage({super.key, required this.session, required this.repos});
 
+  /// Сменить город.
+  ///
+  /// Город тут не украшение анкеты: от него зависит, какие смены человек
+  /// вообще видит в ленте. Поэтому менять его должно быть легко.
+  Future<void> _changeCity(BuildContext context) async {
+    final current = session.user;
+    if (current == null) return;
+
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => Material(
+        color: Theme.of(sheetContext).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+        clipBehavior: Clip.antiAlias,
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.muted.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                child: Text(
+                  'Ваш город',
+                  style: Theme.of(sheetContext)
+                      .textTheme
+                      .headlineSmall
+                      ?.copyWith(fontSize: 20),
+                ),
+              ),
+              for (final city in kCities)
+                ListTile(
+                  title: Text(city),
+                  trailing: city == current.city
+                      ? const Icon(Icons.check_rounded,
+                          color: AppColors.brand)
+                      : null,
+                  onTap: () => Navigator.of(sheetContext).pop(city),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (picked == null || picked == current.city) return;
+
+    final updated = await repos.auth.changeCity(current.id, picked);
+    if (updated != null) session.setUser(updated);
+  }
+
   Future<void> _signOut(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -111,6 +172,7 @@ class ProfilePage extends StatelessWidget {
                   icon: Icons.place_outlined,
                   title: 'Город',
                   trailing: user.city,
+                  onTap: () => _changeCity(context),
                 ),
                 _MenuRow(
                   icon: Icons.chat_bubble_outline_rounded,

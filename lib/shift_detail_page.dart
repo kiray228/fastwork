@@ -72,6 +72,29 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     );
   }
 
+  /// Отметиться на смене: «я на месте».
+  ///
+  /// Это середина жизненного пути записи. Раньше смена считалась
+  /// отработанной просто потому, что дата прошла, — теперь нужно
+  /// действие человека и подтверждение заказчика.
+  Future<void> _checkIn() async {
+    setState(() => busy = true);
+    final result = await widget.repository.checkIn(widget.shiftId);
+    await _load();
+    if (!mounted) return;
+    setState(() => busy = false);
+
+    _showResult(
+      switch (result) {
+        BookingResult.ok => 'Отметка принята — заказчик её видит',
+        BookingResult.alreadyBooked => 'Вы уже отметились',
+        BookingResult.tooEarlyToCheckIn =>
+          'Отметиться можно в день смены, не раньше чем за час до начала',
+        _ => 'Не получилось отметиться',
+      },
+    );
+  }
+
   /// Отменить запись — тоже с подтверждением, но коротким.
   Future<void> _cancel() async {
     final current = shift;
@@ -245,6 +268,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
             userRating: widget.session.rating,
             onBook: _book,
             onCancel: _cancel,
+            onCheckIn: _checkIn,
           ),
         ],
       ),
@@ -724,6 +748,7 @@ class _BottomBar extends StatelessWidget {
   final double userRating;
   final VoidCallback onBook;
   final VoidCallback onCancel;
+  final VoidCallback onCheckIn;
 
   const _BottomBar({
     required this.shift,
@@ -731,6 +756,7 @@ class _BottomBar extends StatelessWidget {
     required this.userRating,
     required this.onBook,
     required this.onCancel,
+    required this.onCheckIn,
   });
 
   @override
@@ -744,7 +770,22 @@ class _BottomBar extends StatelessWidget {
     final VoidCallback? action;
     final bool outlined;
 
-    if (shift.isApplied && canCancel) {
+    final now = DateTime.now();
+
+    if (shift.isCompleted) {
+      label = 'Смена отработана';
+      action = null;
+      outlined = false;
+    } else if (shift.isCheckedIn) {
+      label = 'Вы отметились — ждём подтверждения';
+      action = null;
+      outlined = true;
+    } else if (shift.canCheckInAt(now)) {
+      // В день смены запись уже не отменить, зато появляется отметка.
+      label = 'Я на месте';
+      action = onCheckIn;
+      outlined = false;
+    } else if (shift.isApplied && canCancel) {
       label = 'Отменить запись';
       action = onCancel;
       outlined = true;

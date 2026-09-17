@@ -145,13 +145,7 @@ class _MyShiftsPageState extends State<MyShiftsPage> {
                   itemCount: value.length,
                   itemBuilder: (context, index) {
                     final shift = value[index];
-                    final isPast = shift.workDate.isBefore(
-                      DateTime(
-                        DateTime.now().year,
-                        DateTime.now().month,
-                        DateTime.now().day,
-                      ),
-                    );
+                    final now = DateTime.now();
 
                     return AnimatedEntrance(
                       index: index,
@@ -162,38 +156,15 @@ class _MyShiftsPageState extends State<MyShiftsPage> {
                             userRating: widget.session.rating,
                             onTap: () => _openShift(shift),
                           ),
-                          // Оценить можно только уже отработанную смену.
-                          if (archived && isPast)
+                          if (archived)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 14),
-                              child: reviewed.contains(shift.id)
-                                  ? const TagChip(
-                                      text: 'Отзыв оставлен',
-                                      icon: Icons.check_rounded,
-                                      color: AppColors.brand,
-                                    )
-                                  : SizedBox(
-                                      width: double.infinity,
-                                      child: OutlinedButton.icon(
-                                        onPressed: () => _review(shift),
-                                        icon: const Icon(
-                                          Icons.star_outline_rounded,
-                                          size: 18,
-                                        ),
-                                        label: const Text(
-                                          'Оценить место работы',
-                                        ),
-                                        style: OutlinedButton.styleFrom(
-                                          minimumSize: const Size.fromHeight(
-                                            46,
-                                          ),
-                                          foregroundColor: AppColors.brand,
-                                          side: const BorderSide(
-                                            color: AppColors.brand,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
+                              child: _ArchiveFooter(
+                                shift: shift,
+                                now: now,
+                                reviewed: reviewed.contains(shift.id),
+                                onReview: () => _review(shift),
+                              ),
                             ),
                         ],
                       ),
@@ -280,6 +251,67 @@ class _TabButton extends StatelessWidget {
               color: selected ? Colors.white : AppColors.muted,
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Что показать под карточкой в архиве.
+///
+/// Прошедшая смена может кончиться тремя разными способами, и человеку
+/// важно видеть, каким именно: отработал и подтверждено, отметки не было,
+/// или запись отменена. Раньше всё это выглядело одинаково.
+class _ArchiveFooter extends StatelessWidget {
+  final Shift shift;
+  final DateTime now;
+  final bool reviewed;
+  final VoidCallback onReview;
+
+  const _ArchiveFooter({
+    required this.shift,
+    required this.now,
+    required this.reviewed,
+    required this.onReview,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (shift.isUnconfirmedOn(now)) {
+      return const TagChip(
+        text: 'Выход не подтверждён заказчиком',
+        icon: Icons.help_outline_rounded,
+        color: AppColors.muted,
+      );
+    }
+
+    if (!shift.isCompleted) {
+      return const TagChip(
+        text: 'Запись отменена',
+        icon: Icons.close_rounded,
+        color: AppColors.muted,
+      );
+    }
+
+    // Отработанную смену можно оценить — но только один раз.
+    if (reviewed) {
+      return const TagChip(
+        text: 'Отзыв оставлен',
+        icon: Icons.check_rounded,
+        color: AppColors.brand,
+      );
+    }
+
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: onReview,
+        icon: const Icon(Icons.star_outline_rounded, size: 18),
+        label: const Text('Оценить место работы'),
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(46),
+          foregroundColor: AppColors.brand,
+          side: const BorderSide(color: AppColors.brand),
         ),
       ),
     );

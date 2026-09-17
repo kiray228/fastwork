@@ -28,6 +28,9 @@ abstract class AuthRepository {
 
   /// Перечитать пользователя из базы — например, после новой смены.
   Future<AppUser?> refresh(int userId);
+
+  /// Сменить город. От него зависит, какие смены человек видит.
+  Future<AppUser?> changeCity(int userId, String city);
 }
 
 /// Ключ, под которым в настройках лежит номер вошедшего пользователя.
@@ -40,18 +43,18 @@ class DbAuthRepository implements AuthRepository {
 
   Future<AppUser> _toUser(UserRow row) async {
     // Сколько смен отработано — считаем запросом, а не храним в колонке.
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
+    //
+    // Считаем только подтверждённые заказчиком. Раньше здесь было
+    // «запись жива и дата прошла», и это завышало счётчик: записался,
+    // не пришёл — а смена всё равно засчитывалась.
     final rows = await db.customSelect(
       '''
       SELECT COUNT(*) AS c
       FROM application_rows a
-      JOIN shift_rows s ON s.id = a.shift_id
-      WHERE a.worker_id = ? AND a.status = 'active' AND s.work_date < ?
+      WHERE a.worker_id = ? AND a.status = 'completed'
       ''',
-      variables: [Variable.withInt(row.id), Variable.withDateTime(today)],
-      readsFrom: {db.applicationRows, db.shiftRows},
+      variables: [Variable.withInt(row.id)],
+      readsFrom: {db.applicationRows},
     ).get();
 
     // А вот и главное изменение: рейтинг больше не берётся из колонки.
@@ -139,6 +142,13 @@ class DbAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<AppUser?> changeCity(int userId, String city) async {
+    await (db.update(db.userRows)..where((u) => u.id.equals(userId)))
+        .write(UserRowsCompanion(city: Value(city)));
+    return refresh(userId);
+  }
+
+  @override
   Future<void> signIn(AppUser user) async {
     await db.into(db.appSettings).insertOnConflictUpdate(
           AppSettingsCompanion.insert(
@@ -210,6 +220,30 @@ class FakeAuthRepository implements AuthRepository {
     _users.add(user);
     _current = user;
     return user;
+  }
+
+  @override
+  Future<AppUser?> changeCity(int userId, String city) async {
+    for (var i = 0; i < _users.length; i++) {
+      if (_users[i].id != userId) continue;
+      final old = _users[i];
+      final updated = AppUser(
+        id: old.id,
+        phone: old.phone,
+        fullName: old.fullName,
+        city: city,
+        rating: old.rating,
+        isVerified: old.isVerified,
+        role: old.role,
+        company: old.company,
+        completedShifts: old.completedShifts,
+        ratingCount: old.ratingCount,
+      );
+      _users[i] = updated;
+      if (_current?.id == userId) _current = updated;
+      return updated;
+    }
+    return null;
   }
 
   @override

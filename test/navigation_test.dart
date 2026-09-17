@@ -206,8 +206,10 @@ void main() {
       expect(find.text('Вы записаны на эту смену'), findsOneWidget);
       expect(find.text('Свободно мест: 2'), findsOneWidget);
 
-      // Смена сегодня, до начала меньше 10 часов — отмена уже недоступна.
-      expect(find.text('Отмена уже недоступна'), findsOneWidget);
+      // Что написано на нижней кнопке, зависит от времени суток: до смены
+      // это «Отменить запись», в день смены — «Я на месте». Проверять это
+      // здесь значило бы получить тест, который падает после обеда.
+      // Сами правила проверены в repository_test и shift_test.
     });
 
     testWidgets('отказ в окне условий ничего не меняет', (tester) async {
@@ -283,7 +285,10 @@ void main() {
     testWidgets('кошелёк показывает заработок и предупреждение',
         (tester) async {
       final repo = FakeShiftRepository(userRating: 5.0);
-      await repo.apply(6); // отработанная смена три дня назад
+      // Смена три дня назад: записался, и заказчик подтвердил выход.
+      // Без подтверждения она в заработок не попадёт.
+      await repo.apply(6);
+      await repo.confirmAttendance(shiftId: 6, workerId: 1);
       await openApp(tester, rating: 5.0, shifts: repo);
 
       await tester.tap(find.text('Профиль'));
@@ -318,6 +323,7 @@ void main() {
     testWidgets('отзыв о прошедшей смене сохраняется', (tester) async {
       final repo = FakeShiftRepository(userRating: 5.0);
       await repo.apply(6);
+      await repo.confirmAttendance(shiftId: 6, workerId: 1);
       await openApp(tester, rating: 5.0, shifts: repo);
 
       await tester.tap(find.text('Мои'));
@@ -347,6 +353,7 @@ void main() {
     testWidgets('без звёзд отзыв отправить нельзя', (tester) async {
       final repo = FakeShiftRepository(userRating: 5.0);
       await repo.apply(6);
+      await repo.confirmAttendance(shiftId: 6, workerId: 1);
       await openApp(tester, rating: 5.0, shifts: repo);
 
       await tester.tap(find.text('Мои'));
@@ -500,10 +507,11 @@ void main() {
     });
   });
 
-  /// Прошедшая смена, созданная нашим заказчиком, — по ней будет оценка.
-  FakeShiftRepository managerRepo() {
+  /// Прошедшая смена нашего заказчика, на которой человек отработал:
+  /// записался и выход подтверждён. Только такую и можно оценить.
+  Future<FakeShiftRepository> managerRepo() async {
     final now = DateTime.now();
-    return FakeShiftRepository(
+    final repo = FakeShiftRepository(
       shifts: [
         Shift(
           id: 1,
@@ -520,7 +528,150 @@ void main() {
         ),
       ],
     );
+    await repo.apply(1);
+    await repo.confirmAttendance(shiftId: 1, workerId: 1);
+    return repo;
   }
+
+  /// Смена, которая идёт прямо сейчас, — чтобы отметка была доступна
+  /// независимо от того, в котором часу запустили тест.
+  FakeShiftRepository shiftRunningNow() {
+    final now = DateTime.now();
+    return FakeShiftRepository(
+      userRating: 5.0,
+      shifts: [
+        Shift(
+          id: 1,
+          workDate: DateTime(now.year, now.month, now.day),
+          title: 'Услуги фасовщика',
+          company: 'Magnum',
+          address: 'г. Алматы, ул. Абая, 1',
+          startMinutes: now.hour * 60 + now.minute,
+          endMinutes: 1439,
+          hourlyRate: 100000,
+          workersNeeded: 3,
+          workersHired: 0,
+        ),
+      ],
+    );
+  }
+
+  group('выход на смену', () {
+    testWidgets('в день смены появляется отметка «Я на месте»',
+        (tester) async {
+      final repo = shiftRunningNow();
+      await repo.apply(1);
+      await openApp(tester, rating: 5.0, shifts: repo);
+
+      await tester.tap(find.text('Подробнее').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Я на месте'), findsOneWidget);
+
+      await tester.tap(find.text('Я на месте'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Вы отметились — ждём подтверждения'), findsOneWidget);
+    });
+
+    testWidgets('до дня смены отметки нет', (tester) async {
+      // Смена №5 — через три дня, отметиться нельзя.
+      final repo = FakeShiftRepository(userRating: 5.0);
+      await repo.apply(5);
+      await openApp(tester, rating: 5.0, shifts: repo);
+
+      await tester.tap(find.text('чт').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Я на месте'), findsNothing);
+    });
+
+    testWidgets('заказчик подтверждает выход', (tester) async {
+      final now = DateTime.now();
+      final repo = FakeShiftRepository(
+        userRating: 5.0,
+        shifts: [
+          Shift(
+            id: 1,
+            workDate: DateTime(now.year, now.month, now.day),
+            title: 'Услуги фасовщика',
+            company: 'Magnum',
+            address: 'г. Алматы, ул. Абая, 1',
+            startMinutes: now.hour * 60 + now.minute,
+            endMinutes: 1439,
+            hourlyRate: 100000,
+            workersNeeded: 3,
+            workersHired: 0,
+            createdBy: 1,
+          ),
+        ],
+      );
+      await repo.apply(1);
+      await repo.checkIn(1);
+
+      await openApp(
+        tester,
+        role: UserRole.manager,
+        repos: buildRepos(
+          shifts: repo,
+          signedIn: testUser(role: UserRole.manager),
+        ),
+      );
+
+      await tester.tap(find.text('Услуги фасовщика'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('На месте'), findsOneWidget);
+      await tester.tap(find.text('Подтвердить выход'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Отработал'), findsOneWidget);
+      expect(find.text('Подтвердить выход'), findsNothing);
+    });
+  });
+
+  group('город', () {
+    testWidgets('лента показывает только смены своего города',
+        (tester) async {
+      final now = DateTime.now();
+      final repo = FakeShiftRepository(
+        city: 'Астана',
+        shifts: [
+          Shift(
+            id: 1,
+            workDate: DateTime(now.year, now.month, now.day),
+            title: 'Смена в Алматы',
+            company: 'Magnum',
+            address: 'г. Алматы, ул. Абая, 1',
+            city: 'Алматы',
+            startMinutes: 600,
+            endMinutes: 1200,
+            hourlyRate: 100000,
+            workersNeeded: 3,
+            workersHired: 0,
+          ),
+          Shift(
+            id: 2,
+            workDate: DateTime(now.year, now.month, now.day),
+            title: 'Смена в Астане',
+            company: 'Small',
+            address: 'г. Астана, ул. Кенесары, 1',
+            city: 'Астана',
+            startMinutes: 600,
+            endMinutes: 1200,
+            hourlyRate: 100000,
+            workersNeeded: 3,
+            workersHired: 0,
+          ),
+        ],
+      );
+
+      await openApp(tester, shifts: repo);
+
+      expect(find.text('Смена в Астане'), findsOneWidget);
+      expect(find.text('Смена в Алматы'), findsNothing);
+    });
+  });
 
   group('оценки исполнителей', () {
     testWidgets('заказчик видит, кого нужно оценить', (tester) async {
@@ -528,7 +679,7 @@ void main() {
         tester,
         role: UserRole.manager,
         repos: buildRepos(
-          shifts: managerRepo(),
+          shifts: await managerRepo(),
           signedIn: testUser(role: UserRole.manager),
         ),
       );
@@ -541,7 +692,7 @@ void main() {
     });
 
     testWidgets('после оценки список пустеет', (tester) async {
-      final shifts = managerRepo();
+      final shifts = await managerRepo();
       await openApp(
         tester,
         role: UserRole.manager,
@@ -584,7 +735,7 @@ void main() {
     });
 
     testWidgets('полученный отзыв виден исполнителю', (tester) async {
-      final shifts = managerRepo();
+      final shifts = await managerRepo();
       await shifts.rateWorker(
         shiftId: 1,
         workerId: 1,
