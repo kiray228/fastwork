@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 
 import 'shift.dart';
 import 'shift_detail_page.dart';
+import 'theme/app_colors.dart';
+import 'widgets/common.dart';
+import 'widgets/date_strip.dart';
+import 'widgets/shift_card.dart';
+import 'widgets/stories_row.dart';
 
-/// Главный экран: полоса дат сверху и список смен под ней.
+/// Главный экран: подсказки, полоса дат и список смен.
 class ShiftsPage extends StatefulWidget {
   const ShiftsPage({super.key});
 
@@ -57,12 +62,23 @@ class _ShiftsPageState extends State<ShiftsPage> {
   @override
   Widget build(BuildContext context) {
     final shifts = visibleShifts;
+    final selectedDate = dayAt(selectedDay);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('fastwork'), centerTitle: true),
+      appBar: AppBar(
+        title: const Wordmark(),
+        actions: [
+          IconButton(
+            onPressed: () {},
+            icon: const Icon(Icons.notifications_none_rounded),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
       body: Column(
         children: [
-          _DateStrip(
+          const StoriesRow(),
+          DateStrip(
             today: today,
             selectedDay: selectedDay,
             hasShiftsOn: hasShiftsOn,
@@ -70,17 +86,66 @@ class _ShiftsPageState extends State<ShiftsPage> {
             // Flutter перерисовать экран. Это и есть «состояние экрана».
             onDaySelected: (day) => setState(() => selectedDay = day),
           ),
+          _ListHeader(date: selectedDate, count: shifts.length),
           Expanded(
             child: shifts.isEmpty
                 ? const _EmptyState()
                 : ListView.builder(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                     itemCount: shifts.length,
-                    itemBuilder: (context, index) => _ShiftCard(
+                    itemBuilder: (context, index) => ShiftCard(
                       shift: shifts[index],
                       onTap: () => openShift(shifts[index]),
                     ),
                   ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: const _BottomNav(),
+    );
+  }
+}
+
+/// Строка над списком: какая дата выбрана и сколько смен найдено.
+class _ListHeader extends StatelessWidget {
+  final DateTime date;
+  final int count;
+
+  const _ListHeader({required this.date, required this.count});
+
+  String get _countLabel {
+    // Русские окончания: 1 смена, 2 смены, 5 смен.
+    final last = count % 10;
+    final lastTwo = count % 100;
+    if (lastTwo >= 11 && lastTwo <= 14) return '$count смен';
+    if (last == 1) return '$count смена';
+    if (last >= 2 && last <= 4) return '$count смены';
+    return '$count смен';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Flexible(
+            child: Text(
+              '${date.day} ${monthsShort[date.month - 1]}, '
+              '${weekdaysShort[date.weekday - 1]}',
+              style: Theme.of(context).textTheme.titleMedium,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _countLabel,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.muted,
+            ),
           ),
         ],
       ),
@@ -95,167 +160,39 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.event_busy, size: 64, color: colors.outline),
-          const SizedBox(height: 16),
-          const Text(
-            'На этот день смен нет',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Выберите другую дату',
-            style: TextStyle(color: colors.onSurfaceVariant),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Горизонтальная полоса дат.
-class _DateStrip extends StatelessWidget {
-  final DateTime today;
-  final int selectedDay;
-  final ValueChanged<int> onDaySelected;
-  final bool Function(DateTime) hasShiftsOn;
-
-  const _DateStrip({
-    required this.today,
-    required this.selectedDay,
-    required this.onDaySelected,
-    required this.hasShiftsOn,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return SizedBox(
-      height: 84,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        itemCount: 14,
-        itemBuilder: (context, index) {
-          final date = DateTime(today.year, today.month, today.day + index);
-          final isSelected = index == selectedDay;
-          final hasShifts = hasShiftsOn(date);
-
-          // Цвет текста: выбранный день — белым, день без смен — бледным,
-          // обычный — основным.
-          final textColor = isSelected
-              ? colors.onPrimary
-              : hasShifts
-                  ? colors.onSurface
-                  : colors.onSurface.withValues(alpha: 0.35);
-
-          return GestureDetector(
-            onTap: () => onDaySelected(index),
-            child: Container(
-              width: 60,
-              margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
-              decoration: BoxDecoration(
-                color:
-                    isSelected ? colors.primary : colors.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    weekdaysShort[date.weekday - 1],
-                    style: TextStyle(fontSize: 12, color: textColor),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${date.day}',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// Карточка одной смены в списке.
-class _ShiftCard extends StatelessWidget {
-  final Shift shift;
-  final VoidCallback onTap;
-
-  const _ShiftCard({required this.shift, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(32),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    formatMoney(shift.totalPay),
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                if (shift.crossesMidnight)
-                  Chip(
-                    label: const Text('ночная'),
-                    visualDensity: VisualDensity.compact,
-                    labelStyle: const TextStyle(fontSize: 12),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            IconRow(
-              icon: Icons.schedule,
-              text: '${formatTime(shift.startMinutes)} — '
-                  '${formatTime(shift.endMinutes)}',
-            ),
-            IconRow(icon: Icons.work_outline, text: shift.title),
-            IconRow(
-              icon: Icons.place_outlined,
-              text: '${shift.company} • ${shift.address}',
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                // Если мест нет — кнопка неактивна. null вместо функции
-                // означает «нажать нельзя», Flutter сам её приглушит.
-                onPressed: shift.hasFreeSlots ? onTap : null,
-                child: Text(shift.hasFreeSlots ? 'Подробнее' : 'Мест нет'),
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.brand.withValues(alpha: 0.10),
+              ),
+              child: const Icon(
+                Icons.event_busy_rounded,
+                size: 44,
+                color: AppColors.brand,
               ),
             ),
-            if (shift.hasFreeSlots) ...[
-              const SizedBox(height: 6),
-              Text(
-                'Осталось мест: ${shift.freeSlots}',
-                style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
-              ),
-            ],
+            const SizedBox(height: 20),
+            Text(
+              'На этот день смен нет',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontSize: 18,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Выберите другую дату — зелёная точка\nпод числом означает, '
+              'что смены есть',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.muted, height: 1.4),
+            ),
           ],
         ),
       ),
@@ -263,25 +200,48 @@ class _ShiftCard extends StatelessWidget {
   }
 }
 
-/// Строка «иконка + текст». Используется на обоих экранах,
-/// поэтому вынесена отдельно и не приватная.
-class IconRow extends StatelessWidget {
-  final IconData icon;
-  final String text;
-
-  const IconRow({super.key, required this.icon, required this.text});
+/// Нижнее меню. Пока рабочая только первая вкладка —
+/// остальные экраны ещё не сделаны.
+class _BottomNav extends StatelessWidget {
+  const _BottomNav();
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18, color: colors.primary),
-          const SizedBox(width: 8),
-          Expanded(child: Text(text)),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          top: BorderSide(
+            color: isDark ? AppColors.darkBorder : AppColors.border,
+          ),
+        ),
+      ),
+      child: NavigationBar(
+        selectedIndex: 0,
+        height: 64,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: AppColors.brand.withValues(alpha: 0.12),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.local_fire_department_outlined),
+            selectedIcon: Icon(
+              Icons.local_fire_department_rounded,
+              color: AppColors.brand,
+            ),
+            label: 'Смены',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.work_history_outlined),
+            label: 'Мои',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline_rounded),
+            label: 'Профиль',
+          ),
         ],
       ),
     );

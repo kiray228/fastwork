@@ -61,6 +61,19 @@ class Shift {
 
   /// Заканчивается ли смена на следующий день.
   bool get crossesMidnight => endMinutes <= startMinutes;
+
+  /// Короткие ярлыки для карточки: «Ночная», «Выплата завтра» и подобные.
+  ///
+  /// Мы их не храним — они вычисляются из уже имеющихся полей. Добавится
+  /// новое условие, и ярлык появится сам, без правки данных.
+  List<String> get tags {
+    final result = <String>[];
+    if (crossesMidnight) result.add('Ночная');
+    if (!hasUnpaidBreak) result.add('Без вычета обеда');
+    if (payoutDelayDays == 1) result.add('Выплата завтра');
+    if (hasFreeSlots && freeSlots <= 2) result.add('Мало мест');
+    return result;
+  }
 }
 
 /// Один ли это день? Время суток нас не интересует, только дата.
