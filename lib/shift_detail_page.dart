@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'data/session.dart';
 import 'data/shift_repository.dart';
+import 'company_page.dart';
 import 'shift.dart';
 import 'theme/app_colors.dart';
 import 'widgets/booking_confirm_sheet.dart';
@@ -160,7 +161,17 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
                   ),
                   const SizedBox(height: 14),
                 ],
-                _HeroCard(shift: current),
+                _HeroCard(
+                  shift: current,
+                  onCompanyTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => CompanyPage(
+                        company: current.company,
+                        repository: widget.repository,
+                      ),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 14),
                 _PayCard(shift: current),
                 if (current.duties.isNotEmpty) ...[
@@ -350,8 +361,9 @@ class _RatingLockBanner extends StatelessWidget {
 /// Шапка: бейдж даты, название, компания, адрес, время, ярлыки.
 class _HeroCard extends StatelessWidget {
   final Shift shift;
+  final VoidCallback onCompanyTap;
 
-  const _HeroCard({required this.shift});
+  const _HeroCard({required this.shift, required this.onCompanyTap});
 
   @override
   Widget build(BuildContext context) {
@@ -418,18 +430,28 @@ class _HeroCard extends StatelessWidget {
                       style: text.titleLarge?.copyWith(fontSize: 17, height: 1.3),
                     ),
                     const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        CompanyAvatar(company: shift.company, size: 28),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            shift.company,
-                            style: text.titleMedium?.copyWith(fontSize: 14),
-                            overflow: TextOverflow.ellipsis,
+                    // Компания кликабельна — там оценка и отзывы.
+                    InkWell(
+                      onTap: onCompanyTap,
+                      borderRadius: BorderRadius.circular(10),
+                      child: Row(
+                        children: [
+                          CompanyAvatar(company: shift.company, size: 28),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              shift.company,
+                              style: text.titleMedium?.copyWith(fontSize: 14),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                      ],
+                          const Icon(
+                            Icons.chevron_right_rounded,
+                            size: 20,
+                            color: AppColors.muted,
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),

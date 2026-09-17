@@ -2,16 +2,24 @@ import 'package:flutter/material.dart';
 
 import 'data/auth_repository.dart';
 import 'data/session.dart';
+import 'data/shift_repository.dart';
 import 'theme/app_colors.dart';
 import 'user.dart';
+import 'wallet_page.dart';
 import 'widgets/common.dart';
 
 /// Профиль пользователя.
 class ProfilePage extends StatelessWidget {
   final AppSession session;
   final AuthRepository auth;
+  final ShiftRepository shifts;
 
-  const ProfilePage({super.key, required this.session, required this.auth});
+  const ProfilePage({
+    super.key,
+    required this.session,
+    required this.auth,
+    required this.shifts,
+  });
 
   Future<void> _signOut(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -65,6 +73,11 @@ class ProfilePage extends StatelessWidget {
                   icon: Icons.payments_outlined,
                   title: 'Выплаты',
                   trailing: 'Вознаграждение',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => WalletPage(repository: shifts),
+                    ),
+                  ),
                 ),
                 _MenuRow(
                   icon: Icons.badge_outlined,
@@ -257,8 +270,14 @@ class _MenuRow extends StatelessWidget {
   final IconData icon;
   final String title;
   final String? trailing;
+  final VoidCallback? onTap;
 
-  const _MenuRow({required this.icon, required this.title, this.trailing});
+  const _MenuRow({
+    required this.icon,
+    required this.title,
+    this.trailing,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -276,9 +295,10 @@ class _MenuRow extends StatelessWidget {
           const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
         ],
       ),
-      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Этот раздел ещё не сделан')),
-      ),
+      onTap: onTap ??
+          () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Этот раздел ещё не сделан')),
+              ),
     );
   }
 }

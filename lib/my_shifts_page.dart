@@ -6,6 +6,7 @@ import 'shift.dart';
 import 'shift_detail_page.dart';
 import 'theme/app_colors.dart';
 import 'widgets/common.dart';
+import 'widgets/review_sheet.dart';
 import 'widgets/shift_card.dart';
 
 /// «Мои подработки»: две вкладки над одними и теми же данными.
@@ -30,6 +31,9 @@ class _MyShiftsPageState extends State<MyShiftsPage> {
   bool archived = false;
   List<Shift>? shifts;
 
+  /// Номера смен, о которых отзыв уже оставлен.
+  Set<int> reviewed = {};
+
   @override
   void initState() {
     super.initState();
@@ -38,8 +42,39 @@ class _MyShiftsPageState extends State<MyShiftsPage> {
 
   Future<void> _load() async {
     final loaded = await widget.repository.myShifts(archived: archived);
+
+    // Для архива узнаём, по каким сменам отзыв уже есть — чтобы не
+    // предлагать оценить одно и то же дважды.
+    final done = <int>{};
+    if (archived) {
+      for (final shift in loaded) {
+        if (await widget.repository.hasReviewed(shift.id)) done.add(shift.id);
+      }
+    }
+
     if (!mounted) return;
-    setState(() => shifts = loaded);
+    setState(() {
+      shifts = loaded;
+      reviewed = done;
+    });
+  }
+
+  /// Оценить место работы после смены.
+  Future<void> _review(Shift shift) async {
+    final input = await showReviewSheet(context, shift);
+    if (input == null || !mounted) return;
+
+    await widget.repository.addReview(
+      shiftId: shift.id,
+      rating: input.rating,
+      comment: input.comment,
+    );
+    await _load();
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Спасибо! Отзыв опубликован')),
+    );
   }
 
   void _switchTab(bool value) {
@@ -87,11 +122,55 @@ class _MyShiftsPageState extends State<MyShiftsPage> {
               final items => ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                   itemCount: items.length,
-                  itemBuilder: (context, index) => ShiftCard(
-                    shift: items[index],
-                    userRating: widget.session.rating,
-                    onTap: () => _openShift(items[index]),
-                  ),
+                  itemBuilder: (context, index) {
+                    final shift = items[index];
+                    final isPast = shift.workDate.isBefore(
+                      DateTime(
+                        DateTime.now().year,
+                        DateTime.now().month,
+                        DateTime.now().day,
+                      ),
+                    );
+
+                    return Column(
+                      children: [
+                        ShiftCard(
+                          shift: shift,
+                          userRating: widget.session.rating,
+                          onTap: () => _openShift(shift),
+                        ),
+                        // Оценить можно только уже отработанную смену.
+                        if (archived && isPast)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 14),
+                            child: reviewed.contains(shift.id)
+                                ? const TagChip(
+                                    text: 'Отзыв оставлен',
+                                    icon: Icons.check_rounded,
+                                    color: AppColors.brand,
+                                  )
+                                : SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton.icon(
+                                      onPressed: () => _review(shift),
+                                      icon: const Icon(
+                                        Icons.star_outline_rounded,
+                                        size: 18,
+                                      ),
+                                      label: const Text('Оценить место работы'),
+                                      style: OutlinedButton.styleFrom(
+                                        minimumSize: const Size.fromHeight(46),
+                                        foregroundColor: AppColors.brand,
+                                        side: const BorderSide(
+                                          color: AppColors.brand,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
             },
           ),

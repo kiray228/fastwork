@@ -29,6 +29,16 @@ class _HomeShellState extends State<HomeShell> {
   int index = 0;
 
   @override
+  void initState() {
+    super.initState();
+    // Учебные данные: пара отработанных смен, чтобы архив, кошелёк и
+    // отзывы не пустовали у нового пользователя. Повторно ничего не
+    // добавится — метод сам это проверяет.
+    final id = widget.session.workerId;
+    if (id > 0) widget.shifts.prepareDemoHistory(id);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -37,7 +47,11 @@ class _HomeShellState extends State<HomeShell> {
     final page = switch (index) {
       0 => ShiftsPage(repository: widget.shifts, session: widget.session),
       1 => MyShiftsPage(repository: widget.shifts, session: widget.session),
-      _ => ProfilePage(session: widget.session, auth: widget.auth),
+      _ => ProfilePage(
+          session: widget.session,
+          auth: widget.auth,
+          shifts: widget.shifts,
+        ),
     };
 
     return Scaffold(

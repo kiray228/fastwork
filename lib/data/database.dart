@@ -58,6 +58,27 @@ class UserRows extends Table {
   DateTimeColumn get createdAt => dateTime()();
 }
 
+/// Отзывы исполнителя о филиале, где он отработал смену.
+///
+/// Обрати внимание: отзыв привязан к **смене**, а не просто к компании.
+/// Это доказывает, что человек там действительно работал, и защищает
+/// от накрутки рейтинга выдуманными отзывами.
+class ReviewRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get shiftId =>
+      integer().references(ShiftRows, #id, onDelete: KeyAction.cascade)();
+  IntColumn get authorId => integer()();
+  IntColumn get rating => integer()(); // 1..5
+  TextColumn get comment => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  /// Один отзыв на одну смену от одного человека.
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {shiftId, authorId},
+      ];
+}
+
 /// Мелкие настройки приложения: ключ — значение.
 /// Здесь храним, кто сейчас вошёл, чтобы не спрашивать при каждом запуске.
 class AppSettings extends Table {
@@ -106,7 +127,9 @@ class ApplicationStatus {
 // БАЗА ДАННЫХ
 // ---------------------------------------------------------------------------
 
-@DriftDatabase(tables: [ShiftRows, ApplicationRows, UserRows, AppSettings])
+@DriftDatabase(
+  tables: [ShiftRows, ApplicationRows, UserRows, AppSettings, ReviewRows],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
       : super(executor ?? _open());
@@ -124,7 +147,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Версия схемы. Каждое изменение таблиц поднимает номер на единицу.
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -142,6 +165,9 @@ class AppDatabase extends _$AppDatabase {
             await m.createTable(userRows);
             await m.createTable(appSettings);
             await m.addColumn(shiftRows, shiftRows.minRating);
+          }
+          if (from < 4) {
+            await m.createTable(reviewRows);
           }
         },
         beforeOpen: (details) async {

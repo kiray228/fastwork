@@ -1,3 +1,4 @@
+import '../review.dart';
 import '../shift.dart';
 import 'database.dart';
 import 'shift_filter.dart';
@@ -84,6 +85,68 @@ class FakeShiftRepository implements ShiftRepository {
 
     _myStatuses[shiftId] = ApplicationStatus.cancelled;
     return BookingResult.ok;
+  }
+
+  final List<Review> _reviews = [];
+  int _nextReviewId = 1;
+
+  @override
+  Future<List<Shift>> completedShifts() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    return _shifts
+        .where((s) =>
+            _myStatuses[s.id] == ApplicationStatus.active &&
+            s.workDate.isBefore(today))
+        .map(_decorate)
+        .toList();
+  }
+
+  @override
+  Future<CompanyInfo> companyInfo(String company) async {
+    final ids = _shifts
+        .where((s) => s.company == company)
+        .map((s) => s.id)
+        .toSet();
+    final list = _reviews.where((r) => ids.contains(r.shiftId)).toList();
+
+    final avg = list.isEmpty
+        ? null
+        : list.map((r) => r.rating).reduce((a, b) => a + b) / list.length;
+
+    return CompanyInfo(
+      name: company,
+      rating: avg,
+      reviewCount: list.length,
+      reviews: list,
+    );
+  }
+
+  @override
+  Future<bool> hasReviewed(int shiftId) async =>
+      _reviews.any((r) => r.shiftId == shiftId);
+
+  @override
+  Future<void> addReview({
+    required int shiftId,
+    required int rating,
+    String? comment,
+  }) async {
+    _reviews.removeWhere((r) => r.shiftId == shiftId);
+    _reviews.add(Review(
+      id: _nextReviewId++,
+      shiftId: shiftId,
+      authorName: 'Исполнитель',
+      rating: rating,
+      comment: comment,
+      createdAt: DateTime.now(),
+    ));
+  }
+
+  @override
+  Future<void> prepareDemoHistory(int userId) async {
+    // В памяти истории нет — тестам она не нужна.
   }
 
   @override

@@ -32,13 +32,17 @@ void main() {
   }
 
   /// Запускаем приложение под уже вошедшим пользователем.
-  Future<void> openApp(WidgetTester tester, {double rating = 4.0}) async {
+  Future<void> openApp(
+    WidgetTester tester, {
+    double rating = 4.0,
+    FakeShiftRepository? shifts,
+  }) async {
     useTallPhone(tester);
     final user = testUser(rating: rating);
     final session = AppSession()..setUser(user);
     await tester.pumpWidget(FastworkApp(
       session: session,
-      shifts: FakeShiftRepository(userRating: rating),
+      shifts: shifts ?? FakeShiftRepository(userRating: rating),
       auth: FakeAuthRepository(signedIn: user),
     ));
     await tester.pumpAndSettle();
@@ -245,6 +249,90 @@ void main() {
 
       expect(find.text('Нужен рейтинг 4.5'), findsNothing);
       expect(find.widgetWithText(FilledButton, 'Подробнее'), findsOneWidget);
+    });
+  });
+
+  group('кошелёк и отзывы', () {
+    testWidgets('кошелёк показывает заработок и предупреждение',
+        (tester) async {
+      final repo = FakeShiftRepository(userRating: 5.0);
+      await repo.apply(6); // отработанная смена три дня назад
+      await openApp(tester, rating: 5.0, shifts: repo);
+
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Выплаты'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Заработано всего'), findsOneWidget);
+      expect(find.text('12 100 ₸'), findsOneWidget);
+      expect(
+        find.textContaining('операций с деньгами приложение не проводит'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('кнопка вывода честно говорит, что не подключена',
+        (tester) async {
+      final repo = FakeShiftRepository(userRating: 5.0);
+      await repo.apply(6);
+      await openApp(tester, rating: 5.0, shifts: repo);
+
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Выплаты'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Вывести на карту'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Вывод средств пока не подключён'), findsOneWidget);
+    });
+
+    testWidgets('отзыв о прошедшей смене сохраняется', (tester) async {
+      final repo = FakeShiftRepository(userRating: 5.0);
+      await repo.apply(6);
+      await openApp(tester, rating: 5.0, shifts: repo);
+
+      await tester.tap(find.text('Мои'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Архив'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Оценить место работы'), findsOneWidget);
+      await tester.tap(find.text('Оценить место работы'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Как прошла смена?'), findsOneWidget);
+
+      // Ставим пятую звезду и отправляем.
+      await tester.tap(find.byIcon(Icons.star_outline_rounded).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Отправить отзыв'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Отзыв оставлен'), findsOneWidget);
+
+      // И оценка появилась на странице компании.
+      final info = await repo.companyInfo('Золотое яблоко');
+      expect(info.rating, 5);
+    });
+
+    testWidgets('без звёзд отзыв отправить нельзя', (tester) async {
+      final repo = FakeShiftRepository(userRating: 5.0);
+      await repo.apply(6);
+      await openApp(tester, rating: 5.0, shifts: repo);
+
+      await tester.tap(find.text('Мои'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Архив'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Оценить место работы'));
+      await tester.pumpAndSettle();
+
+      final send = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Отправить отзыв'),
+      );
+      expect(send.onPressed, isNull);
     });
   });
 

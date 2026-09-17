@@ -133,6 +133,54 @@ void main() {
     expect(asc.first.totalPay, lessThan(asc.last.totalPay));
   });
 
+  test('отработанные смены попадают в заработок', () async {
+    expect(await repo.completedShifts(), isEmpty);
+
+    await repo.apply(6); // смена три дня назад
+    final done = await repo.completedShifts();
+
+    expect(done.map((s) => s.id), [6]);
+    // 10:00–22:00 минус час обеда по 1100 ₸ = 12 100 ₸
+    expect(done.first.totalPay, 1210000);
+  });
+
+  test('отзыв формирует оценку компании', () async {
+    final before = await repo.companyInfo('Золотое яблоко');
+    expect(before.rating, isNull);
+    expect(before.reviewCount, 0);
+
+    await repo.addReview(shiftId: 6, rating: 5, comment: 'Всё чётко');
+
+    final after = await repo.companyInfo('Золотое яблоко');
+    expect(after.rating, 5);
+    expect(after.reviewCount, 1);
+    expect(after.reviews.first.comment, 'Всё чётко');
+  });
+
+  test('оценка компании — это среднее по отзывам', () async {
+    await repo.addReview(shiftId: 1, rating: 5);
+    await repo.addReview(shiftId: 6, rating: 3);
+
+    final info = await repo.companyInfo('Золотое яблоко');
+    expect(info.reviewCount, 2);
+    expect(info.rating, 4); // (5 + 3) / 2
+  });
+
+  test('второй отзыв о той же смене не создаёт дубликат', () async {
+    await repo.addReview(shiftId: 6, rating: 2);
+    await repo.addReview(shiftId: 6, rating: 5);
+
+    final info = await repo.companyInfo('Золотое яблоко');
+    expect(info.reviewCount, 1);
+    expect(info.rating, 5); // осталась последняя оценка
+  });
+
+  test('hasReviewed отличает оценённую смену', () async {
+    expect(await repo.hasReviewed(6), isFalse);
+    await repo.addReview(shiftId: 6, rating: 4);
+    expect(await repo.hasReviewed(6), isTrue);
+  });
+
   test('дни со сменами определяются по данным', () async {
     final days = await repo.daysWithShifts();
     final now = DateTime.now();

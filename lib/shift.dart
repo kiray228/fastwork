@@ -289,6 +289,20 @@ List<Shift> buildDemoShifts() {
       // Этот заказчик берёт только проверенных исполнителей.
       minRating: 4.5,
     ),
+    // Уже прошедшая смена — чтобы было что показать в архиве,
+    // в кошельке и в отзывах.
+    Shift(
+      id: 6,
+      workDate: day(-3),
+      title: 'Услуги сотрудника склада',
+      company: 'Золотое яблоко',
+      address: 'г. Алматы, ул. Султана Бейбарыса, 1',
+      startMinutes: 600,
+      endMinutes: 1320,
+      hourlyRate: 110000,
+      workersNeeded: 1,
+      workersHired: 0,
+    ),
   ];
 }
 

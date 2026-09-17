@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 
+import '../review.dart';
 import '../shift.dart';
 import 'database.dart';
 import 'session.dart';
@@ -47,6 +48,27 @@ abstract class ShiftRepository {
 
   /// Мои смены. `archived: false` — вкладка «В работе», `true` — «Архив».
   Future<List<Shift>> myShifts({required bool archived});
+
+  /// Отработанные смены — из них складывается заработок.
+  Future<List<Shift>> completedShifts();
+
+  /// Сводка по компании: описание, средняя оценка, отзывы.
+  Future<CompanyInfo> companyInfo(String company);
+
+  /// Оставлял ли текущий пользователь отзыв об этой смене.
+  Future<bool> hasReviewed(int shiftId);
+
+  /// Оставить отзыв. Один отзыв на смену — это следит база.
+  Future<void> addReview({
+    required int shiftId,
+    required int rating,
+    String? comment,
+  });
+
+  /// Учебные данные: пара уже отработанных смен для нового пользователя,
+  /// чтобы архив, кошелёк и отзывы не пустовали. Вызывать можно сколько
+  /// угодно раз — повторно ничего не добавится.
+  Future<void> prepareDemoHistory(int userId);
 }
 
 /// Фильтрация и сортировка, общие для всех реализаций хранилища.
@@ -267,6 +289,149 @@ class DbShiftRepository implements ShiftRepository {
     ).get();
 
     return rows.map(_toShift).toList();
+  }
+
+  @override
+  Future<List<Shift>> completedShifts() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final rows = await db.customSelect(
+      '''
+      SELECT s.*, $_hiredSql, $_myStatusSql
+      FROM application_rows a
+      JOIN shift_rows s ON s.id = a.shift_id
+      WHERE a.worker_id = $_workerId
+        AND a.status = 'active'
+        AND s.work_date < ?
+      ORDER BY s.work_date DESC
+      ''',
+      variables: [Variable.withDateTime(today)],
+      readsFrom: {db.shiftRows, db.applicationRows},
+    ).get();
+
+    return rows.map(_toShift).toList();
+  }
+
+  @override
+  Future<CompanyInfo> companyInfo(String company) async {
+    // AVG и COUNT — агрегатные функции: они сворачивают много строк в одно
+    // число. Средняя оценка компании нигде не хранится, она считается тут.
+    final agg = await db.customSelect(
+      '''
+      SELECT AVG(r.rating) AS avg_rating, COUNT(*) AS cnt
+      FROM review_rows r
+      JOIN shift_rows s ON s.id = r.shift_id
+      WHERE s.company = ?
+      ''',
+      variables: [Variable.withString(company)],
+      readsFrom: {db.reviewRows, db.shiftRows},
+    ).getSingle();
+
+    final rows = await db.customSelect(
+      '''
+      SELECT r.*, u.full_name AS author_name
+      FROM review_rows r
+      JOIN shift_rows s ON s.id = r.shift_id
+      LEFT JOIN user_rows u ON u.id = r.author_id
+      WHERE s.company = ?
+      ORDER BY r.created_at DESC
+      ''',
+      variables: [Variable.withString(company)],
+      readsFrom: {db.reviewRows, db.shiftRows, db.userRows},
+    ).get();
+
+    return CompanyInfo(
+      name: company,
+      rating: agg.readNullable<double>('avg_rating'),
+      reviewCount: agg.read<int>('cnt'),
+      reviews: rows
+          .map((r) => Review(
+                id: r.read<int>('id'),
+                shiftId: r.read<int>('shift_id'),
+                authorName:
+                    r.readNullable<String>('author_name') ?? 'Исполнитель',
+                rating: r.read<int>('rating'),
+                comment: r.readNullable<String>('comment'),
+                createdAt: r.read<DateTime>('created_at'),
+              ))
+          .toList(),
+    );
+  }
+
+  @override
+  Future<bool> hasReviewed(int shiftId) async {
+    final row = await (db.select(db.reviewRows)
+          ..where((r) =>
+              r.shiftId.equals(shiftId) & r.authorId.equals(_workerId)))
+        .getSingleOrNull();
+    return row != null;
+  }
+
+  @override
+  Future<void> addReview({
+    required int shiftId,
+    required int rating,
+    String? comment,
+  }) async {
+    await db.into(db.reviewRows).insertOnConflictUpdate(
+          ReviewRowsCompanion.insert(
+            shiftId: shiftId,
+            authorId: _workerId,
+            rating: rating,
+            comment: Value(comment),
+            createdAt: DateTime.now(),
+          ),
+        );
+  }
+
+  /// Демонстрационная история для нового пользователя.
+  ///
+  /// Настоящих отработанных смен у него взяться неоткуда, а без них пустуют
+  /// и архив, и кошелёк, и отзывы. Поэтому при первом входе добавляем пару
+  /// прошедших смен — это учебные данные, в боевом приложении их бы не было.
+  @override
+  Future<void> prepareDemoHistory(int userId) async {
+    final existing = await db.customSelect(
+      'SELECT COUNT(*) AS c FROM application_rows WHERE worker_id = ?',
+      variables: [Variable.withInt(userId)],
+      readsFrom: {db.applicationRows},
+    ).getSingle();
+    if (existing.read<int>('c') > 0) return;
+
+    final now = DateTime.now();
+    DateTime day(int minus) =>
+        DateTime(now.year, now.month, now.day - minus);
+
+    final history = [
+      (day(3), 'Услуги сотрудника склада', 'Золотое яблоко',
+          'г. Алматы, ул. Султана Бейбарыса, 1', 600, 1320, 110000),
+      (day(9), 'Услуги работника торгового зала', 'Zara',
+          'г. Алматы, ул. Розыбакиева, 247А', 600, 1260, 70000),
+    ];
+
+    for (final (date, title, company, address, start, end, rate) in history) {
+      final id = await db.into(db.shiftRows).insert(
+            ShiftRowsCompanion.insert(
+              workDate: date,
+              title: title,
+              company: company,
+              address: address,
+              startMinutes: start,
+              endMinutes: end,
+              hourlyRate: rate,
+              workersNeeded: 1,
+            ),
+          );
+      await db.into(db.applicationRows).insert(
+            ApplicationRowsCompanion.insert(
+              shiftId: id,
+              workerId: userId,
+              status: ApplicationStatus.active,
+              createdAt: date,
+            ),
+          );
+    }
   }
 
   /// Первое заполнение базы. Настоящих смен нам взять неоткуда,
