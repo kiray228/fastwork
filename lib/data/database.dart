@@ -1,5 +1,4 @@
 import 'package:drift/drift.dart';
-import 'package:drift_flutter/drift_flutter.dart';
 
 part 'database.g.dart';
 
@@ -271,20 +270,17 @@ class ApplicationStatus {
     WorkerReviewRows,
   ],
 )
+/// Описание базы: какие таблицы и какой версии схема.
+///
+/// Обрати внимание, чего здесь **нет**: ни слова о том, где именно лежит
+/// файл базы. Раньше было — и из-за этого файл тянул за собой Flutter,
+/// а значит, база не могла работать нигде, кроме телефона и браузера.
+///
+/// Теперь хранилище передают снаружи. Телефон передаёт своё, сервер —
+/// обычный файл на диске, тесты — базу в памяти. Тот же приём, что и с
+/// репозиториями, только этажом ниже.
 class AppDatabase extends _$AppDatabase {
-  AppDatabase([QueryExecutor? executor])
-      : super(executor ?? _open());
-
-  /// Открываем базу. На телефоне это файл в папке приложения,
-  /// в браузере — хранилище самого браузера. Для браузера нужно указать,
-  /// где лежат два служебных файла (они в папке `web/`).
-  static QueryExecutor _open() => driftDatabase(
-        name: 'fastwork',
-        web: DriftWebOptions(
-          sqlite3Wasm: Uri.parse('sqlite3.wasm'),
-          driftWorker: Uri.parse('drift_worker.js'),
-        ),
-      );
+  AppDatabase(super.executor);
 
   /// Версия схемы. Каждое изменение таблиц поднимает номер на единицу.
   @override

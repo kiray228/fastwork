@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'auth/register_page.dart';
 import 'data/auth_repository.dart';
 import 'data/database.dart';
+import 'data/database_flutter.dart';
 import 'data/fake_shift_repository.dart';
 import 'data/repositories.dart';
 import 'data/session.dart';
@@ -19,7 +20,7 @@ Future<void> main() async {
   late final AppRepositories repos;
 
   try {
-    final database = AppDatabase();
+    final database = AppDatabase(openAppDatabase());
     final dbShifts = DbShiftRepository(database, session);
     await dbShifts.seedIfEmpty();
     repos = AppRepositories(
