@@ -101,3 +101,47 @@ class ShiftApplicant {
   bool get isCheckedIn => checkedInAt != null;
   bool get isConfirmed => status == 'completed';
 }
+
+extension AppUserJson on AppUser {
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'phone': phone,
+        'fullName': fullName,
+        'city': city,
+        'rating': rating,
+        'isVerified': isVerified,
+        'role': role,
+        'company': company,
+        'completedShifts': completedShifts,
+        'ratingCount': ratingCount,
+      };
+}
+
+AppUser userFromJson(Map<String, dynamic> json) => AppUser(
+      id: json['id'] as int,
+      phone: json['phone'] as String,
+      fullName: json['fullName'] as String,
+      city: json['city'] as String,
+      rating: (json['rating'] as num).toDouble(),
+      isVerified: json['isVerified'] as bool,
+      role: json['role'] as String? ?? 'worker',
+      company: json['company'] as String?,
+      completedShifts: json['completedShifts'] as int? ?? 0,
+      ratingCount: json['ratingCount'] as int? ?? 0,
+    );
+
+extension ShiftApplicantJson on ShiftApplicant {
+  Map<String, dynamic> toJson() => {
+        'user': user.toJson(),
+        'status': status,
+        'checkedInAt': checkedInAt?.toIso8601String(),
+      };
+}
+
+ShiftApplicant applicantFromJson(Map<String, dynamic> json) => ShiftApplicant(
+      user: userFromJson(json['user'] as Map<String, dynamic>),
+      status: json['status'] as String,
+      checkedInAt: json['checkedInAt'] == null
+          ? null
+          : DateTime.parse(json['checkedInAt'] as String),
+    );

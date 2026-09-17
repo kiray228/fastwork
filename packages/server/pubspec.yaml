@@ -1,0 +1,15 @@
+name: fastwork_server
+description: HTTP-сервер fastwork. Зависит от сути приложения, но не от Flutter.
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: ^3.13.3
+
+dependencies:
+  fastwork_core:
+    path: ../core
+  drift: ^2.35.0
+  shelf: ^1.4.2
+  shelf_router: ^1.1.4
+  sqlite3: ^3.5.2

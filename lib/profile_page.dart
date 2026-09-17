@@ -6,7 +6,7 @@ import 'documents_page.dart';
 import 'my_reviews_page.dart';
 import 'support_ui/support_page.dart';
 import 'theme/app_colors.dart';
-import 'user.dart';
+import 'package:fastwork_core/user.dart';
 import 'wallet_page.dart';
 import 'widgets/common.dart';
 import 'widgets/nav.dart';

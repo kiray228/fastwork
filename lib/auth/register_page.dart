@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../data/auth_repository.dart';
-import '../data/database.dart';
+import 'package:fastwork_core/data/auth_repository.dart';
+import 'package:fastwork_core/data/database.dart';
 import '../data/session.dart';
 import '../theme/app_colors.dart';
-import '../user.dart';
+import 'package:fastwork_core/user.dart';
+import '../widgets/async_state.dart';
 import '../widgets/common.dart';
 
 /// Вход и регистрация в одном экране.
@@ -66,23 +67,35 @@ class _RegisterPageState extends State<RegisterPage> {
       error = null;
     });
 
-    // Если с таким номером уже входили — просто пускаем внутрь.
-    // Если нет — создаём нового пользователя.
-    final existing = await widget.auth.findByPhone(_digits);
-    final user = existing ??
-        await widget.auth.register(
-          phone: _digits,
-          fullName: nameController.text.trim(),
-          city: city,
-          role: role,
-          company: isManager ? companyController.text.trim() : null,
-        );
+    // Раньше здесь не было try/catch, и это было почти незаметно: локальная
+    // база не отказывает. С сервером всё иначе — связь может пропасть, и
+    // без перехвата кнопка крутилась бы вечно, а человек не понимал бы,
+    // что происходит.
+    try {
+      // Если с таким номером уже входили — просто пускаем внутрь.
+      // Если нет — создаём нового пользователя.
+      final existing = await widget.auth.findByPhone(_digits);
+      final user = existing ??
+          await widget.auth.register(
+            phone: _digits,
+            fullName: nameController.text.trim(),
+            city: city,
+            role: role,
+            company: isManager ? companyController.text.trim() : null,
+          );
 
-    if (existing != null) await widget.auth.signIn(user);
-    if (!mounted) return;
+      if (existing != null) await widget.auth.signIn(user);
+      if (!mounted) return;
 
-    setState(() => busy = false);
-    widget.session.setUser(user);
+      setState(() => busy = false);
+      widget.session.setUser(user);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        error = describeError(e);
+      });
+    }
   }
 
   @override

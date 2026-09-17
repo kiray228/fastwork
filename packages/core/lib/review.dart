@@ -84,3 +84,83 @@ class PendingRating {
     required this.workerRating,
   });
 }
+
+extension ReviewJson on Review {
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'shiftId': shiftId,
+        'authorName': authorName,
+        'rating': rating,
+        'comment': comment,
+        'createdAt': createdAt.toIso8601String(),
+      };
+}
+
+Review reviewFromJson(Map<String, dynamic> json) => Review(
+      id: json['id'] as int,
+      shiftId: json['shiftId'] as int,
+      authorName: json['authorName'] as String,
+      rating: json['rating'] as int,
+      comment: json['comment'] as String?,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+    );
+
+extension CompanyInfoJson on CompanyInfo {
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'rating': rating,
+        'reviewCount': reviewCount,
+        'reviews': reviews.map((r) => r.toJson()).toList(),
+      };
+}
+
+CompanyInfo companyInfoFromJson(Map<String, dynamic> json) => CompanyInfo(
+      name: json['name'] as String,
+      rating: (json['rating'] as num?)?.toDouble(),
+      reviewCount: json['reviewCount'] as int,
+      reviews: (json['reviews'] as List<dynamic>)
+          .map((r) => reviewFromJson(r as Map<String, dynamic>))
+          .toList(),
+    );
+
+extension WorkerReviewJson on WorkerReview {
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'shiftId': shiftId,
+        'shiftTitle': shiftTitle,
+        'company': company,
+        'rating': rating,
+        'comment': comment,
+        'createdAt': createdAt.toIso8601String(),
+      };
+}
+
+WorkerReview workerReviewFromJson(Map<String, dynamic> json) => WorkerReview(
+      id: json['id'] as int,
+      shiftId: json['shiftId'] as int,
+      shiftTitle: json['shiftTitle'] as String,
+      company: json['company'] as String,
+      rating: json['rating'] as int,
+      comment: json['comment'] as String?,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+    );
+
+extension PendingRatingJson on PendingRating {
+  Map<String, dynamic> toJson() => {
+        'shiftId': shiftId,
+        'shiftTitle': shiftTitle,
+        'workDate': workDate.toIso8601String(),
+        'workerId': workerId,
+        'workerName': workerName,
+        'workerRating': workerRating,
+      };
+}
+
+PendingRating pendingRatingFromJson(Map<String, dynamic> json) => PendingRating(
+      shiftId: json['shiftId'] as int,
+      shiftTitle: json['shiftTitle'] as String,
+      workDate: DateTime.parse(json['workDate'] as String),
+      workerId: json['workerId'] as int,
+      workerName: json['workerName'] as String,
+      workerRating: (json['workerRating'] as num).toDouble(),
+    );

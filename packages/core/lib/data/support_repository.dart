@@ -2,7 +2,7 @@ import 'package:drift/drift.dart';
 
 import '../support.dart';
 import 'database.dart';
-import 'session.dart';
+import 'current_user.dart';
 
 /// Документы исполнителя и их проверка.
 abstract class DocumentRepository {
@@ -37,7 +37,7 @@ abstract class SupportRepository {
 
 class DbDocumentRepository implements DocumentRepository {
   final AppDatabase db;
-  final AppSession session;
+  final CurrentUser session;
 
   DbDocumentRepository(this.db, this.session);
 
@@ -103,7 +103,7 @@ class DbDocumentRepository implements DocumentRepository {
 
 class DbSupportRepository implements SupportRepository {
   final AppDatabase db;
-  final AppSession session;
+  final CurrentUser session;
 
   DbSupportRepository(this.db, this.session);
 

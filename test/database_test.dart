@@ -1,8 +1,8 @@
 import 'package:drift/native.dart';
-import 'package:fastwork/data/auth_repository.dart';
-import 'package:fastwork/data/database.dart';
+import 'package:fastwork_core/data/auth_repository.dart';
+import 'package:fastwork_core/data/database.dart';
 import 'package:fastwork/data/session.dart';
-import 'package:fastwork/data/shift_repository.dart';
+import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Тесты против **настоящей** SQLite, только в памяти.

@@ -31,15 +31,20 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Суть приложения лежит в отдельном пакете рядом. Он ничего не знает
+  # ни про Flutter, ни про экраны — поэтому его может использовать и
+  # сервер. `path` значит «пакет лежит в этой папке», а не скачивается.
+  fastwork_core:
+    path: packages/core
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   google_fonts: ^8.2.1
   drift: ^2.35.0
   drift_flutter: ^0.3.1
-  shelf: ^1.4.2
-  shelf_router: ^1.1.4
   http: ^1.6.0
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:

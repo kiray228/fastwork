@@ -4,7 +4,7 @@ import '../review.dart';
 import '../user.dart';
 import '../shift.dart';
 import 'database.dart';
-import 'session.dart';
+import 'current_user.dart';
 import 'shift_filter.dart';
 
 /// Чем закончилась попытка записаться или отменить запись.
@@ -155,7 +155,7 @@ List<Shift> applyFilter(List<Shift> shifts, ShiftFilter filter) {
 
 class DbShiftRepository implements ShiftRepository {
   final AppDatabase db;
-  final AppSession session;
+  final CurrentUser session;
 
   DbShiftRepository(this.db, this.session);
 

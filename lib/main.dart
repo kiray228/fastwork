@@ -1,29 +1,53 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth/register_page.dart';
-import 'data/auth_repository.dart';
-import 'data/database.dart';
+import 'data/api_auth_repository.dart';
+import 'data/api_client.dart';
+import 'data/api_shift_repository.dart';
+import 'package:fastwork_core/data/auth_repository.dart';
+import 'package:fastwork_core/data/database.dart';
 import 'data/database_flutter.dart';
-import 'data/fake_shift_repository.dart';
+import 'package:fastwork_core/data/fake_shift_repository.dart';
 import 'data/repositories.dart';
 import 'data/session.dart';
-import 'data/shift_repository.dart';
-import 'data/support_repository.dart';
+import 'package:fastwork_core/data/shift_repository.dart';
+import 'package:fastwork_core/data/support_repository.dart';
 import 'home_shell.dart';
 import 'theme/app_theme.dart';
+
+/// Адрес сервера. Пусто — работаем на своей базе, без сети.
+///
+/// Задаётся при запуске, а не в коде:
+///
+///   flutter run -d chrome --dart-define=API_URL=http://localhost:8080
+///
+/// Одна и та же сборка умеет и так, и так. Разница ровно в этой строке.
+const apiUrl = String.fromEnvironment('API_URL');
 
 Future<void> main() async {
   // Нужно, если до запуска приложения мы обращаемся к диску или к системе.
   WidgetsFlutterBinding.ensureInitialized();
 
   final session = AppSession();
-  late final AppRepositories repos;
+  final repos = apiUrl.isEmpty
+      ? await _localRepositories()
+      : await _serverRepositories(apiUrl);
 
+  // Кто входил в прошлый раз — если кто-то входил, сразу пускаем внутрь.
+  session.setUser(await repos.auth.restoreSession());
+
+  runApp(FastworkApp(session: session, repos: repos));
+}
+
+/// Всё хранится на самом устройстве.
+Future<AppRepositories> _localRepositories() async {
+  final session = AppSession();
   try {
     final database = AppDatabase(openAppDatabase());
     final dbShifts = DbShiftRepository(database, session);
     await dbShifts.seedIfEmpty();
-    repos = AppRepositories(
+    return AppRepositories(
       shifts: dbShifts,
       auth: DbAuthRepository(database),
       documents: DbDocumentRepository(database, session),
@@ -35,18 +59,39 @@ Future<void> main() async {
     // в памяти: пользователь всё увидит, просто ничего не сохранится.
     debugPrint('Не удалось открыть базу данных: $error');
     debugPrint('$stack');
-    repos = AppRepositories(
+    return AppRepositories(
       shifts: FakeShiftRepository(),
       auth: FakeAuthRepository(),
       documents: FakeDocumentRepository(),
       support: FakeSupportRepository(),
     );
   }
+}
 
-  // Кто входил в прошлый раз — если кто-то входил, сразу пускаем внутрь.
-  session.setUser(await repos.auth.restoreSession());
+/// Всё хранится на сервере.
+///
+/// Обрати внимание, что меняется: только состав этого объекта. Ни один
+/// экран про сервер не знает и не изменился ни на строчку — они работают
+/// с интерфейсами хранилищ, а не с конкретной базой. Ради этого и была
+/// вся возня со слоями.
+Future<AppRepositories> _serverRepositories(String url) async {
+  final client = ApiClient(baseUrl: url);
+  final prefs = await SharedPreferences.getInstance();
 
-  runApp(FastworkApp(session: session, repos: repos));
+  return AppRepositories(
+    shifts: ApiShiftRepository(client),
+    auth: ApiAuthRepository(
+      client,
+      // Токен переживает перезапуск: иначе пришлось бы входить заново
+      // при каждом открытии приложения.
+      readToken: () async => prefs.getString('token'),
+      writeToken: (value) async => value == null
+          ? await prefs.remove('token')
+          : await prefs.setString('token', value),
+    ),
+    documents: ApiDocumentRepository(client),
+    support: ApiSupportRepository(client),
+  );
 }
 
 class FastworkApp extends StatelessWidget {

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../data/session.dart';
-import '../data/shift_repository.dart';
-import '../shift.dart';
+import 'package:fastwork_core/data/shift_repository.dart';
+import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
 import '../widgets/common.dart';
 

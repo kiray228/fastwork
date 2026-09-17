@@ -4,15 +4,15 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fastwork/main.dart';
-import 'package:fastwork/data/auth_repository.dart';
-import 'package:fastwork/data/database.dart';
-import 'package:fastwork/data/fake_shift_repository.dart';
+import 'package:fastwork_core/data/auth_repository.dart';
+import 'package:fastwork_core/data/database.dart';
+import 'package:fastwork_core/data/fake_shift_repository.dart';
 import 'package:fastwork/data/repositories.dart';
 import 'package:fastwork/data/session.dart';
-import 'package:fastwork/data/shift_filter.dart';
-import 'package:fastwork/data/support_repository.dart';
-import 'package:fastwork/shift.dart';
-import 'package:fastwork/user.dart';
+import 'package:fastwork_core/data/shift_filter.dart';
+import 'package:fastwork_core/data/support_repository.dart';
+import 'package:fastwork_core/shift.dart';
+import 'package:fastwork_core/user.dart';
 import 'package:fastwork/widgets/skeleton.dart';
 
 /// Проверяем экраны целиком — как будто пользователь тыкает пальцем,

@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
 import 'data/session.dart';
-import 'data/shift_repository.dart';
+import 'package:fastwork_core/data/shift_repository.dart';
 import 'company_page.dart';
-import 'shift.dart';
+import 'package:fastwork_core/shift.dart';
 import 'theme/app_colors.dart';
 import 'widgets/booking_confirm_sheet.dart';
+import 'widgets/async_state.dart';
 import 'widgets/common.dart';
 import 'widgets/nav.dart';
 
@@ -55,10 +56,14 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     if (!confirmed || !mounted) return;
 
     setState(() => busy = true);
-    final result = await widget.repository.apply(widget.shiftId);
+    final result = await guarded(
+      context,
+      () => widget.repository.apply(widget.shiftId),
+    );
     await _load();
     if (!mounted) return;
     setState(() => busy = false);
+    if (result == null) return; // сорвалось — сообщение уже показано
 
     _showResult(
       switch (result) {
@@ -79,10 +84,14 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
   /// действие человека и подтверждение заказчика.
   Future<void> _checkIn() async {
     setState(() => busy = true);
-    final result = await widget.repository.checkIn(widget.shiftId);
+    final result = await guarded(
+      context,
+      () => widget.repository.checkIn(widget.shiftId),
+    );
     await _load();
     if (!mounted) return;
     setState(() => busy = false);
+    if (result == null) return;
 
     _showResult(
       switch (result) {
@@ -127,10 +136,14 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     if (confirmed != true || !mounted) return;
 
     setState(() => busy = true);
-    final result = await widget.repository.cancelApplication(widget.shiftId);
+    final result = await guarded(
+      context,
+      () => widget.repository.cancelApplication(widget.shiftId),
+    );
     await _load();
     if (!mounted) return;
     setState(() => busy = false);
+    if (result == null) return;
 
     _showResult(
       switch (result) {

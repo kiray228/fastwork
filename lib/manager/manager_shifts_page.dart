@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../data/session.dart';
-import '../data/shift_repository.dart';
-import '../shift.dart';
+import 'package:fastwork_core/data/shift_repository.dart';
+import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
-import '../user.dart';
+import 'package:fastwork_core/user.dart';
 import '../widgets/async_state.dart';
 import '../widgets/common.dart';
 import '../widgets/nav.dart';
@@ -224,11 +224,14 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
   }
 
   Future<void> _confirm(ShiftApplicant applicant) async {
-    await widget.repository.confirmAttendance(
-      shiftId: widget.shift.id,
-      workerId: applicant.user.id,
+    final done = await guardedDone(
+      context,
+      () => widget.repository.confirmAttendance(
+        shiftId: widget.shift.id,
+        workerId: applicant.user.id,
+      ),
     );
-    if (!mounted) return;
+    if (!mounted || !done) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../shift.dart';
+import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
 
 /// Окно подтверждения записи на смену.

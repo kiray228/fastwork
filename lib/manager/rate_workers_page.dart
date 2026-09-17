@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../data/session.dart';
-import '../data/shift_repository.dart';
-import '../review.dart';
-import '../shift.dart';
+import 'package:fastwork_core/data/shift_repository.dart';
+import 'package:fastwork_core/review.dart';
+import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
 import '../widgets/async_state.dart';
 import '../widgets/common.dart';
@@ -59,13 +59,16 @@ class _RateWorkersPageState extends State<RateWorkersPage> {
     );
     if (input == null || !mounted) return;
 
-    await widget.repository.rateWorker(
-      shiftId: item.shiftId,
-      workerId: item.workerId,
-      rating: input.rating,
-      comment: input.comment,
+    final saved = await guardedDone(
+      context,
+      () => widget.repository.rateWorker(
+        shiftId: item.shiftId,
+        workerId: item.workerId,
+        rating: input.rating,
+        comment: input.comment,
+      ),
     );
-    if (!mounted) return;
+    if (!mounted || !saved) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

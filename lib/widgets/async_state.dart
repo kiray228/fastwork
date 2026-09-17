@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 /// Состояние любой загрузки данных.
 ///
 /// До сих пор мы обходились `List<Shift>?`, где `null` значило «грузим».
@@ -51,9 +53,15 @@ Future<Async<T>> load<T>(Future<T> Function() body) async {
 String describeError(Object error) {
   final text = error.toString().toLowerCase();
 
+  // `failed to fetch` и `clientexception` — это как браузер и пакет http
+  // сообщают, что до сервера не достучались. Узнать их можно было только
+  // на живом сервере: пока база лежала на устройстве, таких ошибок
+  // просто не существовало.
   if (text.contains('socket') ||
       text.contains('network') ||
       text.contains('connection') ||
+      text.contains('failed to fetch') ||
+      text.contains('clientexception') ||
       text.contains('failed host lookup')) {
     return 'Нет связи с сервером. Проверьте интернет и попробуйте снова.';
   }
@@ -66,4 +74,59 @@ String describeError(Object error) {
     return 'Не удалось прочитать данные на устройстве.';
   }
   return 'Что-то пошло не так. Попробуйте ещё раз.';
+}
+
+/// Выполнить действие и показать понятное сообщение, если сорвалось.
+///
+/// Нужно там, где действие что-то **меняет**: записаться, отметиться,
+/// оставить отзыв. Пока база была на устройстве, такие вызовы не
+/// отказывали, и перехват казался лишним. С сервером связь может
+/// пропасть в любой момент — и без перехвата экран замирает с
+/// крутящейся кнопкой, а человек не понимает, что случилось.
+///
+/// Возвращает `null`, если не получилось.
+Future<T?> guarded<T>(
+  BuildContext context,
+  Future<T> Function() body,
+) async {
+  try {
+    return await body();
+  } catch (error) {
+    // `context.mounted` — та же проверка, что и `mounted` у экрана:
+    // пока мы ждали, человек мог уйти, и показывать сообщение уже негде.
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(describeError(error)),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+    return null;
+  }
+}
+
+/// То же самое для действий, которые ничего не возвращают.
+///
+/// Отдельная функция нужна из-за особенности Dart: `void` — это «ничего»,
+/// и значение такого типа нельзя проверить на `null`. Поэтому здесь
+/// возвращаем `true`/`false` — получилось или нет.
+Future<bool> guardedDone(
+  BuildContext context,
+  Future<void> Function() body,
+) async {
+  try {
+    await body();
+    return true;
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(describeError(error)),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+    return false;
+  }
 }

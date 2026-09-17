@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../data/support_repository.dart';
-import '../shift.dart';
-import '../support.dart';
+import 'package:fastwork_core/data/support_repository.dart';
+import 'package:fastwork_core/shift.dart';
+import 'package:fastwork_core/support.dart';
 import '../theme/app_colors.dart';
 import '../widgets/common.dart';
 import '../widgets/nav.dart';

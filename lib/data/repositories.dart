@@ -1,6 +1,6 @@
-import 'auth_repository.dart';
-import 'shift_repository.dart';
-import 'support_repository.dart';
+import 'package:fastwork_core/data/auth_repository.dart';
+import 'package:fastwork_core/data/shift_repository.dart';
+import 'package:fastwork_core/data/support_repository.dart';
 
 /// Все хранилища приложения в одном месте.
 ///

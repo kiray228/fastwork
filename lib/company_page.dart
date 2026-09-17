@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'data/shift_repository.dart';
-import 'review.dart';
-import 'shift.dart';
+import 'package:fastwork_core/data/shift_repository.dart';
+import 'package:fastwork_core/review.dart';
+import 'package:fastwork_core/shift.dart';
 import 'theme/app_colors.dart';
 import 'widgets/common.dart';
 import 'widgets/skeleton.dart';

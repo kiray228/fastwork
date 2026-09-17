@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fastwork/data/fake_shift_repository.dart';
-import 'package:fastwork/data/shift_filter.dart';
-import 'package:fastwork/data/shift_repository.dart';
+import 'package:fastwork_core/data/fake_shift_repository.dart';
+import 'package:fastwork_core/data/shift_filter.dart';
+import 'package:fastwork_core/data/shift_repository.dart';
 
 /// Проверяем правила записи на смены — без экранов, только логика.
 /// Такие тесты самые быстрые и самые полезные: они про суть, а не про вид.

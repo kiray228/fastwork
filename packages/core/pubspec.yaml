@@ -1,0 +1,15 @@
+name: fastwork_core
+description: Суть fastwork — смены, пользователи, правила и база. Без Flutter.
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: ^3.13.3
+
+dependencies:
+  drift: ^2.35.0
+
+dev_dependencies:
+  drift_dev: ^2.35.0
+  build_runner: ^2.16.1
+  test: ^1.25.0

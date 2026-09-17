@@ -358,3 +358,69 @@ String formatDateTime(DateTime dt) =>
     '${dt.day} ${monthsShort[dt.month - 1]}, '
     '${dt.hour.toString().padLeft(2, '0')}:'
     '${dt.minute.toString().padLeft(2, '0')}';
+
+// ---------------------------------------------------------------------------
+// JSON — язык, на котором приложение и сервер разговаривают
+//
+// Программы не могут передать друг другу объект Dart: по сети идёт текст.
+// JSON — общепринятый способ записать объект текстом.
+//
+// Важно, что это описано **здесь**, в одном файле с самой сменой. Значит,
+// приложение и сервер понимают смену одинаково не потому, что кто-то
+// следил за этим, а потому что читают один и тот же код.
+// ---------------------------------------------------------------------------
+
+extension ShiftJson on Shift {
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        // Даты по сети передают строкой по стандарту ISO 8601.
+        // '2026-09-17T00:00:00.000' — так её поймёт любой язык, не только Dart.
+        'workDate': workDate.toIso8601String(),
+        'title': title,
+        'company': company,
+        'address': address,
+        'city': city,
+        'startMinutes': startMinutes,
+        'endMinutes': endMinutes,
+        'breakMinutes': breakMinutes,
+        'hourlyRate': hourlyRate,
+        'workersNeeded': workersNeeded,
+        'workersHired': workersHired,
+        'duties': duties,
+        'dressCode': dressCode,
+        'employerComment': employerComment,
+        'payoutDelayDays': payoutDelayDays,
+        'cancelDeadlineHours': cancelDeadlineHours,
+        'minRating': minRating,
+        'createdBy': createdBy,
+        'myStatus': myStatus,
+        'myCheckedInAt': myCheckedInAt?.toIso8601String(),
+      };
+}
+
+Shift shiftFromJson(Map<String, dynamic> json) => Shift(
+      id: json['id'] as int,
+      workDate: DateTime.parse(json['workDate'] as String),
+      title: json['title'] as String,
+      company: json['company'] as String,
+      address: json['address'] as String,
+      city: json['city'] as String? ?? 'Алматы',
+      startMinutes: json['startMinutes'] as int,
+      endMinutes: json['endMinutes'] as int,
+      breakMinutes: json['breakMinutes'] as int,
+      hourlyRate: json['hourlyRate'] as int,
+      workersNeeded: json['workersNeeded'] as int,
+      workersHired: json['workersHired'] as int,
+      // Списки из JSON приходят как List<dynamic> — нужно привести к типу.
+      duties: (json['duties'] as List<dynamic>).cast<String>(),
+      dressCode: json['dressCode'] as String?,
+      employerComment: json['employerComment'] as String?,
+      payoutDelayDays: json['payoutDelayDays'] as int,
+      cancelDeadlineHours: json['cancelDeadlineHours'] as int,
+      minRating: (json['minRating'] as num?)?.toDouble(),
+      createdBy: json['createdBy'] as int?,
+      myStatus: json['myStatus'] as String?,
+      myCheckedInAt: json['myCheckedInAt'] == null
+          ? null
+          : DateTime.parse(json['myCheckedInAt'] as String),
+    );

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'data/session.dart';
-import 'data/shift_filter.dart';
-import 'data/shift_repository.dart';
-import 'shift.dart';
+import 'package:fastwork_core/data/shift_filter.dart';
+import 'package:fastwork_core/data/shift_repository.dart';
+import 'package:fastwork_core/shift.dart';
 import 'shift_detail_page.dart';
 import 'theme/app_colors.dart';
 import 'widgets/async_state.dart';

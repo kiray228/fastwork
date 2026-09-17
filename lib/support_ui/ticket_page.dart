@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../data/support_repository.dart';
-import '../support.dart';
+import 'package:fastwork_core/data/support_repository.dart';
+import 'package:fastwork_core/support.dart';
 import '../theme/app_colors.dart';
 import '../widgets/skeleton.dart';
 

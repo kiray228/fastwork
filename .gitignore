@@ -9,3 +9,8 @@ android/local.properties
 ios/Pods/
 ios/.symlinks/
 shots/
+fastwork.sqlite
+*.sqlite
+packages/*/.dart_tool/
+packages/*/build/
+packages/*/pubspec.lock
