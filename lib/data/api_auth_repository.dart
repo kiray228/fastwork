@@ -23,6 +23,32 @@ class ApiAuthRepository implements AuthRepository {
     required this.writeToken,
   });
 
+  /// Через сервер — только по коду с почты. Сервер не может знать, что
+  /// почта твоя, пока ты не покажешь письмо.
+  @override
+  bool get requiresEmailCode => true;
+
+  @override
+  Future<void> requestCode(String email) async {
+    await client.post('/api/auth/request-code', {'email': email});
+  }
+
+  @override
+  Future<AppUser?> verifyCode(String email, String code) async {
+    final data = await client.post('/api/auth/verify', {
+      'email': email,
+      'code': code,
+    }) as Map<String, dynamic>;
+
+    // Токен выдают в обоих случаях. Если аккаунта ещё нет, он пускает
+    // только в регистрацию — этим распоряжается сервер, не мы.
+    client.token = data['token'] as String;
+    await writeToken(client.token);
+
+    final user = data['user'];
+    return user == null ? null : userFromJson(user as Map<String, dynamic>);
+  }
+
   @override
   Future<AppUser?> restoreSession() async {
     final saved = await readToken();
@@ -32,7 +58,8 @@ class ApiAuthRepository implements AuthRepository {
     try {
       return userFromJson(await client.get('/api/me') as Map<String, dynamic>);
     } on ApiException {
-      // Токен устарел или сервер его не знает — выходим начисто.
+      // Токен устарел, или сервер его не знает, или аккаунт по нему ещё
+      // не создан — во всех случаях начинаем вход заново.
       client.token = null;
       await writeToken(null);
       return null;
@@ -45,17 +72,8 @@ class ApiAuthRepository implements AuthRepository {
 
   @override
   Future<AppUser?> findByPhone(String phone) async {
-    try {
-      final data = await client.post('/api/auth/login', {'phone': phone})
-          as Map<String, dynamic>;
-      client.token = data['token'] as String;
-      await writeToken(client.token);
-      return userFromJson(data['user'] as Map<String, dynamic>);
-    } on ApiException catch (e) {
-      // 404 — такого номера нет, значит будем регистрировать.
-      if (e.statusCode == 404) return null;
-      rethrow;
-    }
+    // Через сервер по телефону не входят: код приходит на почту.
+    throw UnsupportedError('Вход через сервер — по коду с почты');
   }
 
   @override
@@ -63,9 +81,12 @@ class ApiAuthRepository implements AuthRepository {
     required String phone,
     required String fullName,
     required String city,
+    String? email,
     String role = UserRole.worker,
     String? company,
   }) async {
+    // Почту не передаём: сервер знает её из токена, выданного при
+    // подтверждении кода. Так её нельзя подменить по дороге.
     final data = await client.post('/api/auth/register', {
       'phone': phone,
       'fullName': fullName,
@@ -81,7 +102,7 @@ class ApiAuthRepository implements AuthRepository {
 
   @override
   Future<void> signIn(AppUser user) async {
-    // Вход уже произошёл: токен выдан в findByPhone или register.
+    // Вход уже произошёл: токен выдан при проверке кода.
   }
 
   @override

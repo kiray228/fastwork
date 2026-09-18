@@ -2,6 +2,10 @@
 class AppUser {
   final int id;
   final String phone;
+
+  /// Почта — на неё приходит код входа. Пустая у аккаунтов, заведённых
+  /// до появления кодов.
+  final String? email;
   final String fullName;
   final String city;
   final double rating;
@@ -20,6 +24,7 @@ class AppUser {
   const AppUser({
     required this.id,
     required this.phone,
+    this.email,
     required this.fullName,
     required this.city,
     required this.rating,
@@ -61,6 +66,7 @@ class AppUser {
       AppUser(
         id: id,
         phone: phone,
+        email: email,
         fullName: fullName,
         city: city,
         rating: rating ?? this.rating,
@@ -106,6 +112,7 @@ extension AppUserJson on AppUser {
   Map<String, dynamic> toJson() => {
         'id': id,
         'phone': phone,
+        'email': email,
         'fullName': fullName,
         'city': city,
         'rating': rating,
@@ -120,6 +127,7 @@ extension AppUserJson on AppUser {
 AppUser userFromJson(Map<String, dynamic> json) => AppUser(
       id: json['id'] as int,
       phone: json['phone'] as String,
+      email: json['email'] as String?,
       fullName: json['fullName'] as String,
       city: json['city'] as String,
       rating: (json['rating'] as num).toDouble(),

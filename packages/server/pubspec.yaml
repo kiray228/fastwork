@@ -13,3 +13,5 @@ dependencies:
   shelf: ^1.4.2
   shelf_router: ^1.1.4
   sqlite3: ^3.5.2
+  mailer: ^7.2.0
+  crypto: ^3.0.7

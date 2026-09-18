@@ -1470,6 +1470,16 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
     requiredDuringInsert: true,
     defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
   );
+  static const VerificationMeta _emailMeta = const VerificationMeta('email');
+  @override
+  late final GeneratedColumn<String> email = GeneratedColumn<String>(
+    'email',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
   static const VerificationMeta _fullNameMeta = const VerificationMeta(
     'fullName',
   );
@@ -1551,6 +1561,7 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
   List<GeneratedColumn> get $columns => [
     id,
     phone,
+    email,
     fullName,
     city,
     rating,
@@ -1581,6 +1592,12 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
       );
     } else if (isInserting) {
       context.missing(_phoneMeta);
+    }
+    if (data.containsKey('email')) {
+      context.handle(
+        _emailMeta,
+        email.isAcceptableOrUnknown(data['email']!, _emailMeta),
+      );
     }
     if (data.containsKey('full_name')) {
       context.handle(
@@ -1647,6 +1664,10 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
         DriftSqlType.string,
         data['${effectivePrefix}phone'],
       )!,
+      email: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}email'],
+      ),
       fullName: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}full_name'],
@@ -1690,6 +1711,10 @@ class UserRow extends DataClass implements Insertable<UserRow> {
   /// Телефон — логин. UNIQUE: два аккаунта на один номер невозможны,
   /// и это проверяет сама база, а не код.
   final String phone;
+
+  /// Почта — на неё приходит код для входа, по ней же человека узнают.
+  /// Может быть пустой у тех, кто регистрировался до появления кодов.
+  final String? email;
   final String fullName;
   final String city;
 
@@ -1709,6 +1734,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
   const UserRow({
     required this.id,
     required this.phone,
+    this.email,
     required this.fullName,
     required this.city,
     required this.rating,
@@ -1722,6 +1748,9 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['phone'] = Variable<String>(phone);
+    if (!nullToAbsent || email != null) {
+      map['email'] = Variable<String>(email);
+    }
     map['full_name'] = Variable<String>(fullName);
     map['city'] = Variable<String>(city);
     map['rating'] = Variable<double>(rating);
@@ -1738,6 +1767,9 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     return UserRowsCompanion(
       id: Value(id),
       phone: Value(phone),
+      email: email == null && nullToAbsent
+          ? const Value.absent()
+          : Value(email),
       fullName: Value(fullName),
       city: Value(city),
       rating: Value(rating),
@@ -1758,6 +1790,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     return UserRow(
       id: serializer.fromJson<int>(json['id']),
       phone: serializer.fromJson<String>(json['phone']),
+      email: serializer.fromJson<String?>(json['email']),
       fullName: serializer.fromJson<String>(json['fullName']),
       city: serializer.fromJson<String>(json['city']),
       rating: serializer.fromJson<double>(json['rating']),
@@ -1773,6 +1806,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'phone': serializer.toJson<String>(phone),
+      'email': serializer.toJson<String?>(email),
       'fullName': serializer.toJson<String>(fullName),
       'city': serializer.toJson<String>(city),
       'rating': serializer.toJson<double>(rating),
@@ -1786,6 +1820,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
   UserRow copyWith({
     int? id,
     String? phone,
+    Value<String?> email = const Value.absent(),
     String? fullName,
     String? city,
     double? rating,
@@ -1796,6 +1831,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
   }) => UserRow(
     id: id ?? this.id,
     phone: phone ?? this.phone,
+    email: email.present ? email.value : this.email,
     fullName: fullName ?? this.fullName,
     city: city ?? this.city,
     rating: rating ?? this.rating,
@@ -1808,6 +1844,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     return UserRow(
       id: data.id.present ? data.id.value : this.id,
       phone: data.phone.present ? data.phone.value : this.phone,
+      email: data.email.present ? data.email.value : this.email,
       fullName: data.fullName.present ? data.fullName.value : this.fullName,
       city: data.city.present ? data.city.value : this.city,
       rating: data.rating.present ? data.rating.value : this.rating,
@@ -1825,6 +1862,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     return (StringBuffer('UserRow(')
           ..write('id: $id, ')
           ..write('phone: $phone, ')
+          ..write('email: $email, ')
           ..write('fullName: $fullName, ')
           ..write('city: $city, ')
           ..write('rating: $rating, ')
@@ -1840,6 +1878,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
   int get hashCode => Object.hash(
     id,
     phone,
+    email,
     fullName,
     city,
     rating,
@@ -1854,6 +1893,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
       (other is UserRow &&
           other.id == this.id &&
           other.phone == this.phone &&
+          other.email == this.email &&
           other.fullName == this.fullName &&
           other.city == this.city &&
           other.rating == this.rating &&
@@ -1866,6 +1906,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
 class UserRowsCompanion extends UpdateCompanion<UserRow> {
   final Value<int> id;
   final Value<String> phone;
+  final Value<String?> email;
   final Value<String> fullName;
   final Value<String> city;
   final Value<double> rating;
@@ -1876,6 +1917,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
   const UserRowsCompanion({
     this.id = const Value.absent(),
     this.phone = const Value.absent(),
+    this.email = const Value.absent(),
     this.fullName = const Value.absent(),
     this.city = const Value.absent(),
     this.rating = const Value.absent(),
@@ -1887,6 +1929,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
   UserRowsCompanion.insert({
     this.id = const Value.absent(),
     required String phone,
+    this.email = const Value.absent(),
     required String fullName,
     required String city,
     this.rating = const Value.absent(),
@@ -1901,6 +1944,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
   static Insertable<UserRow> custom({
     Expression<int>? id,
     Expression<String>? phone,
+    Expression<String>? email,
     Expression<String>? fullName,
     Expression<String>? city,
     Expression<double>? rating,
@@ -1912,6 +1956,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (phone != null) 'phone': phone,
+      if (email != null) 'email': email,
       if (fullName != null) 'full_name': fullName,
       if (city != null) 'city': city,
       if (rating != null) 'rating': rating,
@@ -1925,6 +1970,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
   UserRowsCompanion copyWith({
     Value<int>? id,
     Value<String>? phone,
+    Value<String?>? email,
     Value<String>? fullName,
     Value<String>? city,
     Value<double>? rating,
@@ -1936,6 +1982,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     return UserRowsCompanion(
       id: id ?? this.id,
       phone: phone ?? this.phone,
+      email: email ?? this.email,
       fullName: fullName ?? this.fullName,
       city: city ?? this.city,
       rating: rating ?? this.rating,
@@ -1954,6 +2001,9 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     }
     if (phone.present) {
       map['phone'] = Variable<String>(phone.value);
+    }
+    if (email.present) {
+      map['email'] = Variable<String>(email.value);
     }
     if (fullName.present) {
       map['full_name'] = Variable<String>(fullName.value);
@@ -1984,6 +2034,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     return (StringBuffer('UserRowsCompanion(')
           ..write('id: $id, ')
           ..write('phone: $phone, ')
+          ..write('email: $email, ')
           ..write('fullName: $fullName, ')
           ..write('city: $city, ')
           ..write('rating: $rating, ')
@@ -4230,6 +4281,724 @@ class WorkerReviewRowsCompanion extends UpdateCompanion<WorkerReviewRow> {
   }
 }
 
+class $AuthCodeRowsTable extends AuthCodeRows
+    with TableInfo<$AuthCodeRowsTable, AuthCodeRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AuthCodeRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _emailMeta = const VerificationMeta('email');
+  @override
+  late final GeneratedColumn<String> email = GeneratedColumn<String>(
+    'email',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _codeHashMeta = const VerificationMeta(
+    'codeHash',
+  );
+  @override
+  late final GeneratedColumn<String> codeHash = GeneratedColumn<String>(
+    'code_hash',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _expiresAtMeta = const VerificationMeta(
+    'expiresAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> expiresAt = GeneratedColumn<DateTime>(
+    'expires_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _attemptsMeta = const VerificationMeta(
+    'attempts',
+  );
+  @override
+  late final GeneratedColumn<int> attempts = GeneratedColumn<int>(
+    'attempts',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    email,
+    codeHash,
+    createdAt,
+    expiresAt,
+    attempts,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'auth_code_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AuthCodeRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('email')) {
+      context.handle(
+        _emailMeta,
+        email.isAcceptableOrUnknown(data['email']!, _emailMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_emailMeta);
+    }
+    if (data.containsKey('code_hash')) {
+      context.handle(
+        _codeHashMeta,
+        codeHash.isAcceptableOrUnknown(data['code_hash']!, _codeHashMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_codeHashMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('expires_at')) {
+      context.handle(
+        _expiresAtMeta,
+        expiresAt.isAcceptableOrUnknown(data['expires_at']!, _expiresAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_expiresAtMeta);
+    }
+    if (data.containsKey('attempts')) {
+      context.handle(
+        _attemptsMeta,
+        attempts.isAcceptableOrUnknown(data['attempts']!, _attemptsMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AuthCodeRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AuthCodeRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      email: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}email'],
+      )!,
+      codeHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}code_hash'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      expiresAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}expires_at'],
+      )!,
+      attempts: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}attempts'],
+      )!,
+    );
+  }
+
+  @override
+  $AuthCodeRowsTable createAlias(String alias) {
+    return $AuthCodeRowsTable(attachedDatabase, alias);
+  }
+}
+
+class AuthCodeRow extends DataClass implements Insertable<AuthCodeRow> {
+  final int id;
+  final String email;
+
+  /// Отпечаток кода, а не сам код.
+  final String codeHash;
+  final DateTime createdAt;
+
+  /// Когда код перестаёт действовать. Без срока подобранный однажды код
+  /// работал бы вечно.
+  final DateTime expiresAt;
+
+  /// Сколько раз пытались ввести. После трёх неудач код сгорает —
+  /// иначе шестизначный код можно перебрать за вечер.
+  final int attempts;
+  const AuthCodeRow({
+    required this.id,
+    required this.email,
+    required this.codeHash,
+    required this.createdAt,
+    required this.expiresAt,
+    required this.attempts,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['email'] = Variable<String>(email);
+    map['code_hash'] = Variable<String>(codeHash);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['expires_at'] = Variable<DateTime>(expiresAt);
+    map['attempts'] = Variable<int>(attempts);
+    return map;
+  }
+
+  AuthCodeRowsCompanion toCompanion(bool nullToAbsent) {
+    return AuthCodeRowsCompanion(
+      id: Value(id),
+      email: Value(email),
+      codeHash: Value(codeHash),
+      createdAt: Value(createdAt),
+      expiresAt: Value(expiresAt),
+      attempts: Value(attempts),
+    );
+  }
+
+  factory AuthCodeRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AuthCodeRow(
+      id: serializer.fromJson<int>(json['id']),
+      email: serializer.fromJson<String>(json['email']),
+      codeHash: serializer.fromJson<String>(json['codeHash']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      expiresAt: serializer.fromJson<DateTime>(json['expiresAt']),
+      attempts: serializer.fromJson<int>(json['attempts']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'email': serializer.toJson<String>(email),
+      'codeHash': serializer.toJson<String>(codeHash),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'expiresAt': serializer.toJson<DateTime>(expiresAt),
+      'attempts': serializer.toJson<int>(attempts),
+    };
+  }
+
+  AuthCodeRow copyWith({
+    int? id,
+    String? email,
+    String? codeHash,
+    DateTime? createdAt,
+    DateTime? expiresAt,
+    int? attempts,
+  }) => AuthCodeRow(
+    id: id ?? this.id,
+    email: email ?? this.email,
+    codeHash: codeHash ?? this.codeHash,
+    createdAt: createdAt ?? this.createdAt,
+    expiresAt: expiresAt ?? this.expiresAt,
+    attempts: attempts ?? this.attempts,
+  );
+  AuthCodeRow copyWithCompanion(AuthCodeRowsCompanion data) {
+    return AuthCodeRow(
+      id: data.id.present ? data.id.value : this.id,
+      email: data.email.present ? data.email.value : this.email,
+      codeHash: data.codeHash.present ? data.codeHash.value : this.codeHash,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      expiresAt: data.expiresAt.present ? data.expiresAt.value : this.expiresAt,
+      attempts: data.attempts.present ? data.attempts.value : this.attempts,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AuthCodeRow(')
+          ..write('id: $id, ')
+          ..write('email: $email, ')
+          ..write('codeHash: $codeHash, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('expiresAt: $expiresAt, ')
+          ..write('attempts: $attempts')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, email, codeHash, createdAt, expiresAt, attempts);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AuthCodeRow &&
+          other.id == this.id &&
+          other.email == this.email &&
+          other.codeHash == this.codeHash &&
+          other.createdAt == this.createdAt &&
+          other.expiresAt == this.expiresAt &&
+          other.attempts == this.attempts);
+}
+
+class AuthCodeRowsCompanion extends UpdateCompanion<AuthCodeRow> {
+  final Value<int> id;
+  final Value<String> email;
+  final Value<String> codeHash;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> expiresAt;
+  final Value<int> attempts;
+  const AuthCodeRowsCompanion({
+    this.id = const Value.absent(),
+    this.email = const Value.absent(),
+    this.codeHash = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.expiresAt = const Value.absent(),
+    this.attempts = const Value.absent(),
+  });
+  AuthCodeRowsCompanion.insert({
+    this.id = const Value.absent(),
+    required String email,
+    required String codeHash,
+    required DateTime createdAt,
+    required DateTime expiresAt,
+    this.attempts = const Value.absent(),
+  }) : email = Value(email),
+       codeHash = Value(codeHash),
+       createdAt = Value(createdAt),
+       expiresAt = Value(expiresAt);
+  static Insertable<AuthCodeRow> custom({
+    Expression<int>? id,
+    Expression<String>? email,
+    Expression<String>? codeHash,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? expiresAt,
+    Expression<int>? attempts,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (email != null) 'email': email,
+      if (codeHash != null) 'code_hash': codeHash,
+      if (createdAt != null) 'created_at': createdAt,
+      if (expiresAt != null) 'expires_at': expiresAt,
+      if (attempts != null) 'attempts': attempts,
+    });
+  }
+
+  AuthCodeRowsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? email,
+    Value<String>? codeHash,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? expiresAt,
+    Value<int>? attempts,
+  }) {
+    return AuthCodeRowsCompanion(
+      id: id ?? this.id,
+      email: email ?? this.email,
+      codeHash: codeHash ?? this.codeHash,
+      createdAt: createdAt ?? this.createdAt,
+      expiresAt: expiresAt ?? this.expiresAt,
+      attempts: attempts ?? this.attempts,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (email.present) {
+      map['email'] = Variable<String>(email.value);
+    }
+    if (codeHash.present) {
+      map['code_hash'] = Variable<String>(codeHash.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (expiresAt.present) {
+      map['expires_at'] = Variable<DateTime>(expiresAt.value);
+    }
+    if (attempts.present) {
+      map['attempts'] = Variable<int>(attempts.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AuthCodeRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('email: $email, ')
+          ..write('codeHash: $codeHash, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('expiresAt: $expiresAt, ')
+          ..write('attempts: $attempts')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AuthTokenRowsTable extends AuthTokenRows
+    with TableInfo<$AuthTokenRowsTable, AuthTokenRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AuthTokenRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _tokenMeta = const VerificationMeta('token');
+  @override
+  late final GeneratedColumn<String> token = GeneratedColumn<String>(
+    'token',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<int> userId = GeneratedColumn<int>(
+    'user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _emailMeta = const VerificationMeta('email');
+  @override
+  late final GeneratedColumn<String> email = GeneratedColumn<String>(
+    'email',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [token, userId, email, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'auth_token_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AuthTokenRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('token')) {
+      context.handle(
+        _tokenMeta,
+        token.isAcceptableOrUnknown(data['token']!, _tokenMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_tokenMeta);
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    }
+    if (data.containsKey('email')) {
+      context.handle(
+        _emailMeta,
+        email.isAcceptableOrUnknown(data['email']!, _emailMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_emailMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {token};
+  @override
+  AuthTokenRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AuthTokenRow(
+      token: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}token'],
+      )!,
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}user_id'],
+      ),
+      email: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}email'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $AuthTokenRowsTable createAlias(String alias) {
+    return $AuthTokenRowsTable(attachedDatabase, alias);
+  }
+}
+
+class AuthTokenRow extends DataClass implements Insertable<AuthTokenRow> {
+  final String token;
+
+  /// Чей токен. null — почта подтверждена, аккаунт ещё не создан.
+  final int? userId;
+
+  /// Подтверждённая почта. По ней создаётся аккаунт на следующем шаге.
+  final String email;
+  final DateTime createdAt;
+  const AuthTokenRow({
+    required this.token,
+    this.userId,
+    required this.email,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['token'] = Variable<String>(token);
+    if (!nullToAbsent || userId != null) {
+      map['user_id'] = Variable<int>(userId);
+    }
+    map['email'] = Variable<String>(email);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  AuthTokenRowsCompanion toCompanion(bool nullToAbsent) {
+    return AuthTokenRowsCompanion(
+      token: Value(token),
+      userId: userId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(userId),
+      email: Value(email),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory AuthTokenRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AuthTokenRow(
+      token: serializer.fromJson<String>(json['token']),
+      userId: serializer.fromJson<int?>(json['userId']),
+      email: serializer.fromJson<String>(json['email']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'token': serializer.toJson<String>(token),
+      'userId': serializer.toJson<int?>(userId),
+      'email': serializer.toJson<String>(email),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  AuthTokenRow copyWith({
+    String? token,
+    Value<int?> userId = const Value.absent(),
+    String? email,
+    DateTime? createdAt,
+  }) => AuthTokenRow(
+    token: token ?? this.token,
+    userId: userId.present ? userId.value : this.userId,
+    email: email ?? this.email,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  AuthTokenRow copyWithCompanion(AuthTokenRowsCompanion data) {
+    return AuthTokenRow(
+      token: data.token.present ? data.token.value : this.token,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      email: data.email.present ? data.email.value : this.email,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AuthTokenRow(')
+          ..write('token: $token, ')
+          ..write('userId: $userId, ')
+          ..write('email: $email, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(token, userId, email, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AuthTokenRow &&
+          other.token == this.token &&
+          other.userId == this.userId &&
+          other.email == this.email &&
+          other.createdAt == this.createdAt);
+}
+
+class AuthTokenRowsCompanion extends UpdateCompanion<AuthTokenRow> {
+  final Value<String> token;
+  final Value<int?> userId;
+  final Value<String> email;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const AuthTokenRowsCompanion({
+    this.token = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.email = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AuthTokenRowsCompanion.insert({
+    required String token,
+    this.userId = const Value.absent(),
+    required String email,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : token = Value(token),
+       email = Value(email),
+       createdAt = Value(createdAt);
+  static Insertable<AuthTokenRow> custom({
+    Expression<String>? token,
+    Expression<int>? userId,
+    Expression<String>? email,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (token != null) 'token': token,
+      if (userId != null) 'user_id': userId,
+      if (email != null) 'email': email,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AuthTokenRowsCompanion copyWith({
+    Value<String>? token,
+    Value<int?>? userId,
+    Value<String>? email,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return AuthTokenRowsCompanion(
+      token: token ?? this.token,
+      userId: userId ?? this.userId,
+      email: email ?? this.email,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (token.present) {
+      map['token'] = Variable<String>(token.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<int>(userId.value);
+    }
+    if (email.present) {
+      map['email'] = Variable<String>(email.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AuthTokenRowsCompanion(')
+          ..write('token: $token, ')
+          ..write('userId: $userId, ')
+          ..write('email: $email, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -4248,6 +5017,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $WorkerReviewRowsTable workerReviewRows = $WorkerReviewRowsTable(
     this,
   );
+  late final $AuthCodeRowsTable authCodeRows = $AuthCodeRowsTable(this);
+  late final $AuthTokenRowsTable authTokenRows = $AuthTokenRowsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4262,6 +5033,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     supportTicketRows,
     supportMessageRows,
     workerReviewRows,
+    authCodeRows,
+    authTokenRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -5393,6 +6166,7 @@ typedef $$ApplicationRowsTableProcessedTableManager =
 typedef $$UserRowsTableCreateCompanionBuilder = UserRowsCompanion Function({
   Value<int> id,
   required String phone,
+  Value<String?> email,
   required String fullName,
   required String city,
   Value<double> rating,
@@ -5404,6 +6178,7 @@ typedef $$UserRowsTableCreateCompanionBuilder = UserRowsCompanion Function({
 typedef $$UserRowsTableUpdateCompanionBuilder = UserRowsCompanion Function({
   Value<int> id,
   Value<String> phone,
+  Value<String?> email,
   Value<String> fullName,
   Value<String> city,
   Value<double> rating,
@@ -5429,6 +6204,11 @@ class $$UserRowsTableFilterComposer
 
   ColumnFilters<String> get phone => $composableBuilder(
     column: $table.phone,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get email => $composableBuilder(
+    column: $table.email,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5487,6 +6267,11 @@ class $$UserRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get email => $composableBuilder(
+    column: $table.email,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get fullName => $composableBuilder(
     column: $table.fullName,
     builder: (column) => ColumnOrderings(column),
@@ -5537,6 +6322,9 @@ class $$UserRowsTableAnnotationComposer
 
   GeneratedColumn<String> get phone =>
       $composableBuilder(column: $table.phone, builder: (column) => column);
+
+  GeneratedColumn<String> get email =>
+      $composableBuilder(column: $table.email, builder: (column) => column);
 
   GeneratedColumn<String> get fullName =>
       $composableBuilder(column: $table.fullName, builder: (column) => column);
@@ -5592,6 +6380,7 @@ class $$UserRowsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<String> phone = const Value.absent(),
+                Value<String?> email = const Value.absent(),
                 Value<String> fullName = const Value.absent(),
                 Value<String> city = const Value.absent(),
                 Value<double> rating = const Value.absent(),
@@ -5602,6 +6391,7 @@ class $$UserRowsTableTableManager
               }) => UserRowsCompanion(
                 id: id,
                 phone: phone,
+                email: email,
                 fullName: fullName,
                 city: city,
                 rating: rating,
@@ -5614,6 +6404,7 @@ class $$UserRowsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 required String phone,
+                Value<String?> email = const Value.absent(),
                 required String fullName,
                 required String city,
                 Value<double> rating = const Value.absent(),
@@ -5624,6 +6415,7 @@ class $$UserRowsTableTableManager
               }) => UserRowsCompanion.insert(
                 id: id,
                 phone: phone,
+                email: email,
                 fullName: fullName,
                 city: city,
                 rating: rating,
@@ -7375,6 +8167,418 @@ typedef $$WorkerReviewRowsTableProcessedTableManager =
       WorkerReviewRow,
       PrefetchHooks Function({bool shiftId})
     >;
+typedef $$AuthCodeRowsTableCreateCompanionBuilder =
+    AuthCodeRowsCompanion Function({
+      Value<int> id,
+      required String email,
+      required String codeHash,
+      required DateTime createdAt,
+      required DateTime expiresAt,
+      Value<int> attempts,
+    });
+typedef $$AuthCodeRowsTableUpdateCompanionBuilder =
+    AuthCodeRowsCompanion Function({
+      Value<int> id,
+      Value<String> email,
+      Value<String> codeHash,
+      Value<DateTime> createdAt,
+      Value<DateTime> expiresAt,
+      Value<int> attempts,
+    });
+
+class $$AuthCodeRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $AuthCodeRowsTable> {
+  $$AuthCodeRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get email => $composableBuilder(
+    column: $table.email,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get codeHash => $composableBuilder(
+    column: $table.codeHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get expiresAt => $composableBuilder(
+    column: $table.expiresAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get attempts => $composableBuilder(
+    column: $table.attempts,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AuthCodeRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AuthCodeRowsTable> {
+  $$AuthCodeRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get email => $composableBuilder(
+    column: $table.email,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get codeHash => $composableBuilder(
+    column: $table.codeHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get expiresAt => $composableBuilder(
+    column: $table.expiresAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get attempts => $composableBuilder(
+    column: $table.attempts,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AuthCodeRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AuthCodeRowsTable> {
+  $$AuthCodeRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get email =>
+      $composableBuilder(column: $table.email, builder: (column) => column);
+
+  GeneratedColumn<String> get codeHash =>
+      $composableBuilder(column: $table.codeHash, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get expiresAt =>
+      $composableBuilder(column: $table.expiresAt, builder: (column) => column);
+
+  GeneratedColumn<int> get attempts =>
+      $composableBuilder(column: $table.attempts, builder: (column) => column);
+}
+
+class $$AuthCodeRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AuthCodeRowsTable,
+          AuthCodeRow,
+          $$AuthCodeRowsTableFilterComposer,
+          $$AuthCodeRowsTableOrderingComposer,
+          $$AuthCodeRowsTableAnnotationComposer,
+          $$AuthCodeRowsTableCreateCompanionBuilder,
+          $$AuthCodeRowsTableUpdateCompanionBuilder,
+          (
+            AuthCodeRow,
+            BaseReferences<_$AppDatabase, $AuthCodeRowsTable, AuthCodeRow>,
+          ),
+          AuthCodeRow,
+          PrefetchHooks Function()
+        > {
+  $$AuthCodeRowsTableTableManager(_$AppDatabase db, $AuthCodeRowsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AuthCodeRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AuthCodeRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AuthCodeRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> email = const Value.absent(),
+                Value<String> codeHash = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> expiresAt = const Value.absent(),
+                Value<int> attempts = const Value.absent(),
+              }) => AuthCodeRowsCompanion(
+                id: id,
+                email: email,
+                codeHash: codeHash,
+                createdAt: createdAt,
+                expiresAt: expiresAt,
+                attempts: attempts,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String email,
+                required String codeHash,
+                required DateTime createdAt,
+                required DateTime expiresAt,
+                Value<int> attempts = const Value.absent(),
+              }) => AuthCodeRowsCompanion.insert(
+                id: id,
+                email: email,
+                codeHash: codeHash,
+                createdAt: createdAt,
+                expiresAt: expiresAt,
+                attempts: attempts,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$AuthCodeRowsTable, AuthCodeRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $AuthCodeRowsTable,
+                    AuthCodeRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AuthCodeRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AuthCodeRowsTable,
+      AuthCodeRow,
+      $$AuthCodeRowsTableFilterComposer,
+      $$AuthCodeRowsTableOrderingComposer,
+      $$AuthCodeRowsTableAnnotationComposer,
+      $$AuthCodeRowsTableCreateCompanionBuilder,
+      $$AuthCodeRowsTableUpdateCompanionBuilder,
+      (
+        AuthCodeRow,
+        BaseReferences<_$AppDatabase, $AuthCodeRowsTable, AuthCodeRow>,
+      ),
+      AuthCodeRow,
+      PrefetchHooks Function()
+    >;
+typedef $$AuthTokenRowsTableCreateCompanionBuilder =
+    AuthTokenRowsCompanion Function({
+      required String token,
+      Value<int?> userId,
+      required String email,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$AuthTokenRowsTableUpdateCompanionBuilder =
+    AuthTokenRowsCompanion Function({
+      Value<String> token,
+      Value<int?> userId,
+      Value<String> email,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$AuthTokenRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $AuthTokenRowsTable> {
+  $$AuthTokenRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get token => $composableBuilder(
+    column: $table.token,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get email => $composableBuilder(
+    column: $table.email,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AuthTokenRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AuthTokenRowsTable> {
+  $$AuthTokenRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get token => $composableBuilder(
+    column: $table.token,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get email => $composableBuilder(
+    column: $table.email,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AuthTokenRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AuthTokenRowsTable> {
+  $$AuthTokenRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get token =>
+      $composableBuilder(column: $table.token, builder: (column) => column);
+
+  GeneratedColumn<int> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<String> get email =>
+      $composableBuilder(column: $table.email, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$AuthTokenRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AuthTokenRowsTable,
+          AuthTokenRow,
+          $$AuthTokenRowsTableFilterComposer,
+          $$AuthTokenRowsTableOrderingComposer,
+          $$AuthTokenRowsTableAnnotationComposer,
+          $$AuthTokenRowsTableCreateCompanionBuilder,
+          $$AuthTokenRowsTableUpdateCompanionBuilder,
+          (
+            AuthTokenRow,
+            BaseReferences<_$AppDatabase, $AuthTokenRowsTable, AuthTokenRow>,
+          ),
+          AuthTokenRow,
+          PrefetchHooks Function()
+        > {
+  $$AuthTokenRowsTableTableManager(_$AppDatabase db, $AuthTokenRowsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AuthTokenRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AuthTokenRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AuthTokenRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> token = const Value.absent(),
+                Value<int?> userId = const Value.absent(),
+                Value<String> email = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AuthTokenRowsCompanion(
+                token: token,
+                userId: userId,
+                email: email,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String token,
+                Value<int?> userId = const Value.absent(),
+                required String email,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => AuthTokenRowsCompanion.insert(
+                token: token,
+                userId: userId,
+                email: email,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$AuthTokenRowsTable, AuthTokenRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $AuthTokenRowsTable,
+                    AuthTokenRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AuthTokenRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AuthTokenRowsTable,
+      AuthTokenRow,
+      $$AuthTokenRowsTableFilterComposer,
+      $$AuthTokenRowsTableOrderingComposer,
+      $$AuthTokenRowsTableAnnotationComposer,
+      $$AuthTokenRowsTableCreateCompanionBuilder,
+      $$AuthTokenRowsTableUpdateCompanionBuilder,
+      (
+        AuthTokenRow,
+        BaseReferences<_$AppDatabase, $AuthTokenRowsTable, AuthTokenRow>,
+      ),
+      AuthTokenRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -7397,4 +8601,8 @@ class $AppDatabaseManager {
       $$SupportMessageRowsTableTableManager(_db, _db.supportMessageRows);
   $$WorkerReviewRowsTableTableManager get workerReviewRows =>
       $$WorkerReviewRowsTableTableManager(_db, _db.workerReviewRows);
+  $$AuthCodeRowsTableTableManager get authCodeRows =>
+      $$AuthCodeRowsTableTableManager(_db, _db.authCodeRows);
+  $$AuthTokenRowsTableTableManager get authTokenRows =>
+      $$AuthTokenRowsTableTableManager(_db, _db.authTokenRows);
 }

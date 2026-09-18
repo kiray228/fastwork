@@ -5,6 +5,7 @@ import 'package:fastwork_core/data/database.dart';
 import 'package:fastwork_core/data/current_user.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_server/api.dart';
+import 'package:fastwork_server/code_sender.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as io;
 
@@ -29,13 +30,17 @@ Future<void> main(List<String> args) async {
   final file = File(dbPath);
   final db = AppDatabase(NativeDatabase(file));
 
+  // Настоящая отправка писем, если настроены SMTP_*, иначе код печатается
+  // в это же окно. Приложение разницы не замечает.
+  final sender = resolveCodeSender();
+
   // Первый запуск: кладём демонстрационные смены, иначе лента пустая.
   await DbShiftRepository(db, const StaticUser(null)).seedIfEmpty();
 
   final handler = const Pipeline()
       .addMiddleware(logRequests())
       .addMiddleware(_cors)
-      .addHandler(Api(db).router.call);
+      .addHandler(Api(db, sender).router.call);
 
   // InternetAddress.anyIPv4 — «слушать все сетевые интерфейсы».
   // На localhost хватило бы и loopback, но в облаке запрос приходит
@@ -44,6 +49,11 @@ Future<void> main(List<String> args) async {
 
   stdout.writeln('fastwork сервер слушает http://localhost:${server.port}');
   stdout.writeln('база: ${file.absolute.path}');
+  stdout.writeln(
+    sender is ConsoleCodeSender
+        ? 'письма НЕ отправляются — код входа будет напечатан здесь'
+        : 'письма отправляются через SMTP',
+  );
 }
 
 /// Браузер не даёт странице обращаться к другому адресу, пока сервер

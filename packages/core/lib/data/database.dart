@@ -52,6 +52,10 @@ class UserRows extends Table {
   /// и это проверяет сама база, а не код.
   TextColumn get phone => text().unique()();
 
+  /// Почта — на неё приходит код для входа, по ней же человека узнают.
+  /// Может быть пустой у тех, кто регистрировался до появления кодов.
+  TextColumn get email => text().nullable().unique()();
+
   TextColumn get fullName => text()();
   TextColumn get city => text()();
 
@@ -190,6 +194,53 @@ class WorkerReviewRows extends Table {
       ];
 }
 
+/// Одноразовые коды для входа.
+///
+/// Обрати внимание: хранится не сам код, а его **отпечаток** — результат
+/// необратимого преобразования. Если базу украдут, коды из неё не достать.
+///
+/// Так же хранят пароли в любом приличном приложении. Проверка работает
+/// не «сравни коды», а «посчитай отпечаток присланного и сравни отпечатки».
+class AuthCodeRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get email => text()();
+
+  /// Отпечаток кода, а не сам код.
+  TextColumn get codeHash => text()();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  /// Когда код перестаёт действовать. Без срока подобранный однажды код
+  /// работал бы вечно.
+  DateTimeColumn get expiresAt => dateTime()();
+
+  /// Сколько раз пытались ввести. После трёх неудач код сгорает —
+  /// иначе шестизначный код можно перебрать за вечер.
+  IntColumn get attempts => integer().withDefault(const Constant(0))();
+}
+
+/// Выданные токены.
+///
+/// Раньше они лежали в таблице настроек: ключ `token:...`, значение —
+/// номер пользователя. Этого больше не хватает, потому что токен теперь
+/// бывает двух видов: «я знаю, кто ты» и «почта подтверждена, но
+/// аккаунта ещё нет» — второй выдаётся между вводом кода и заполнением
+/// анкеты.
+class AuthTokenRows extends Table {
+  TextColumn get token => text()();
+
+  /// Чей токен. null — почта подтверждена, аккаунт ещё не создан.
+  IntColumn get userId => integer().nullable()();
+
+  /// Подтверждённая почта. По ней создаётся аккаунт на следующем шаге.
+  TextColumn get email => text()();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {token};
+}
+
 /// Мелкие настройки приложения: ключ — значение.
 /// Здесь храним, кто сейчас вошёл, чтобы не спрашивать при каждом запуске.
 class AppSettings extends Table {
@@ -268,6 +319,8 @@ class ApplicationStatus {
     SupportTicketRows,
     SupportMessageRows,
     WorkerReviewRows,
+    AuthCodeRows,
+    AuthTokenRows,
   ],
 )
 /// Описание базы: какие таблицы и какой версии схема.
@@ -284,7 +337,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Версия схемы. Каждое изменение таблиц поднимает номер на единицу.
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -320,6 +373,11 @@ class AppDatabase extends _$AppDatabase {
           if (from < 7) {
             await m.addColumn(shiftRows, shiftRows.city);
             await m.addColumn(applicationRows, applicationRows.checkedInAt);
+          }
+          if (from < 8) {
+            await m.addColumn(userRows, userRows.email);
+            await m.createTable(authCodeRows);
+            await m.createTable(authTokenRows);
           }
         },
         beforeOpen: (details) async {

@@ -12,7 +12,8 @@ import 'package:fastwork_core/support.dart';
 import 'package:fastwork_core/review.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
-import 'tokens.dart';
+import 'auth_service.dart';
+import 'code_sender.dart';
 
 /// Все адреса сервера.
 ///
@@ -27,9 +28,17 @@ import 'tokens.dart';
 /// правила, все транзакции переехали сюда целиком — их не переписывали.
 class Api {
   final AppDatabase db;
-  final Tokens tokens;
+  final AuthService auth;
 
-  Api(this.db) : tokens = Tokens(db);
+  Api(this.db, CodeSender sender) : auth = AuthService(db, sender);
+
+  /// Найти пользователя по почте — нужно после ввода кода.
+  Future<AppUser?> _userByEmail(String email) async {
+    final row = await (db.select(db.userRows)
+          ..where((u) => u.email.equals(email)))
+        .getSingleOrNull();
+    return row == null ? null : DbAuthRepository(db).refresh(row.id);
+  }
 
   // -------------------------------------------------------------------------
   // Мелкие помощники
@@ -59,10 +68,10 @@ class Api {
     final header = request.headers['authorization'];
     if (header == null || !header.startsWith('Bearer ')) return null;
 
-    final userId = await tokens.userIdFor(header.substring(7));
-    if (userId == null) return null;
+    final info = await auth.lookup(header.substring(7));
+    if (info?.userId == null) return null;
 
-    return DbAuthRepository(db).refresh(userId);
+    return DbAuthRepository(db).refresh(info!.userId!);
   }
 
   /// Хранилище от имени того, кто прислал запрос.
@@ -100,52 +109,86 @@ class Api {
 
     // --- вход и регистрация ------------------------------------------------
 
-    router.post('/api/auth/register', (Request request) async {
+    // --- вход по коду с почты ----------------------------------------------
+
+    router.post('/api/auth/request-code', (Request request) async {
       final body = await _body(request);
-      final auth = DbAuthRepository(db);
+      try {
+        final delivery = await auth.requestCode(body['email'] as String? ?? '');
+        // `delivery` говорит приложению, где искать код: в почте или,
+        // пока почтовый сервис не подключён, в окне сервера.
+        return _json({'ok': true, 'delivery': delivery});
+      } on AuthError catch (e) {
+        return _error(e.message, status: e.status);
+      }
+    });
 
-      final phone = (body['phone'] as String? ?? '').trim();
-      if (phone.length < 11) return _error('Некорректный номер телефона');
+    router.post('/api/auth/verify', (Request request) async {
+      final body = await _body(request);
+      try {
+        final email = await auth.verifyCode(
+          body['email'] as String? ?? '',
+          body['code'] as String? ?? '',
+        );
 
-      // Проверку «номер занят» делает и приложение, но повторить её здесь
-      // обязательно. Правило простое: **сервер не верит клиенту**. К нему
-      // можно обратиться в обход приложения, и тогда никаких проверок
-      // на той стороне уже нет.
-      if (await auth.findByPhone(phone) != null) {
+        final user = await _userByEmail(email);
+        final token = await auth.issue(email: email, userId: user?.id);
+
+        // Пользователя может ещё не быть — тогда почта подтверждена, а
+        // анкету заполнят следующим шагом. Токен уже выдан, но он пускает
+        // только в регистрацию.
+        return _json({'token': token, 'user': user?.toJson()});
+      } on AuthError catch (e) {
+        return _error(e.message, status: e.status);
+      }
+    });
+
+    router.post('/api/auth/register', (Request request) async {
+      final header = request.headers['authorization'];
+      if (header == null || !header.startsWith('Bearer ')) {
+        return _error('Сначала подтвердите почту', status: 401);
+      }
+
+      final token = header.substring(7);
+      final info = await auth.lookup(token);
+      if (info == null) {
+        return _error('Сначала подтвердите почту', status: 401);
+      }
+      if (info.userId != null) {
+        return _error('Аккаунт с этой почтой уже создан');
+      }
+
+      final body = await _body(request);
+      final phone =
+          (body['phone'] as String? ?? '').replaceAll(RegExp(r'\D'), '');
+      if (phone.length < 10) return _error('Некорректный номер телефона');
+
+      final fullName = (body['fullName'] as String? ?? '').trim();
+      if (fullName.length < 2) return _error('Укажите имя и фамилию');
+
+      final repository = DbAuthRepository(db);
+      if (await repository.findByPhone(phone) != null) {
         return _error('Этот номер уже зарегистрирован');
       }
 
-      final user = await auth.register(
+      final user = await repository.register(
         phone: phone,
-        fullName: (body['fullName'] as String? ?? '').trim(),
+        email: info.email,
+        fullName: fullName,
         city: body['city'] as String? ?? 'Алматы',
         role: body['role'] as String? ?? UserRole.worker,
         company: body['company'] as String?,
       );
 
-      return _json({
-        'token': await tokens.issue(user.id),
-        'user': user.toJson(),
-      });
-    });
-
-    router.post('/api/auth/login', (Request request) async {
-      final body = await _body(request);
-      final phone = (body['phone'] as String? ?? '').trim();
-
-      final user = await DbAuthRepository(db).findByPhone(phone);
-      if (user == null) return _error('Такого номера нет', status: 404);
-
-      return _json({
-        'token': await tokens.issue(user.id),
-        'user': user.toJson(),
-      });
+      // Теперь токен принадлежит созданному аккаунту.
+      await auth.bind(token, user.id);
+      return _json({'token': token, 'user': user.toJson()});
     });
 
     router.post('/api/auth/logout', (Request request) async {
       final header = request.headers['authorization'];
       if (header != null && header.startsWith('Bearer ')) {
-        await tokens.revoke(header.substring(7));
+        await auth.revoke(header.substring(7));
       }
       return _json({'ok': true});
     });

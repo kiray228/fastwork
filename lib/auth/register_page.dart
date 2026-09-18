@@ -11,8 +11,10 @@ import '../widgets/common.dart';
 
 /// Вход и регистрация в одном экране.
 ///
-/// Пароля нет намеренно: настоящая проверка номера — это SMS-код, а его
-/// присылает внешний сервис. Пока входим по номеру телефона.
+/// Пароля нет намеренно. Вместо него — одноразовый код на почту: пароль
+/// надо придумать, запомнить и не потерять, а код приходит сам и живёт
+/// пять минут. Почта, а не SMS, потому что письма бесплатны, а каждое
+/// SMS стоит денег — в том числе каждая проверка при отладке.
 class RegisterPage extends StatefulWidget {
   final AppSession session;
   final AuthRepository auth;
@@ -23,7 +25,15 @@ class RegisterPage extends StatefulWidget {
   State<RegisterPage> createState() => _RegisterPageState();
 }
 
+/// Шаг входа.
+///
+/// Через сервер их три: почта → код → анкета. На своём устройстве шаг
+/// один — анкета: там некому подтверждать почту и нечем слать письма.
+enum _Step { email, code, profile }
+
 class _RegisterPageState extends State<RegisterPage> {
+  final emailController = TextEditingController();
+  final codeController = TextEditingController();
   final phoneController = TextEditingController();
   final nameController = TextEditingController();
   final companyController = TextEditingController();
@@ -35,8 +45,16 @@ class _RegisterPageState extends State<RegisterPage> {
   bool busy = false;
   String? error;
 
+  late _Step step =
+      widget.auth.requiresEmailCode ? _Step.email : _Step.profile;
+
+  /// Куда ушёл код: `email` — письмом, `console` — в окно сервера.
+  String delivery = 'email';
+
   @override
   void dispose() {
+    emailController.dispose();
+    codeController.dispose();
     phoneController.dispose();
     nameController.dispose();
     companyController.dispose();
@@ -47,6 +65,74 @@ class _RegisterPageState extends State<RegisterPage> {
   String get _digits => phoneController.text.replaceAll(RegExp(r'\D'), '');
   bool get _phoneOk => _digits.length >= 10;
   bool get _nameOk => nameController.text.trim().length >= 2;
+  String get _email => emailController.text.trim().toLowerCase();
+
+  /// Обёртка вокруг любого шага: включает ожидание, ловит сбой,
+  /// показывает понятную причину.
+  ///
+  /// Без неё каждый из трёх шагов повторял бы один и тот же try/catch,
+  /// и в одном из них его однажды забыли бы.
+  Future<void> _run(Future<void> Function() body) async {
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      await body();
+      if (mounted) setState(() => busy = false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        busy = false;
+        error = describeError(e);
+      });
+    }
+  }
+
+  // --- шаг 1: почта --------------------------------------------------------
+
+  Future<void> _requestCode() async {
+    if (!_email.contains('@') || !_email.contains('.')) {
+      setState(() => error = 'Проверьте адрес почты');
+      return;
+    }
+
+    await _run(() async {
+      await widget.auth.requestCode(_email);
+      if (!mounted) return;
+      setState(() {
+        step = _Step.code;
+        codeController.clear();
+      });
+    });
+  }
+
+  // --- шаг 2: код ----------------------------------------------------------
+
+  Future<void> _verifyCode() async {
+    if (codeController.text.trim().length != 6) {
+      setState(() => error = 'Код состоит из шести цифр');
+      return;
+    }
+
+    await _run(() async {
+      final user = await widget.auth.verifyCode(
+        _email,
+        codeController.text.trim(),
+      );
+      if (!mounted) return;
+
+      if (user != null) {
+        // Аккаунт уже есть — сразу внутрь.
+        widget.session.setUser(user);
+      } else {
+        // Почта подтверждена, аккаунта ещё нет — дальше анкета.
+        setState(() => step = _Step.profile);
+      }
+    });
+  }
+
+  // --- шаг 3: анкета -------------------------------------------------------
 
   Future<void> _submit() async {
     if (!_phoneOk) {
@@ -62,40 +148,36 @@ class _RegisterPageState extends State<RegisterPage> {
       return;
     }
 
-    setState(() {
-      busy = true;
-      error = null;
-    });
+    await _run(() async {
+      final AppUser user;
 
-    // Раньше здесь не было try/catch, и это было почти незаметно: локальная
-    // база не отказывает. С сервером всё иначе — связь может пропасть, и
-    // без перехвата кнопка крутилась бы вечно, а человек не понимал бы,
-    // что происходит.
-    try {
-      // Если с таким номером уже входили — просто пускаем внутрь.
-      // Если нет — создаём нового пользователя.
-      final existing = await widget.auth.findByPhone(_digits);
-      final user = existing ??
-          await widget.auth.register(
-            phone: _digits,
-            fullName: nameController.text.trim(),
-            city: city,
-            role: role,
-            company: isManager ? companyController.text.trim() : null,
-          );
+      if (widget.auth.requiresEmailCode) {
+        // Почту сервер возьмёт из токена, выданного за код.
+        user = await widget.auth.register(
+          phone: _digits,
+          fullName: nameController.text.trim(),
+          city: city,
+          role: role,
+          company: isManager ? companyController.text.trim() : null,
+        );
+      } else {
+        // На своём устройстве: если таким номером уже входили — пускаем,
+        // иначе создаём.
+        final existing = await widget.auth.findByPhone(_digits);
+        user = existing ??
+            await widget.auth.register(
+              phone: _digits,
+              fullName: nameController.text.trim(),
+              city: city,
+              role: role,
+              company: isManager ? companyController.text.trim() : null,
+            );
+        if (existing != null) await widget.auth.signIn(user);
+      }
 
-      if (existing != null) await widget.auth.signIn(user);
       if (!mounted) return;
-
-      setState(() => busy = false);
       widget.session.setUser(user);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        busy = false;
-        error = describeError(e);
-      });
-    }
+    });
   }
 
   @override
@@ -116,11 +198,11 @@ class _RegisterPageState extends State<RegisterPage> {
             ),
             const SizedBox(height: 36),
 
-            Text('Вход', style: text.headlineSmall?.copyWith(fontSize: 22)),
+            Text(_title, style: text.headlineSmall?.copyWith(fontSize: 22)),
             const SizedBox(height: 6),
-            const Text(
-              'Введите номер — если вы у нас впервые, аккаунт создастся сам',
-              style: TextStyle(
+            Text(
+              _subtitle,
+              style: const TextStyle(
                 fontSize: 13.5,
                 color: AppColors.muted,
                 height: 1.4,
@@ -128,87 +210,11 @@ class _RegisterPageState extends State<RegisterPage> {
             ),
             const SizedBox(height: 20),
 
-            // Выбор роли. Роль это свойство пользователя, а не отдельная
-            // таблица: поля одинаковые, различается только то, что человек
-            // видит и может делать внутри приложения.
-            Row(
-              children: [
-                Expanded(
-                  child: _RoleCard(
-                    icon: Icons.person_search_rounded,
-                    title: 'Ищу подработку',
-                    selected: !isManager,
-                    onTap: () =>
-                        setState(() => role = UserRole.worker),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _RoleCard(
-                    icon: Icons.business_center_rounded,
-                    title: 'Нанимаю людей',
-                    selected: isManager,
-                    onTap: () =>
-                        setState(() => role = UserRole.manager),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            _Field(
-              label: 'Номер телефона',
-              controller: phoneController,
-              hint: '+7 700 000 00 00',
-              keyboardType: TextInputType.phone,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ()-]')),
-                LengthLimitingTextInputFormatter(18),
-              ],
-              onChanged: (_) => setState(() => error = null),
-            ),
-            const SizedBox(height: 16),
-            _Field(
-              label: 'Имя и фамилия',
-              controller: nameController,
-              hint: 'Ернар Калдыбеков',
-              textCapitalization: TextCapitalization.words,
-              onChanged: (_) => setState(() => error = null),
-            ),
-            if (isManager) ...[
-              const SizedBox(height: 16),
-              _Field(
-                label: 'Название компании',
-                controller: companyController,
-                hint: 'Magnum',
-                textCapitalization: TextCapitalization.words,
-                onChanged: (_) => setState(() => error = null),
-              ),
-            ],
-            const SizedBox(height: 16),
-
-            const Text(
-              'Город',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.muted,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final c in kCities)
-                  GestureDetector(
-                    onTap: () => setState(() => city = c),
-                    child: TagChip(
-                      text: c,
-                      color: c == city ? AppColors.brand : null,
-                    ),
-                  ),
-              ],
+            // Шаги меняются плавно — так видно, что это один процесс,
+            // а не три разных экрана.
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: KeyedSubtree(key: ValueKey(step), child: _stepBody()),
             ),
 
             if (error != null) ...[
@@ -234,7 +240,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
             const SizedBox(height: 28),
             FilledButton(
-              onPressed: busy ? null : _submit,
+              onPressed: busy ? null : _action,
               child: busy
                   ? const SizedBox(
                       width: 20,
@@ -244,25 +250,255 @@ class _RegisterPageState extends State<RegisterPage> {
                         color: Colors.white,
                       ),
                     )
-                  : Text(
-                      isManager ? 'Создать аккаунт' : 'Начать работать',
-                    ),
+                  : Text(_buttonLabel),
             ),
+
+            if (step == _Step.code) ...[
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: busy
+                    ? null
+                    : () => setState(() {
+                          step = _Step.email;
+                          error = null;
+                        }),
+                child: const Text('Другой адрес'),
+              ),
+            ],
+
             const SizedBox(height: 14),
             const Text(
               'Нажимая кнопку, вы соглашаетесь с условиями оказания услуг '
               'и обработкой персональных данных.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11.5, color: AppColors.muted, height: 1.4),
+              style:
+                  TextStyle(fontSize: 11.5, color: AppColors.muted, height: 1.4),
             ),
           ],
         ),
       ),
     );
   }
+
+  String get _title => switch (step) {
+        _Step.email => 'Вход',
+        _Step.code => 'Код из письма',
+        // На своём устройстве анкета — это и есть вход, а не его
+        // продолжение. Заголовок должен говорить то же, что и раньше.
+        _Step.profile =>
+          widget.auth.requiresEmailCode ? 'Немного о вас' : 'Вход',
+      };
+
+  String get _subtitle => switch (step) {
+        _Step.email =>
+          'Введите почту — пришлём код. Если вы у нас впервые, аккаунт '
+              'создастся сам',
+        _Step.code => 'Отправили код на $_email. Он действует 5 минут',
+        _Step.profile => widget.auth.requiresEmailCode
+            ? 'Почта подтверждена. Осталось заполнить анкету'
+            : 'Введите номер — если вы у нас впервые, аккаунт создастся сам',
+      };
+
+  String get _buttonLabel => switch (step) {
+        _Step.email => 'Получить код',
+        _Step.code => 'Подтвердить',
+        _Step.profile => isManager ? 'Создать аккаунт' : 'Начать работать',
+      };
+
+  VoidCallback get _action => switch (step) {
+        _Step.email => _requestCode,
+        _Step.code => _verifyCode,
+        _Step.profile => _submit,
+      };
+
+  Widget _stepBody() => switch (step) {
+        _Step.email => _EmailStep(
+            controller: emailController,
+            onChanged: () => setState(() => error = null),
+            onSubmit: _requestCode,
+          ),
+        _Step.code => _CodeStep(
+            controller: codeController,
+            onChanged: () => setState(() => error = null),
+            onSubmit: _verifyCode,
+          ),
+        _Step.profile => _ProfileStep(
+            isManager: isManager,
+            onRole: (value) => setState(() => role = value),
+            phoneController: phoneController,
+            nameController: nameController,
+            companyController: companyController,
+            city: city,
+            onCity: (value) => setState(() => city = value),
+            onChanged: () => setState(() => error = null),
+          ),
+      };
 }
 
-/// Карточка выбора роли.
+/// Шаг 1: адрес почты.
+class _EmailStep extends StatelessWidget {
+  final TextEditingController controller;
+  final VoidCallback onChanged;
+  final VoidCallback onSubmit;
+
+  const _EmailStep({
+    required this.controller,
+    required this.onChanged,
+    required this.onSubmit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _Field(
+      label: 'Почта',
+      controller: controller,
+      hint: 'edamkaldybek@gmail.com',
+      keyboardType: TextInputType.emailAddress,
+      onChanged: (_) => onChanged(),
+      onSubmitted: (_) => onSubmit(),
+    );
+  }
+}
+
+/// Шаг 2: шестизначный код.
+class _CodeStep extends StatelessWidget {
+  final TextEditingController controller;
+  final VoidCallback onChanged;
+  final VoidCallback onSubmit;
+
+  const _CodeStep({
+    required this.controller,
+    required this.onChanged,
+    required this.onSubmit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _Field(
+      label: 'Код из письма',
+      controller: controller,
+      hint: '000000',
+      keyboardType: TextInputType.number,
+      inputFormatters: [
+        FilteringTextInputFormatter.digitsOnly,
+        LengthLimitingTextInputFormatter(6),
+      ],
+      onChanged: (_) => onChanged(),
+      onSubmitted: (_) => onSubmit(),
+    );
+  }
+}
+
+/// Шаг 3: кто ты и откуда.
+class _ProfileStep extends StatelessWidget {
+  final bool isManager;
+  final ValueChanged<String> onRole;
+  final TextEditingController phoneController;
+  final TextEditingController nameController;
+  final TextEditingController companyController;
+  final String city;
+  final ValueChanged<String> onCity;
+  final VoidCallback onChanged;
+
+  const _ProfileStep({
+    required this.isManager,
+    required this.onRole,
+    required this.phoneController,
+    required this.nameController,
+    required this.companyController,
+    required this.city,
+    required this.onCity,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Выбор роли. Роль это свойство пользователя, а не отдельная
+        // таблица: поля одинаковые, различается только то, что человек
+        // видит и может делать внутри приложения.
+        Row(
+          children: [
+            Expanded(
+              child: _RoleCard(
+                icon: Icons.person_search_rounded,
+                title: 'Ищу подработку',
+                selected: !isManager,
+                onTap: () => onRole(UserRole.worker),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _RoleCard(
+                icon: Icons.business_center_rounded,
+                title: 'Нанимаю людей',
+                selected: isManager,
+                onTap: () => onRole(UserRole.manager),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        _Field(
+          label: 'Номер телефона',
+          controller: phoneController,
+          hint: '+7 700 000 00 00',
+          keyboardType: TextInputType.phone,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ()-]')),
+            LengthLimitingTextInputFormatter(18),
+          ],
+          onChanged: (_) => onChanged(),
+        ),
+        const SizedBox(height: 16),
+        _Field(
+          label: 'Имя и фамилия',
+          controller: nameController,
+          hint: 'Ернар Калдыбеков',
+          textCapitalization: TextCapitalization.words,
+          onChanged: (_) => onChanged(),
+        ),
+        if (isManager) ...[
+          const SizedBox(height: 16),
+          _Field(
+            label: 'Название компании',
+            controller: companyController,
+            hint: 'Magnum',
+            textCapitalization: TextCapitalization.words,
+            onChanged: (_) => onChanged(),
+          ),
+        ],
+        const SizedBox(height: 16),
+        const Text(
+          'Город',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: AppColors.muted,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final c in kCities)
+              GestureDetector(
+                onTap: () => onCity(c),
+                child: TagChip(
+                  text: c,
+                  color: c == city ? AppColors.brand : null,
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class _RoleCard extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -332,6 +568,10 @@ class _Field extends StatelessWidget {
   final TextCapitalization textCapitalization;
   final ValueChanged<String>? onChanged;
 
+  /// Что делать по нажатию Enter — чтобы код можно было подтвердить
+  /// с клавиатуры, не целясь мышью в кнопку.
+  final ValueChanged<String>? onSubmitted;
+
   const _Field({
     required this.label,
     required this.hint,
@@ -340,6 +580,7 @@ class _Field extends StatelessWidget {
     this.inputFormatters,
     this.textCapitalization = TextCapitalization.none,
     this.onChanged,
+    this.onSubmitted,
   });
 
   @override
@@ -364,6 +605,7 @@ class _Field extends StatelessWidget {
           inputFormatters: inputFormatters,
           textCapitalization: textCapitalization,
           onChanged: onChanged,
+          onSubmitted: onSubmitted,
           decoration: InputDecoration(
             hintText: hint,
             filled: true,

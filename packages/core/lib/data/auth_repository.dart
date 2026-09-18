@@ -5,10 +5,32 @@ import 'database.dart';
 
 /// Что умеет хранилище пользователей. Экраны знают только это описание.
 abstract class AuthRepository {
-  /// Кто вошёл в прошлый раз. null — никто, надо показать регистрацию.
+  /// Нужен ли код с почты, чтобы войти.
+  ///
+  /// На сервере — да: он не знает, кто к нему обращается, и должен
+  /// убедиться, что почта действительно твоя.
+  ///
+  /// На своём устройстве — нет: база и так лежит в твоём телефоне, и
+  /// проверять некого. Отправлять письма оттуда всё равно нечем.
+  ///
+  /// Экран входа спрашивает это и показывает либо один шаг, либо три.
+  bool get requiresEmailCode;
+
+  /// Отправить код на почту. Только когда `requiresEmailCode` истинно.
+  Future<void> requestCode(String email);
+
+  /// Проверить код.
+  ///
+  /// Вернёт пользователя, если аккаунт с такой почтой уже есть.
+  /// Вернёт `null`, если почта подтверждена, но аккаунта ещё нет —
+  /// значит, дальше анкета.
+  Future<AppUser?> verifyCode(String email, String code);
+
+  /// Кто вошёл в прошлый раз. null — никто, надо показать вход.
   Future<AppUser?> restoreSession();
 
-  /// Найти пользователя по телефону — это наш «вход».
+  /// Найти пользователя по телефону — вход без кода, для работы
+  /// на своём устройстве.
   Future<AppUser?> findByPhone(String phone);
 
   /// Создать нового пользователя и сразу войти под ним.
@@ -16,6 +38,7 @@ abstract class AuthRepository {
     required String phone,
     required String fullName,
     required String city,
+    String? email,
     String role = UserRole.worker,
     String? company,
   });
@@ -40,6 +63,20 @@ class DbAuthRepository implements AuthRepository {
   final AppDatabase db;
 
   DbAuthRepository(this.db);
+
+  /// На своём устройстве кодов нет: проверять некого и отправлять нечем.
+  @override
+  bool get requiresEmailCode => false;
+
+  @override
+  Future<void> requestCode(String email) async {
+    throw UnsupportedError('Коды на почту работают только через сервер');
+  }
+
+  @override
+  Future<AppUser?> verifyCode(String email, String code) async {
+    throw UnsupportedError('Коды на почту работают только через сервер');
+  }
 
   Future<AppUser> _toUser(UserRow row) async {
     // Сколько смен отработано — считаем запросом, а не храним в колонке.
@@ -78,6 +115,7 @@ class DbAuthRepository implements AuthRepository {
     return AppUser(
       id: row.id,
       phone: row.phone,
+      email: row.email,
       fullName: row.fullName,
       city: row.city,
       rating: rating.readNullable<double>('avg_rating') ?? row.rating,
@@ -122,12 +160,14 @@ class DbAuthRepository implements AuthRepository {
     required String phone,
     required String fullName,
     required String city,
+    String? email,
     String role = UserRole.worker,
     String? company,
   }) async {
     final id = await db.into(db.userRows).insert(
           UserRowsCompanion.insert(
             phone: phone,
+            email: Value(email),
             fullName: fullName,
             city: city,
             role: Value(role),
@@ -172,7 +212,41 @@ class FakeAuthRepository implements AuthRepository {
   AppUser? _current;
   int _nextId = 1;
 
-  FakeAuthRepository({AppUser? signedIn}) {
+  /// Тестам код не нужен — но при желании можно включить и проверить
+  /// трёхшаговый вход, не поднимая сервер.
+  @override
+  final bool requiresEmailCode;
+
+  /// Какой код считать верным. Настоящий приходит письмом, в тестах
+  /// договариваемся заранее.
+  final String expectedCode;
+
+  String? lastRequestedEmail;
+
+  @override
+  Future<void> requestCode(String email) async {
+    lastRequestedEmail = email;
+  }
+
+  @override
+  Future<AppUser?> verifyCode(String email, String code) async {
+    if (code != expectedCode) {
+      throw StateError('Неверный код');
+    }
+    for (final u in _users) {
+      if (u.email == email) {
+        _current = u;
+        return u;
+      }
+    }
+    return null;
+  }
+
+  FakeAuthRepository({
+    AppUser? signedIn,
+    this.requiresEmailCode = false,
+    this.expectedCode = '111111',
+  }) {
     if (signedIn != null) {
       _users.add(signedIn);
       _current = signedIn;
@@ -204,12 +278,14 @@ class FakeAuthRepository implements AuthRepository {
     required String phone,
     required String fullName,
     required String city,
+    String? email,
     String role = UserRole.worker,
     String? company,
   }) async {
     final user = AppUser(
       id: _nextId++,
       phone: phone,
+      email: email,
       fullName: fullName,
       city: city,
       rating: 4.0,

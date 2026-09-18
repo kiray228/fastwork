@@ -87,10 +87,11 @@ void main() {
   }
 
   group('вход', () {
-    testWidgets('без пользователя показывается регистрация', (tester) async {
+    testWidgets('без пользователя показывается вход', (tester) async {
       await openAppSignedOut(tester);
 
       expect(find.text('Вход'), findsOneWidget);
+      // На своём устройстве кодов нет — сразу анкета.
       expect(find.text('Начать работать'), findsOneWidget);
     });
 
@@ -113,6 +114,134 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Подробнее'), findsWidgets);
+    });
+  });
+
+  group('вход по коду с почты', () {
+    /// Хранилище, которое ведёт себя как серверное: требует код.
+    AppRepositories codeRepos({AppUser? signedIn}) => AppRepositories(
+          shifts: FakeShiftRepository(),
+          auth: FakeAuthRepository(
+            signedIn: signedIn,
+            requiresEmailCode: true,
+          ),
+          documents: FakeDocumentRepository(),
+          support: FakeSupportRepository(),
+        );
+
+    Future<void> openWithCodes(WidgetTester tester) async {
+      useTallPhone(tester);
+      await tester.pumpWidget(FastworkApp(
+        session: AppSession(),
+        repos: codeRepos(),
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('сначала спрашивают почту, а не телефон', (tester) async {
+      await openWithCodes(tester);
+
+      expect(find.text('Получить код'), findsOneWidget);
+      expect(find.text('Почта'), findsOneWidget);
+      // Ни телефона, ни выбора роли на первом шаге ещё нет.
+      expect(find.text('Номер телефона'), findsNothing);
+      expect(find.text('Ищу подработку'), findsNothing);
+    });
+
+    testWidgets('кривой адрес не отправляет код', (tester) async {
+      await openWithCodes(tester);
+
+      await tester.enterText(find.byType(TextField).first, 'не почта');
+      await tester.tap(find.text('Получить код'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Проверьте адрес почты'), findsOneWidget);
+      expect(find.text('Подтвердить'), findsNothing);
+    });
+
+    testWidgets('после почты просят код', (tester) async {
+      await openWithCodes(tester);
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        'edamkaldybek@gmail.com',
+      );
+      await tester.tap(find.text('Получить код'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Код из письма'), findsWidgets);
+      expect(find.text('Подтвердить'), findsOneWidget);
+      expect(
+        find.textContaining('edamkaldybek@gmail.com'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('неверный код не пускает дальше', (tester) async {
+      await openWithCodes(tester);
+
+      await tester.enterText(find.byType(TextField).first, 'a@b.kz');
+      await tester.tap(find.text('Получить код'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).first, '999999');
+      await tester.tap(find.text('Подтвердить'));
+      await tester.pumpAndSettle();
+
+      // Остались на том же шаге, анкета не открылась.
+      expect(find.text('Подтвердить'), findsOneWidget);
+      expect(find.text('Номер телефона'), findsNothing);
+    });
+
+    testWidgets('короткий код даже не отправляется', (tester) async {
+      await openWithCodes(tester);
+
+      await tester.enterText(find.byType(TextField).first, 'a@b.kz');
+      await tester.tap(find.text('Получить код'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).first, '12');
+      await tester.tap(find.text('Подтвердить'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Код состоит из шести цифр'), findsOneWidget);
+    });
+
+    testWidgets('верный код ведёт к анкете, а она — в приложение',
+        (tester) async {
+      await openWithCodes(tester);
+
+      await tester.enterText(find.byType(TextField).first, 'a@b.kz');
+      await tester.tap(find.text('Получить код'));
+      await tester.pumpAndSettle();
+
+      // 111111 — код, о котором договорились в FakeAuthRepository.
+      await tester.enterText(find.byType(TextField).first, '111111');
+      await tester.tap(find.text('Подтвердить'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Немного о вас'), findsOneWidget);
+      expect(find.text('Номер телефона'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField).at(0), '77001234567');
+      await tester.enterText(find.byType(TextField).at(1), 'Ернар Калдыбеков');
+      await tester.tap(find.text('Начать работать'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Подробнее'), findsWidgets);
+    });
+
+    testWidgets('можно вернуться и указать другой адрес', (tester) async {
+      await openWithCodes(tester);
+
+      await tester.enterText(find.byType(TextField).first, 'a@b.kz');
+      await tester.tap(find.text('Получить код'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Другой адрес'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Получить код'), findsOneWidget);
     });
   });
 
