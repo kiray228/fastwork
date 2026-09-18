@@ -103,6 +103,57 @@ class Api {
   Router get router {
     final router = Router();
 
+    // --- корневой адрес -----------------------------------------------------
+    //
+    // Сюда попадают, когда открывают адрес сервера в браузере. Раньше
+    // здесь была пустая ошибка «маршрут не найден» — и было непонятно,
+    // сервер сломан или просто показывать ему нечего.
+    //
+    // Это не сайт: страниц у сервера нет, он отвечает только приложению.
+    // Но сказать об этом человеку стоит.
+    router.get('/', (Request request) {
+      return Response.ok(
+        '''
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>fastwork — сервер</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #F4F6F9;
+           color: #0F172A; margin: 0; display: grid; place-items: center;
+           min-height: 100vh; padding: 24px; }
+    .card { background: #fff; border-radius: 20px; padding: 32px;
+            max-width: 460px; box-shadow: 0 8px 30px rgba(0,0,0,.06); }
+    h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -.5px; }
+    h1 span { color: #0FA36B; }
+    p { color: #64748B; line-height: 1.5; font-size: 14px; }
+    code { background: #F4F6F9; padding: 2px 6px; border-radius: 6px;
+           font-size: 13px; }
+    .ok { display: inline-block; background: rgba(15,163,107,.12);
+          color: #0B7A50; font-weight: 700; font-size: 13px;
+          padding: 6px 12px; border-radius: 999px; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="ok">● сервер работает</div>
+    <h1>fast<span>work</span></h1>
+    <p>Это сервер, а не сайт. Страниц у него нет — он отвечает
+       приложению на запросы о сменах, записях и оценках.</p>
+    <p>Проверить, что он жив:
+       <a href="/api/health"><code>/api/health</code></a></p>
+    <p>Чтобы открыть приложение, запустите его с этим адресом:<br>
+       <code>flutter run -d chrome --dart-define=API_URL=…</code></p>
+  </div>
+</body>
+</html>
+''',
+        headers: {'content-type': 'text/html; charset=utf-8'},
+      );
+    });
+
     // --- проверка, что сервер жив -----------------------------------------
     // Хостинги дёргают такой адрес, чтобы понять, работает ли программа.
     router.get('/api/health', (Request r) => _json({'status': 'ok'}));
