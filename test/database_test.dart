@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Migrator;
 import 'package:drift/native.dart';
 import 'package:fastwork_core/data/auth_repository.dart';
 import 'package:fastwork_core/data/database.dart';
@@ -361,6 +362,26 @@ void main() {
 
     // В helper выход подтверждён — смена засчитана.
     expect((await auth.refresh(workerId))!.completedShifts, 1);
+  });
+
+  // ---------------------------------------------------------------------
+  // ОБНОВЛЕНИЕ СХЕМЫ
+  // ---------------------------------------------------------------------
+
+  test('повторное добавление колонки не роняет обновление схемы', () async {
+    final m = Migrator(db);
+
+    // Так выглядит наполовину выполненное обновление: колонка уже есть,
+    // а отметка «схема обновлена» не записана. Живой сервер застрял ровно
+    // на этом и падал при каждом запуске.
+    await db.addColumnIfMissing(m, db.shiftRows, db.shiftRows.cancelledAt);
+
+    // А без защиты та же команда падает — вот та самая ошибка.
+    expect(
+      () => m.addColumn(db.shiftRows, db.shiftRows.cancelledAt),
+      throwsA(anything),
+      reason: 'иначе тест ничего не проверяет',
+    );
   });
 
   // ---------------------------------------------------------------------

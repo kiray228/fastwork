@@ -418,6 +418,57 @@ class AppDatabase extends _$AppDatabase {
 
 
   /// Версия схемы. Каждое изменение таблиц поднимает номер на единицу.
+  /// Добавить колонку, только если её ещё нет.
+  ///
+  /// Зачем так, а не просто `m.addColumn`.
+  ///
+  /// Обновление схемы — это несколько отдельных команд, а отметка «схема
+  /// теперь такой-то версии» ставится **после** всех. Если между ними
+  /// что-то оборвётся — сервер перезапустят, хостинг сочтёт запуск
+  /// неудачным, — то часть команд уже выполнена, а отметки нет.
+  ///
+  /// При следующем запуске обновление начнётся сначала и споткнётся:
+  /// «колонка cancelled_at уже существует». И так каждый раз — база
+  /// застревает навсегда, и сама из этого состояния не выберется.
+  ///
+  /// Ровно это и случилось с живым сервером. Лечится не «починить базу
+  /// руками», а правилом: **обновление схемы должно переживать повторный
+  /// запуск**. Создание таблиц этому правилу следует и без нас — drift
+  /// пишет `CREATE TABLE IF NOT EXISTS`. Для колонок такого нет, поэтому
+  /// спрашиваем у базы сами.
+  Future<void> addColumnIfMissing(
+    Migrator m,
+    TableInfo<Table, dynamic> table,
+    GeneratedColumn<Object> column,
+  ) async {
+    final existing = await _columnsOf(table.actualTableName);
+    if (existing.contains(column.name)) return;
+    await m.addColumn(table, column);
+  }
+
+  /// Какие колонки сейчас есть у таблицы.
+  ///
+  /// Спросить об этом можно у любой базы, но по-разному: у PostgreSQL есть
+  /// служебные таблицы с описанием всех остальных, у SQLite — команда
+  /// PRAGMA. Тот же случай, что и с вопросительными знаками: одно и то же
+  /// намерение, два разных способа записи.
+  Future<Set<String>> _columnsOf(String table) async {
+    if (executor.dialect == SqlDialect.postgres) {
+      final rows = await customSelect(
+        'SELECT column_name FROM information_schema.columns '
+        'WHERE table_name = \$1',
+        variables: [Variable<String>(table)],
+      ).get();
+      return rows.map((r) => r.read<String>('column_name')).toSet();
+    }
+
+    // Имя таблицы подставляем прямо в текст: PRAGMA не принимает
+    // подстановки. Опасности нет — имена здесь наши собственные,
+    // из описания схемы, а не из того, что ввёл человек.
+    final rows = await customSelect('PRAGMA table_info($table)').get();
+    return rows.map((r) => r.read<String>('name')).toSet();
+  }
+
   @override
   int get schemaVersion => 10;
 
@@ -431,20 +482,21 @@ class AppDatabase extends _$AppDatabase {
           // Поэтому мы не создаём базу заново, а дописываем недостающую
           // колонку в существующую таблицу.
           if (from < 2) {
-            await m.addColumn(shiftRows, shiftRows.cancelDeadlineHours);
+            await addColumnIfMissing(
+                m, shiftRows, shiftRows.cancelDeadlineHours);
           }
           if (from < 3) {
             await m.createTable(userRows);
             await m.createTable(appSettings);
-            await m.addColumn(shiftRows, shiftRows.minRating);
+            await addColumnIfMissing(m, shiftRows, shiftRows.minRating);
           }
           if (from < 4) {
             await m.createTable(reviewRows);
           }
           if (from < 5) {
-            await m.addColumn(shiftRows, shiftRows.createdBy);
-            await m.addColumn(userRows, userRows.role);
-            await m.addColumn(userRows, userRows.company);
+            await addColumnIfMissing(m, shiftRows, shiftRows.createdBy);
+            await addColumnIfMissing(m, userRows, userRows.role);
+            await addColumnIfMissing(m, userRows, userRows.company);
             await m.createTable(documentRows);
             await m.createTable(supportTicketRows);
             await m.createTable(supportMessageRows);
@@ -453,11 +505,12 @@ class AppDatabase extends _$AppDatabase {
             await m.createTable(workerReviewRows);
           }
           if (from < 7) {
-            await m.addColumn(shiftRows, shiftRows.city);
-            await m.addColumn(applicationRows, applicationRows.checkedInAt);
+            await addColumnIfMissing(m, shiftRows, shiftRows.city);
+            await addColumnIfMissing(
+                m, applicationRows, applicationRows.checkedInAt);
           }
           if (from < 8) {
-            await m.addColumn(userRows, userRows.email);
+            await addColumnIfMissing(m, userRows, userRows.email);
             await m.createTable(authCodeRows);
             await m.createTable(authTokenRows);
           }
@@ -465,7 +518,7 @@ class AppDatabase extends _$AppDatabase {
             await m.createTable(notificationRows);
           }
           if (from < 10) {
-            await m.addColumn(shiftRows, shiftRows.cancelledAt);
+            await addColumnIfMissing(m, shiftRows, shiftRows.cancelledAt);
           }
         },
         beforeOpen: (details) async {
