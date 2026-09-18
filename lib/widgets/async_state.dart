@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../data/api_client.dart';
+
 /// Состояние любой загрузки данных.
 ///
 /// До сих пор мы обходились `List<Shift>?`, где `null` значило «грузим».
@@ -51,6 +53,12 @@ Future<Async<T>> load<T>(Future<T> Function() body) async {
 /// программиста. Но и «что-то пошло не так» — плохо, потому что не
 /// подсказывает, что делать. Поэтому объясняем причину по-русски.
 String describeError(Object error) {
+  // Если ответил наш сервер, у него уже есть готовое объяснение —
+  // «код неверный», «письмо не отправилось», «слишком много запросов».
+  // Раньше мы его выбрасывали и подставляли своё общее «что-то пошло не
+  // так»: человек видел, что сломалось, но не узнавал почему.
+  if (error is ApiException) return error.message;
+
   final text = error.toString().toLowerCase();
 
   // `failed to fetch` и `clientexception` — это как браузер и пакет http

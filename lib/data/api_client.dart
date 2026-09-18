@@ -35,9 +35,19 @@ class ApiClient {
   /// 404 «не нашёл», 500 «сервер сломался». Всё, что не 2xx, превращаем
   /// в исключение — его поймает `load()` и покажет экран ошибки.
   dynamic _decode(http.Response response) {
-    final body = response.body.isEmpty
-        ? null
-        : jsonDecode(utf8.decode(response.bodyBytes));
+    // Разбирать ответ надо осторожно. Обычно сервер присылает JSON, но
+    // при сбое между нами и сервером (хостинг перезапускается, шлюз
+    // отдал свою страницу ошибки) приходит HTML. Раньше на нём падал сам
+    // разбор, и вместо «сервер ответил 502» человек видел невнятное
+    // сообщение про формат.
+    dynamic body;
+    try {
+      body = response.body.isEmpty
+          ? null
+          : jsonDecode(utf8.decode(response.bodyBytes));
+    } catch (_) {
+      body = null;
+    }
 
     if (response.statusCode >= 200 && response.statusCode < 300) return body;
 
