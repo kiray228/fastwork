@@ -164,7 +164,7 @@ void main() {
 
       await tester.enterText(
         find.byType(TextField).first,
-        'edamkaldybek@gmail.com',
+        'ernar@example.kz',
       );
       await tester.tap(find.text('Получить код'));
       await tester.pumpAndSettle();
@@ -172,7 +172,7 @@ void main() {
       expect(find.text('Код из письма'), findsWidgets);
       expect(find.text('Подтвердить'), findsOneWidget);
       expect(
-        find.textContaining('edamkaldybek@gmail.com'),
+        find.textContaining('ernar@example.kz'),
         findsOneWidget,
       );
     });

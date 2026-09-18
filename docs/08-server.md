@@ -226,7 +226,7 @@ Authorization: Bearer UHAnSbx9h3HGHvAbOCFsXG4kG9YmydTu
   │                                        │
   │      515325                            │
   │                                        │
-  │  для edamkaldybek@gmail.com
+  │  для ernar@example.kz
   └────────────────────────────────────────┘
 ```
 

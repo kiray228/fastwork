@@ -352,7 +352,7 @@ class _EmailStep extends StatelessWidget {
     return _Field(
       label: 'Почта',
       controller: controller,
-      hint: 'edamkaldybek@gmail.com',
+      hint: 'ernar@example.kz',
       keyboardType: TextInputType.emailAddress,
       onChanged: (_) => onChanged(),
       onSubmitted: (_) => onSubmit(),
