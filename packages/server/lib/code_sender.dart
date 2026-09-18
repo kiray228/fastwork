@@ -49,10 +49,15 @@ class ConsoleCodeSender implements CodeSender {
 /// адреса, ни пароля: их нельзя класть в репозиторий, иначе они утекут
 /// вместе с ним.
 ///
-///   SMTP_HOST=smtp.gmail.com
+///   SMTP_HOST=smtp-relay.brevo.com
 ///   SMTP_PORT=587
-///   SMTP_USER=твоя.почта@gmail.com
-///   SMTP_PASSWORD=пароль-приложения
+///   SMTP_USER=логин, который выдал сервис
+///   SMTP_PASSWORD=пароль, который выдал сервис
+///   SMTP_FROM=адрес, подтверждённый в сервисе (его увидит получатель)
+///
+/// Для Gmail SMTP_FROM можно не задавать: там логин и есть адрес.
+/// Но Gmail для рассылок годится плохо — письма незнакомым людям часто
+/// попадают в спам, и есть суточный предел.
 ///
 /// Для Gmail нужен именно **пароль приложения** (создаётся в настройках
 /// аккаунта при включённой двухфакторной защите), а не обычный пароль.
@@ -62,11 +67,20 @@ class SmtpCodeSender implements CodeSender {
   final String username;
   final String password;
 
+  /// Адрес, который получатель увидит в поле «от кого».
+  ///
+  /// Это **не то же самое**, что логин. У Gmail они совпадают, а у
+  /// сервисов рассылок логин — служебная строка вроде
+  /// `8a1b2c001@smtp-brevo.com`, и письмо с таким отправителем либо не
+  /// уйдёт, либо попадёт в спам. Поэтому адрес задаётся отдельно.
+  final String from;
+
   SmtpCodeSender({
     required this.host,
     required this.port,
     required this.username,
     required this.password,
+    required this.from,
   });
 
   /// Собрать из переменных окружения. null — настройки не заданы,
@@ -84,6 +98,9 @@ class SmtpCodeSender implements CodeSender {
       port: int.tryParse(env['SMTP_PORT'] ?? '') ?? 587,
       username: user,
       password: password,
+      // Если SMTP_FROM не задан, считаем, что логин и есть адрес —
+      // так устроен Gmail.
+      from: env['SMTP_FROM'] ?? user,
     );
   }
 
@@ -103,7 +120,7 @@ class SmtpCodeSender implements CodeSender {
     );
 
     final message = Message()
-      ..from = Address(username, 'fastwork')
+      ..from = Address(from, 'fastwork')
       ..recipients.add(email)
       ..subject = 'Код для входа: $code'
       ..text = 'Ваш код для входа в fastwork: $code\n\n'
