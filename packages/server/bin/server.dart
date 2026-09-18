@@ -48,11 +48,12 @@ Future<void> main(List<String> args) async {
 
   stdout.writeln('fastwork сервер слушает http://localhost:${server.port}');
   stdout.writeln('база: ${describeDatabase()}');
-  stdout.writeln(
-    sender is ConsoleCodeSender
-        ? 'письма НЕ отправляются — код входа будет напечатан здесь'
-        : 'письма отправляются через SMTP',
-  );
+  stdout.writeln(switch (sender) {
+    ConsoleCodeSender() =>
+      'письма НЕ отправляются — код входа будет напечатан здесь',
+    BrevoCodeSender() => 'письма отправляются через Brevo (веб-интерфейс)',
+    _ => 'письма отправляются через SMTP',
+  });
 }
 
 /// Браузер не даёт странице обращаться к другому адресу, пока сервер

@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:http/http.dart' as http;
 import 'package:mailer/mailer.dart';
 import 'package:mailer/mailer.dart' as mailer;
 import 'package:mailer/smtp_server.dart';
@@ -41,6 +43,92 @@ class ConsoleCodeSender implements CodeSender {
     stdout.writeln('  └────────────────────────────────────────┘');
     stdout.writeln('');
   }
+}
+
+/// Отправка письма через HTTP-интерфейс Brevo.
+///
+/// Зачем это, если SMTP уже написан: **хостинги блокируют почтовые
+/// порты**. Render, как и почти все остальные, не выпускает наружу
+/// соединения на 25, 465 и 587 — иначе с бесплатных серверов рассылали
+/// бы спам вагонами.
+///
+/// Выглядит это неприятно: запрос не отвергается, а просто висит, пока
+/// не истечёт время ожидания. В логах — `Connection timed out`.
+///
+/// Обходной путь стандартный: те же сервисы умеют принимать письма
+/// обычным веб-запросом на порт 443, а его не блокирует никто.
+///
+/// Для нас это снова та же история с интерфейсом: способ доставки
+/// поменялся целиком, а всё остальное приложение об этом не узнало.
+class BrevoCodeSender implements CodeSender {
+  final String apiKey;
+  final String from;
+  final String fromName;
+
+  BrevoCodeSender({
+    required this.apiKey,
+    required this.from,
+    this.fromName = 'fastwork',
+  });
+
+  /// Собрать из переменных окружения. null — ключ не задан.
+  static BrevoCodeSender? fromEnvironment() {
+    final env = Platform.environment;
+    final key = env['BREVO_API_KEY'];
+    // Адрес отправителя обязателен: Brevo принимает письма только от
+    // адресов, подтверждённых в личном кабинете.
+    final from = env['SMTP_FROM'];
+
+    if (key == null || key.isEmpty || from == null || from.isEmpty) {
+      return null;
+    }
+    return BrevoCodeSender(apiKey: key, from: from);
+  }
+
+  @override
+  String get name => 'email';
+
+  @override
+  Future<void> send(String email, String code) async {
+    final response = await http
+        .post(
+          Uri.parse('https://api.brevo.com/v3/smtp/email'),
+          headers: {
+            'api-key': apiKey,
+            'content-type': 'application/json',
+            'accept': 'application/json',
+          },
+          body: jsonEncode({
+            'sender': {'email': from, 'name': fromName},
+            'to': [
+              {'email': email},
+            ],
+            'subject': 'Код для входа: $code',
+            'textContent': 'Ваш код для входа в fastwork: $code\n\n'
+                'Код действует 5 минут.\n'
+                'Если вы не пытались войти — просто не отвечайте на это письмо.',
+          }),
+        )
+        // Без ограничения времени запрос может висеть очень долго, и
+        // человек всё это время смотрит на крутящуюся кнопку.
+        .timeout(const Duration(seconds: 15));
+
+    if (response.statusCode >= 300) {
+      throw CodeSendFailure(
+        'Brevo ответил ${response.statusCode}: ${response.body}',
+      );
+    }
+  }
+}
+
+/// Письмо не ушло.
+class CodeSendFailure implements Exception {
+  final String message;
+
+  CodeSendFailure(this.message);
+
+  @override
+  String toString() => message;
 }
 
 /// Отправляет письмо по-настоящему.
@@ -127,7 +215,9 @@ class SmtpCodeSender implements CodeSender {
           'Код действует 5 минут.\n'
           'Если вы не пытались войти — просто не отвечайте на это письмо.';
 
-    await send_(message, server);
+    // Ограничение времени: без него запрос к заблокированному порту
+    // висит минуту, и всё это время человек смотрит на крутящуюся кнопку.
+    await send_(message, server).timeout(const Duration(seconds: 20));
   }
 }
 
@@ -135,6 +225,14 @@ class SmtpCodeSender implements CodeSender {
 Future<void> send_(Message message, SmtpServer server) =>
     mailer.send(message, server);
 
-/// Настоящий отправитель, если настроен, иначе заглушка.
+/// Кто будет отправлять коды.
+///
+/// По порядку: веб-интерфейс Brevo, если задан ключ; иначе SMTP, если
+/// заданы его настройки; иначе заглушка, печатающая код в окно сервера.
+///
+/// Brevo стоит первым не случайно: на хостинге SMTP обычно заблокирован,
+/// и рабочим остаётся только веб-интерфейс.
 CodeSender resolveCodeSender() =>
-    SmtpCodeSender.fromEnvironment() ?? ConsoleCodeSender();
+    BrevoCodeSender.fromEnvironment() ??
+    SmtpCodeSender.fromEnvironment() ??
+    ConsoleCodeSender();

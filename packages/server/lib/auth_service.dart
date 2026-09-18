@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
@@ -94,6 +95,24 @@ class AuthService {
       );
     }
 
+    final code = _generateCode();
+
+    // Сначала отправляем, и только потом записываем.
+    //
+    // Порядок важен: если письмо не ушло, код записывать незачем — он
+    // всё равно никому не известен, а место в счётчике запросов займёт.
+    try {
+      await sender.send(email, code);
+    } catch (error) {
+      // Наружу отдаём понятную причину, а подробности пишем в лог:
+      // человеку они ни о чём не скажут, а нам понадобятся.
+      stderr.writeln('Не удалось отправить код на $email: $error');
+      throw AuthError(
+        'Не получилось отправить письмо. Попробуйте ещё раз через минуту.',
+        status: 502,
+      );
+    }
+
     // Прежние коды этой почты гасим, но **не удаляем**.
     //
     // Сначала я их удалял — и ограничение на частоту перестало работать:
@@ -103,7 +122,6 @@ class AuthService {
     await (db.update(db.authCodeRows)..where((c) => c.email.equals(email)))
         .write(AuthCodeRowsCompanion(expiresAt: Value(now)));
 
-    final code = _generateCode();
     await db.into(db.authCodeRows).insert(
           AuthCodeRowsCompanion.insert(
             email: email,
@@ -113,7 +131,6 @@ class AuthService {
           ),
         );
 
-    await sender.send(email, code);
     return sender.name;
   }
 
