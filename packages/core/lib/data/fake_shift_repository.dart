@@ -41,6 +41,7 @@ class FakeShiftRepository implements ShiftRepository {
       myStatus: status,
       clearMyStatus: status == null,
       myCheckedInAt: _checkIns[s.id],
+      cancelledAt: _cancelled.contains(s.id) ? DateTime.now() : null,
     );
   }
 
@@ -50,7 +51,10 @@ class FakeShiftRepository implements ShiftRepository {
     ShiftFilter filter = const ShiftFilter(),
   }) async {
     final list = _shifts
-        .where((s) => isSameDay(s.workDate, date) && s.city == city)
+        .where((s) =>
+            isSameDay(s.workDate, date) &&
+            s.city == city &&
+            !_cancelled.contains(s.id))
         .map(_decorate)
         .toList();
     return applyFilter(list, filter);
@@ -58,14 +62,14 @@ class FakeShiftRepository implements ShiftRepository {
 
   @override
   Future<Set<DateTime>> daysWithShifts() async => _shifts
-      .where((s) => s.city == city)
+      .where((s) => s.city == city && !_cancelled.contains(s.id))
       .map((s) => DateTime(s.workDate.year, s.workDate.month, s.workDate.day))
       .toSet();
 
   @override
   Future<List<String>> companies() async {
     final names = _shifts
-        .where((s) => s.city == city)
+        .where((s) => s.city == city && !_cancelled.contains(s.id))
         .map((s) => s.company)
         .toSet()
         .toList()
@@ -85,6 +89,7 @@ class FakeShiftRepository implements ShiftRepository {
   Future<BookingResult> apply(int shiftId) async {
     final shift = await shiftById(shiftId);
     if (shift == null) return BookingResult.notFound;
+    if (shift.isCancelled) return BookingResult.alreadyCancelled;
     if (shift.isApplied) return BookingResult.alreadyBooked;
     if (!shift.ratingAllows(userRating)) return BookingResult.ratingTooLow;
     if (!shift.hasFreeSlots) return BookingResult.noSlots;
@@ -303,6 +308,21 @@ class FakeShiftRepository implements ShiftRepository {
   Future<void> prepareDemoHistory(int userId) async {
     // В памяти истории нет — тестам она не нужна.
   }
+
+  @override
+  Future<BookingResult> cancelShift(int shiftId) async {
+    final index = _shifts.indexWhere((s) => s.id == shiftId);
+    if (index < 0) return BookingResult.notFound;
+    if (_shifts[index].isCancelled) return BookingResult.alreadyCancelled;
+
+    _cancelled.add(shiftId);
+    _myStatuses.remove(shiftId);
+    return BookingResult.ok;
+  }
+
+  /// Номера отменённых смен. В памяти проще держать отдельным множеством,
+  /// чем пересобирать сам объект смены.
+  final Set<int> _cancelled = {};
 
   /// Уведомления, которые кто-то «прислал» в памяти.
   final List<AppNotification> _notifications = [];

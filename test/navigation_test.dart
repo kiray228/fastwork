@@ -803,6 +803,73 @@ void main() {
     });
   });
 
+  group('отмена смены заказчиком', () {
+    Shift todayShift() {
+      final now = DateTime.now();
+      return Shift(
+        id: 1,
+        workDate: DateTime(now.year, now.month, now.day),
+        title: 'Услуги грузчика',
+        company: 'Magnum',
+        address: 'г. Алматы, ул. Абая, 1',
+        city: 'Алматы',
+        startMinutes: 600,
+        endMinutes: 1200,
+        hourlyRate: 100000,
+        workersNeeded: 3,
+        workersHired: 0,
+        createdBy: 1,
+      );
+    }
+
+    testWidgets('у своей смены есть кнопка «Отменить»', (tester) async {
+      final repo = FakeShiftRepository(shifts: [todayShift()]);
+      await openApp(tester, role: UserRole.manager, shifts: repo);
+
+      expect(find.text('Отменить'), findsOneWidget);
+    });
+
+    testWidgets('перед отменой спрашивают подтверждение', (tester) async {
+      final repo = FakeShiftRepository(shifts: [todayShift()]);
+      await openApp(tester, role: UserRole.manager, shifts: repo);
+
+      await tester.tap(find.text('Отменить'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Отменить смену?'), findsOneWidget);
+
+      // Передумал — смена остаётся.
+      await tester.tap(find.text('Нет'));
+      await tester.pumpAndSettle();
+      expect(await repo.shiftById(1), isNotNull);
+      expect((await repo.shiftById(1))!.isCancelled, isFalse);
+    });
+
+    testWidgets('после подтверждения смена помечается отменённой',
+        (tester) async {
+      final repo = FakeShiftRepository(shifts: [todayShift()]);
+      await openApp(tester, role: UserRole.manager, shifts: repo);
+
+      await tester.tap(find.text('Отменить'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Отменить смену'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Отменена'), findsOneWidget);
+      expect((await repo.shiftById(1))!.isCancelled, isTrue);
+    });
+
+    testWidgets('отменённая смена исчезает из ленты исполнителя',
+        (tester) async {
+      final repo = FakeShiftRepository(shifts: [todayShift()]);
+      await repo.cancelShift(1);
+
+      await openApp(tester, shifts: repo);
+
+      expect(find.text('Услуги грузчика'), findsNothing);
+    });
+  });
+
   group('уведомления', () {
     AppNotification note({
       int id = 1,

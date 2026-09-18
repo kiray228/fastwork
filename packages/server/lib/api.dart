@@ -322,6 +322,17 @@ class Api {
       });
     });
 
+    // Заказчик отменяет свою смену. Адрес отличается от /cancel, которым
+    // исполнитель снимает **свою запись**: действия разные, и путать их
+    // нельзя. Кто здесь имеет право, проверяет хранилище.
+    router.post('/api/shifts/<id|[0-9]+>/cancel-shift',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        final result = await _shiftsFor(user).cancelShift(int.parse(id));
+        return _json({'result': result.name});
+      });
+    });
+
     router.post('/api/shifts/<id|[0-9]+>/checkin',
         (Request request, String id) async {
       return _authorized(request, (user) async {

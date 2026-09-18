@@ -4,6 +4,7 @@ import 'package:fastwork_core/data/database.dart';
 import 'package:fastwork/data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/notification.dart';
+import 'package:fastwork_core/user.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Тесты против **настоящей** SQLite, только в памяти.
@@ -76,6 +77,45 @@ void main() {
     await shifts.confirmAttendance(shiftId: shiftId, workerId: worker.id);
 
     return (shiftId, worker.id, manager.id);
+  }
+
+  /// Смена на сегодня, на которую исполнитель записан и **ещё не**
+  /// отработал. Отличается от `workedShift` тем, что выход не подтверждён:
+  /// именно такую смену заказчик и может отменить.
+  var seq = 0;
+  Future<(int shiftId, AppUser worker, AppUser manager)> upcomingShift() async {
+    seq++;
+    final manager = await auth.register(
+      phone: '7701000000$seq',
+      fullName: 'Айгуль Досова',
+      city: 'Алматы',
+      role: UserRole.manager,
+      company: 'Magnum',
+    );
+    final worker = await auth.register(
+      phone: '7702000000$seq',
+      fullName: 'Азамат Серик',
+      city: 'Алматы',
+    );
+
+    session.setUser(manager);
+    final shiftId = await shifts.createShift(
+      workDate: daysAgo(0),
+      title: 'Услуги грузчика',
+      company: 'Magnum',
+      address: 'г. Алматы, ул. Абая, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 2,
+      createdBy: manager.id,
+      city: 'Алматы',
+    );
+
+    session.setUser(worker);
+    expect(await shifts.apply(shiftId), BookingResult.ok);
+
+    return (shiftId, worker, manager);
   }
 
   test('схема создаётся и смена сохраняется', () async {
@@ -321,6 +361,76 @@ void main() {
 
     // В helper выход подтверждён — смена засчитана.
     expect((await auth.refresh(workerId))!.completedShifts, 1);
+  });
+
+  // ---------------------------------------------------------------------
+  // ОТМЕНА СМЕНЫ ЗАКАЗЧИКОМ
+  // ---------------------------------------------------------------------
+
+  test('отменённая смена пропадает из ленты, но остаётся в архиве',
+      () async {
+    final (shiftId, worker, manager) = await upcomingShift();
+
+    session.setUser(worker);
+    expect(await shifts.shiftsOn(daysAgo(0)), hasLength(1));
+
+    session.setUser(manager);
+    expect(await shifts.cancelShift(shiftId), BookingResult.ok);
+
+    session.setUser(worker);
+    expect(await shifts.shiftsOn(daysAgo(0)), isEmpty);
+
+    // Но след остался: человек должен понять, почему выходить не нужно.
+    final archive = await shifts.myShifts(archived: true);
+    expect(archive.map((s) => s.id), contains(shiftId));
+    expect(archive.firstWhere((s) => s.id == shiftId).isCancelled, isTrue);
+  });
+
+  test('записавшихся предупреждают об отмене', () async {
+    final (shiftId, worker, manager) = await upcomingShift();
+
+    session.setUser(manager);
+    await shifts.cancelShift(shiftId);
+
+    session.setUser(worker);
+    final cancelled = (await shifts.notifications())
+        .where((n) => n.kind == NotificationKind.shiftCancelled);
+    expect(cancelled, hasLength(1));
+  });
+
+  test('чужую смену отменить нельзя', () async {
+    final (shiftId, worker, _) = await upcomingShift();
+
+    // Исполнитель подставляет номер чужой смены — правило не на экране,
+    // а в хранилище, поэтому подстановка не поможет.
+    session.setUser(worker);
+    expect(await shifts.cancelShift(shiftId), BookingResult.notMine);
+
+    final shift = await shifts.shiftById(shiftId);
+    expect(shift!.isCancelled, isFalse);
+  });
+
+  test('на отменённую смену записаться нельзя', () async {
+    final (shiftId, _, manager) = await upcomingShift();
+
+    session.setUser(manager);
+    await shifts.cancelShift(shiftId);
+
+    final other = await auth.register(
+      phone: '77039990001',
+      fullName: 'Данияр Ким',
+      city: 'Алматы',
+    );
+    session.setUser(other);
+    expect(await shifts.apply(shiftId), BookingResult.alreadyCancelled);
+  });
+
+  test('дважды отменить одну смену нельзя', () async {
+    final (shiftId, _, manager) = await upcomingShift();
+    session.setUser(manager);
+
+    expect(await shifts.cancelShift(shiftId), BookingResult.ok);
+    expect(await shifts.cancelShift(shiftId), BookingResult.alreadyCancelled);
   });
 
   // ---------------------------------------------------------------------

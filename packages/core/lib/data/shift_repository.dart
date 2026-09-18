@@ -19,6 +19,8 @@ enum BookingResult {
   ratingTooLow, // рейтинг ниже порога заказчика
   tooLateToCancel, // срок отмены прошёл
   tooEarlyToCheckIn, // отметиться можно только в день смены
+  notMine, // чужую смену отменить нельзя
+  alreadyCancelled, // смена уже отменена
   notFound,
 }
 
@@ -90,6 +92,9 @@ abstract class ShiftRepository {
 
   /// Кто записался на смену — список для заказчика.
   Future<List<ShiftApplicant>> applicantsFor(int shiftId);
+
+  /// Заказчик отменяет свою смену. Всем записавшимся уходит уведомление.
+  Future<BookingResult> cancelShift(int shiftId);
 
   /// Отметиться на смене: «я на месте».
   Future<BookingResult> checkIn(int shiftId);
@@ -214,6 +219,7 @@ class DbShiftRepository implements ShiftRepository {
         cancelDeadlineHours: row.read<int>('cancel_deadline_hours'),
         minRating: row.readNullable<double>('min_rating'),
         createdBy: row.readNullable<int>('created_by'),
+        cancelledAt: row.readNullable<DateTime>('cancelled_at'),
       );
 
   static List<String> _splitDuties(String raw) =>
@@ -234,6 +240,7 @@ class DbShiftRepository implements ShiftRepository {
       SELECT s.*, $_hiredSql, $_mineSql
       FROM shift_rows s
       WHERE s.work_date >= ? AND s.work_date < ? AND s.city = ?
+        AND s.cancelled_at IS NULL
       ''',
       variables: [
         Variable.withDateTime(from),
@@ -249,7 +256,8 @@ class DbShiftRepository implements ShiftRepository {
   @override
   Future<Set<DateTime>> daysWithShifts() async {
     final rows = await db.query(
-      'SELECT DISTINCT work_date FROM shift_rows WHERE city = ?',
+      'SELECT DISTINCT work_date FROM shift_rows '
+      'WHERE city = ? AND cancelled_at IS NULL',
       variables: [Variable.withString(session.city)],
       readsFrom: {db.shiftRows},
     ).get();
@@ -263,7 +271,8 @@ class DbShiftRepository implements ShiftRepository {
   @override
   Future<List<String>> companies() async {
     final rows = await db.query(
-      'SELECT DISTINCT company FROM shift_rows WHERE city = ? ORDER BY company',
+      'SELECT DISTINCT company FROM shift_rows '
+      'WHERE city = ? AND cancelled_at IS NULL ORDER BY company',
       variables: [Variable.withString(session.city)],
       readsFrom: {db.shiftRows},
     ).get();
@@ -289,6 +298,9 @@ class DbShiftRepository implements ShiftRepository {
     return db.transaction(() async {
       final shift = await shiftById(shiftId);
       if (shift == null) return BookingResult.notFound;
+      // Отменённой смены в ленте нет, но открытый экран мог остаться
+      // открытым с прошлого раза — и кнопка на нём ещё живая.
+      if (shift.isCancelled) return BookingResult.alreadyCancelled;
       if (shift.isApplied) return BookingResult.alreadyBooked;
       if (!shift.ratingAllows(session.rating)) {
         return BookingResult.ratingTooLow;
@@ -832,6 +844,57 @@ class DbShiftRepository implements ShiftRepository {
 
   /// Первое заполнение базы. Настоящих смен нам взять неоткуда,
   /// поэтому кладём демонстрационные — но уже в настоящие таблицы.
+  @override
+  Future<BookingResult> cancelShift(int shiftId) async {
+    return db.transaction(() async {
+      final shift = await shiftById(shiftId);
+      if (shift == null) return BookingResult.notFound;
+
+      // Отменить смену может только тот, кто её создал.
+      //
+      // Проверка стоит здесь, а не на экране: кнопку заказчик видит только
+      // на своих сменах, но в запрос к серверу можно подставить любой
+      // номер. Правило, которое защищает данные, обязано жить там, где
+      // данные меняются.
+      if (shift.createdBy != _workerId) return BookingResult.notMine;
+      if (shift.isCancelled) return BookingResult.alreadyCancelled;
+
+      final now = DateTime.now();
+
+      await (db.update(db.shiftRows)..where((s) => s.id.equals(shiftId)))
+          .write(ShiftRowsCompanion(cancelledAt: Value(now)));
+
+      // Кого предупредить — узнаём ДО того, как снимем записи: после
+      // обновления они уже не будут `active`, и список окажется пустым.
+      final affected = await (db.select(db.applicationRows)
+            ..where((a) =>
+                a.shiftId.equals(shiftId) &
+                a.status.equals(ApplicationStatus.active)))
+          .get();
+
+      await (db.update(db.applicationRows)
+            ..where((a) =>
+                a.shiftId.equals(shiftId) &
+                a.status.equals(ApplicationStatus.active)))
+          .write(const ApplicationRowsCompanion(
+        status: Value(ApplicationStatus.cancelled),
+      ));
+
+      for (final application in affected) {
+        await _notify(
+          userId: application.workerId,
+          kind: NotificationKind.shiftCancelled,
+          title: 'Смена отменена',
+          body: 'Заказчик отменил «${shift.title}» '
+              '${_dayText(shift.workDate)}. Выходить не нужно.',
+          shiftId: shiftId,
+        );
+      }
+
+      return BookingResult.ok;
+    });
+  }
+
   // -------------------------------------------------------------------------
   // УВЕДОМЛЕНИЯ
   // -------------------------------------------------------------------------

@@ -42,6 +42,14 @@ class ShiftRows extends Table {
   /// Минимальный рейтинг для допуска к смене. null — ограничений нет.
   /// Добавлена в третьей версии схемы.
   RealColumn get minRating => real().nullable()();
+
+  /// Когда заказчик отменил смену. null — смена в силе.
+  ///
+  /// Строку не удаляем, а помечаем. Удали мы её — вместе со сменой по
+  /// каскаду исчезли бы все отклики, и человек, который на неё
+  /// рассчитывал, не нашёл бы в архиве даже следа. А так смена остаётся:
+  /// её видно в «Моих сменах» с пометкой «отменена».
+  DateTimeColumn get cancelledAt => dateTime().nullable()();
 }
 
 /// Пользователи приложения.
@@ -411,7 +419,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Версия схемы. Каждое изменение таблиц поднимает номер на единицу.
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -455,6 +463,9 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 9) {
             await m.createTable(notificationRows);
+          }
+          if (from < 10) {
+            await m.addColumn(shiftRows, shiftRows.cancelledAt);
           }
         },
         beforeOpen: (details) async {

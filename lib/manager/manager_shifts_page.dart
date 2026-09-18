@@ -42,6 +42,55 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
     setState(() => state = result);
   }
 
+  /// Отменить смену. Спрашиваем подтверждение: действие видят все
+  /// записавшиеся, и «случайно нажал» здесь обходится дорого.
+  Future<void> _cancelShift(Shift shift) async {
+    final agreed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Отменить смену?'),
+        content: Text(
+          shift.workersHired > 0
+              ? 'На смену записались ${shift.workersHired} чел. '
+                  'Все получат уведомление, что выходить не нужно.'
+              : 'Смена пропадёт из ленты. Вернуть её будет нельзя — '
+                  'нужно будет создать новую.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Нет'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: const Text('Отменить смену'),
+          ),
+        ],
+      ),
+    );
+    if (agreed != true || !mounted) return;
+
+    final result = await guarded(
+      context,
+      () => widget.repository.cancelShift(shift.id),
+    );
+    if (result == null || !mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(switch (result) {
+          BookingResult.ok => 'Смена отменена',
+          BookingResult.notMine => 'Это не ваша смена',
+          BookingResult.alreadyCancelled => 'Смена уже отменена',
+          _ => 'Смену не удалось отменить',
+        }),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    await _load();
+  }
+
   Future<void> _openApplicants(Shift shift) async {
     await Navigator.of(context).push(
       appRoute(
@@ -81,6 +130,7 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
                   child: _ManagerShiftCard(
                     shift: value[index],
                     onTap: () => _openApplicants(value[index]),
+                    onCancel: () => _cancelShift(value[index]),
                   ),
                 ),
               ),
@@ -94,8 +144,13 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
 class _ManagerShiftCard extends StatelessWidget {
   final Shift shift;
   final VoidCallback onTap;
+  final VoidCallback onCancel;
 
-  const _ManagerShiftCard({required this.shift, required this.onTap});
+  const _ManagerShiftCard({
+    required this.shift,
+    required this.onTap,
+    required this.onCancel,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -120,7 +175,9 @@ class _ManagerShiftCard extends StatelessWidget {
                     style: text.titleMedium?.copyWith(fontSize: 15),
                   ),
                 ),
-                if (isPast)
+                if (shift.isCancelled)
+                  const TagChip(text: 'Отменена', color: AppColors.danger)
+                else if (isPast)
                   const TagChip(text: 'Прошла')
                 else if (!shift.hasFreeSlots)
                   const TagChip(text: 'Набрана', color: AppColors.brand)
@@ -176,17 +233,43 @@ class _ManagerShiftCard extends StatelessWidget {
                 const Icon(Icons.group_outlined,
                     size: 15, color: AppColors.muted),
                 const SizedBox(width: 6),
-                Text(
-                  'Посмотреть записавшихся',
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.brand,
+                // Flexible, а не просто Text: рядом стоит кнопка «Отменить»,
+                // и на узком экране двое в строку не помещались — карточка
+                // ругалась полосатой лентой поверх текста.
+                const Flexible(
+                  child: Text(
+                    'Посмотреть записавшихся',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.brand,
+                    ),
                   ),
                 ),
                 const Spacer(),
-                const Icon(Icons.chevron_right_rounded,
-                    size: 18, color: AppColors.muted),
+                // Отменить можно только смену, которая ещё впереди:
+                // прошедшую отменять поздно, отменённую — незачем.
+                if (!isPast && !shift.isCancelled)
+                  TextButton(
+                    onPressed: onCancel,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.danger,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      'Отменить',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  )
+                else
+                  const Icon(Icons.chevron_right_rounded,
+                      size: 18, color: AppColors.muted),
               ],
             ),
           ],

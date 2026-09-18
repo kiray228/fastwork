@@ -29,6 +29,9 @@ class Shift {
   /// Когда я отметился на этой смене. null — ещё не отмечался.
   final DateTime? myCheckedInAt;
 
+  /// Когда смену отменил заказчик. null — смена в силе.
+  final DateTime? cancelledAt;
+
   const Shift({
     required this.id,
     required this.workDate,
@@ -50,8 +53,12 @@ class Shift {
     this.createdBy,
     this.myStatus,
     this.myCheckedInAt,
+    this.cancelledAt,
     this.city = 'Алматы',
   });
+
+  /// Смену отменил заказчик.
+  bool get isCancelled => cancelledAt != null;
 
   /// Копия смены с изменёнными полями. Сам объект менять нельзя —
   /// все его поля `final`. Это защищает от случайных правок «издалека»:
@@ -61,6 +68,7 @@ class Shift {
     String? myStatus,
     bool clearMyStatus = false,
     DateTime? myCheckedInAt,
+    DateTime? cancelledAt,
   }) =>
       Shift(
         id: id,
@@ -84,6 +92,7 @@ class Shift {
         createdBy: createdBy,
         myStatus: clearMyStatus ? null : (myStatus ?? this.myStatus),
         myCheckedInAt: myCheckedInAt ?? this.myCheckedInAt,
+        cancelledAt: cancelledAt ?? this.cancelledAt,
       );
 
   /// Сколько всего длится смена.
@@ -395,6 +404,7 @@ extension ShiftJson on Shift {
         'createdBy': createdBy,
         'myStatus': myStatus,
         'myCheckedInAt': myCheckedInAt?.toIso8601String(),
+        'cancelledAt': cancelledAt?.toIso8601String(),
       };
 }
 
@@ -423,4 +433,7 @@ Shift shiftFromJson(Map<String, dynamic> json) => Shift(
       myCheckedInAt: json['myCheckedInAt'] == null
           ? null
           : DateTime.parse(json['myCheckedInAt'] as String),
+      cancelledAt: json['cancelledAt'] == null
+          ? null
+          : DateTime.parse(json['cancelledAt'] as String),
     );

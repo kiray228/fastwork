@@ -281,6 +281,17 @@ class _ArchiveFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Отменил заказчик — это не то же самое, что «человек передумал».
+    // Раньше обе истории выглядели одинаково: «Запись отменена», и
+    // выходило, будто исполнитель сам отказался.
+    if (shift.isCancelled) {
+      return const TagChip(
+        text: 'Смену отменил заказчик',
+        icon: Icons.event_busy_rounded,
+        color: AppColors.danger,
+      );
+    }
+
     if (shift.isUnconfirmedOn(now)) {
       return const TagChip(
         text: 'Выход не подтверждён заказчиком',
