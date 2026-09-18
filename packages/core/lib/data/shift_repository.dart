@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 
+import '../notification.dart';
 import '../review.dart';
 import '../user.dart';
 import '../shift.dart';
@@ -114,6 +115,18 @@ abstract class ShiftRepository {
 
   /// Отзывы, которые получил исполнитель.
   Future<List<WorkerReview>> reviewsAbout(int workerId);
+
+  /// Уведомления текущего пользователя — новые сверху.
+  Future<List<AppNotification>> notifications();
+
+  /// Сколько уведомлений не прочитано — это число на колокольчике.
+  ///
+  /// Отдельный метод, а не `notifications().length`: на главном экране
+  /// нужно только число, и тянуть ради него все тексты из базы незачем.
+  Future<int> unreadNotifications();
+
+  /// Отметить все уведомления прочитанными.
+  Future<void> markNotificationsRead();
 
   /// Учебные данные: пара уже отработанных смен для нового пользователя,
   /// чтобы архив, кошелёк и отзывы не пустовали. Вызывать можно сколько
@@ -294,6 +307,7 @@ class DbShiftRepository implements ShiftRepository {
             .write(const ApplicationRowsCompanion(
           status: Value(ApplicationStatus.active),
         ));
+        await _notifyApplied(shift);
         return BookingResult.ok;
       }
 
@@ -305,8 +319,28 @@ class DbShiftRepository implements ShiftRepository {
               createdAt: DateTime.now(),
             ),
           );
+      await _notifyApplied(shift);
       return BookingResult.ok;
     });
+  }
+
+  Future<void> _notifyApplied(Shift shift) => _notify(
+        userId: shift.createdBy,
+        kind: NotificationKind.applied,
+        title: 'Новая запись на смену',
+        body: '$_myName записался на «${shift.title}» '
+            '${_dayText(shift.workDate)}.',
+        shiftId: shift.id,
+      );
+
+  /// Дата словами — «12 сентября». В уведомлении она нужна затем же,
+  /// зачем и в письме: читать «на смену 2026-09-12» неприятно.
+  static String _dayText(DateTime date) {
+    const months = [
+      'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+      'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+    ];
+    return '${date.day} ${months[date.month - 1]}';
   }
 
   @override
@@ -327,6 +361,15 @@ class DbShiftRepository implements ShiftRepository {
         .write(const ApplicationRowsCompanion(
       status: Value(ApplicationStatus.cancelled),
     ));
+
+    await _notify(
+      userId: shift.createdBy,
+      kind: NotificationKind.withdrew,
+      title: 'Человек снял запись',
+      body: '$_myName больше не выйдет на «${shift.title}» '
+          '${_dayText(shift.workDate)}. Место снова свободно.',
+      shiftId: shift.id,
+    );
     return BookingResult.ok;
   }
 
@@ -408,6 +451,18 @@ class DbShiftRepository implements ShiftRepository {
         .write(const ApplicationRowsCompanion(
       status: Value(ApplicationStatus.completed),
     ));
+
+    final shift = await shiftById(shiftId);
+    if (shift == null) return;
+    await _notify(
+      userId: workerId,
+      kind: NotificationKind.confirmed,
+      title: 'Смена подтверждена',
+      body: 'Заказчик подтвердил выход на «${shift.title}» '
+          '${_dayText(shift.workDate)}. '
+          'Начислено ${formatMoney(shift.totalPay)}.',
+      shiftId: shiftId,
+    );
   }
 
   @override
@@ -734,6 +789,18 @@ class DbShiftRepository implements ShiftRepository {
             ],
           ),
         );
+
+    final shift = await shiftById(shiftId);
+    await _notify(
+      userId: workerId,
+      kind: NotificationKind.rated,
+      title: 'Новая оценка: $rating из 5',
+      body: shift == null
+          ? 'Заказчик оценил вашу работу.'
+          : 'Заказчик оценил работу на «${shift.title}» '
+              '${_dayText(shift.workDate)}.',
+      shiftId: shiftId,
+    );
   }
 
   @override
@@ -765,6 +832,89 @@ class DbShiftRepository implements ShiftRepository {
 
   /// Первое заполнение базы. Настоящих смен нам взять неоткуда,
   /// поэтому кладём демонстрационные — но уже в настоящие таблицы.
+  // -------------------------------------------------------------------------
+  // УВЕДОМЛЕНИЯ
+  // -------------------------------------------------------------------------
+
+  /// Записать уведомление.
+  ///
+  /// Обрати внимание, где стоят вызовы этого метода: прямо в тех же
+  /// действиях, где событие и происходит — в `apply`, `confirmAttendance`
+  /// и так далее. Не в экранах.
+  ///
+  /// Если бы уведомление создавал экран, то стоило появиться второму
+  /// способу записаться на смену — скажем, из уведомления или с сервера —
+  /// и половина событий тихо перестала бы доходить. Правило то же, что и
+  /// с проверками: событие принадлежит действию, а не кнопке.
+  Future<void> _notify({
+    required int? userId,
+    required NotificationKind kind,
+    required String title,
+    required String body,
+    int? shiftId,
+  }) async {
+    // Некому — например, смена учебная, её никто не создавал.
+    if (userId == null || userId == 0) return;
+    // Себе не пишем: человек и так знает, что он только что сделал.
+    if (userId == _workerId) return;
+
+    await db.into(db.notificationRows).insert(
+          NotificationRowsCompanion.insert(
+            userId: userId,
+            kind: kind.name,
+            title: title,
+            body: body,
+            shiftId: Value(shiftId),
+            createdAt: DateTime.now(),
+          ),
+        );
+  }
+
+  /// Как подписать действующего в тексте уведомления.
+  String get _myName => session.user?.fullName ?? 'Кто-то';
+
+  @override
+  Future<List<AppNotification>> notifications() async {
+    final rows = await (db.select(db.notificationRows)
+          ..where((n) => n.userId.equals(_workerId))
+          ..orderBy([(n) => OrderingTerm.desc(n.createdAt)])
+          // Ограничение не ради экономии, а ради экрана: список на тысячу
+          // строк никто не листает, а грузиться он будет заметно.
+          ..limit(50))
+        .get();
+
+    return rows
+        .map((r) => AppNotification(
+              id: r.id,
+              kind: AppNotification.kindFrom(r.kind),
+              title: r.title,
+              body: r.body,
+              shiftId: r.shiftId,
+              createdAt: r.createdAt,
+              readAt: r.readAt,
+            ))
+        .toList();
+  }
+
+  @override
+  Future<int> unreadNotifications() async {
+    final row = await db.query(
+      '''
+      SELECT COUNT(*) AS cnt FROM notification_rows
+      WHERE user_id = ? AND read_at IS NULL''',
+      variables: [Variable<int>(_workerId)],
+      readsFrom: {db.notificationRows},
+    ).getSingle();
+    return row.read<int>('cnt');
+  }
+
+  @override
+  Future<void> markNotificationsRead() async {
+    await (db.update(db.notificationRows)
+          ..where((n) => n.userId.equals(_workerId) & n.readAt.isNull()))
+        .write(NotificationRowsCompanion(readAt: Value(DateTime.now())));
+  }
+
   Future<void> seedIfEmpty() async {
     final count = await db.shiftRows.count().getSingle();
     if (count > 0) return;

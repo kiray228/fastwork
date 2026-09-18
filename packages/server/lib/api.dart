@@ -9,6 +9,7 @@ import 'package:fastwork_core/data/current_user.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/data/support_repository.dart';
 import 'package:fastwork_core/support.dart';
+import 'package:fastwork_core/notification.dart';
 import 'package:fastwork_core/review.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
@@ -348,6 +349,31 @@ class Api {
       return _authorized(request, (user) async {
         final reviews = await _shiftsFor(user).reviewsAbout(user.id);
         return _json(reviews.map((r) => r.toJson()).toList());
+      });
+    });
+
+    // --- уведомления ------------------------------------------------------
+
+    router.get('/api/notifications', (Request request) async {
+      return _authorized(request, (user) async {
+        final items = await _shiftsFor(user).notifications();
+        return _json(items.map((n) => n.toJson()).toList());
+      });
+    });
+
+    // Число непрочитанных — отдельный адрес, потому что приложение
+    // спрашивает его часто, а тексты ему для кружка не нужны.
+    router.get('/api/notifications/unread', (Request request) async {
+      return _authorized(request, (user) async {
+        final count = await _shiftsFor(user).unreadNotifications();
+        return _json({'count': count});
+      });
+    });
+
+    router.post('/api/notifications/read', (Request request) async {
+      return _authorized(request, (user) async {
+        await _shiftsFor(user).markNotificationsRead();
+        return _json({'ok': true});
       });
     });
 

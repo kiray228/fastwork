@@ -304,6 +304,38 @@ class ApplicationStatus {
   static const completed = 'completed';
 }
 
+/// Уведомления — то, что показывает колокольчик.
+///
+/// Таблица намеренно «глупая»: в ней лежит уже готовый текст, а не ссылки,
+/// по которым его можно собрать. Почему — написано у модели
+/// `AppNotification`: уведомление рассказывает о том, что было верно
+/// в момент события, а не о том, что верно сейчас.
+class NotificationRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+
+  /// Кому адресовано.
+  IntColumn get userId => integer()();
+
+  /// Вид события — имя значения из `NotificationKind`.
+  TextColumn get kind => text()();
+
+  TextColumn get title => text()();
+  TextColumn get body => text()();
+
+  /// Смена, к которой относится событие.
+  ///
+  /// Здесь нарочно **нет** внешнего ключа со связью «удалить вместе со
+  /// сменой». В остальных таблицах он есть: отклик без смены — мусор.
+  /// А уведомление «смену отменили» без смены — как раз то, ради чего
+  /// оно и написано. Пусть переживёт саму смену.
+  IntColumn get shiftId => integer().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  /// Когда прочитано. null — ещё не прочитано.
+  DateTimeColumn get readAt => dateTime().nullable()();
+}
+
 // ---------------------------------------------------------------------------
 // БАЗА ДАННЫХ
 // ---------------------------------------------------------------------------
@@ -321,6 +353,7 @@ class ApplicationStatus {
     WorkerReviewRows,
     AuthCodeRows,
     AuthTokenRows,
+    NotificationRows,
   ],
 )
 /// Описание базы: какие таблицы и какой версии схема.
@@ -378,7 +411,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Версия схемы. Каждое изменение таблиц поднимает номер на единицу.
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -419,6 +452,9 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(userRows, userRows.email);
             await m.createTable(authCodeRows);
             await m.createTable(authTokenRows);
+          }
+          if (from < 9) {
+            await m.createTable(notificationRows);
           }
         },
         beforeOpen: (details) async {

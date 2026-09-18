@@ -17,6 +17,15 @@ class AppColors {
   static const accent = Color(0xFFF59E0B);
   static const accentSoft = Color(0xFFFEF3C7);
 
+  // Смысловые цвета: «получилось», «внимание», «плохо».
+  //
+  // Названы по смыслу, а не по цвету: `danger`, а не `red`. Если завтра
+  // красный сменится на малиновый, править придётся одну строку здесь,
+  // а не искать по коду все слова «red».
+  static const success = Color(0xFF16A34A);
+  static const warning = Color(0xFFEA580C);
+  static const danger = Color(0xFFDC2626);
+
   // Текст и фон, светлая тема
   static const ink = Color(0xFF0F172A); // заголовки, суммы
   static const body = Color(0xFF475569); // обычный текст

@@ -11,6 +11,7 @@ import 'package:fastwork/data/repositories.dart';
 import 'package:fastwork/data/session.dart';
 import 'package:fastwork_core/data/shift_filter.dart';
 import 'package:fastwork_core/data/support_repository.dart';
+import 'package:fastwork_core/notification.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
 import 'package:fastwork/widgets/skeleton.dart';
@@ -799,6 +800,75 @@ void main() {
 
       expect(find.text('Смена в Астане'), findsOneWidget);
       expect(find.text('Смена в Алматы'), findsNothing);
+    });
+  });
+
+  group('уведомления', () {
+    AppNotification note({
+      int id = 1,
+      NotificationKind kind = NotificationKind.applied,
+      String title = 'Новая запись на смену',
+      DateTime? readAt,
+      int? shiftId,
+    }) =>
+        AppNotification(
+          id: id,
+          kind: kind,
+          title: title,
+          body: 'Азамат записался на «Услуги грузчика» 12 сентября.',
+          shiftId: shiftId,
+          createdAt: DateTime.now().subtract(const Duration(minutes: 5)),
+          readAt: readAt,
+        );
+
+    testWidgets('без уведомлений на колокольчике нет числа', (tester) async {
+      await openApp(tester);
+
+      expect(find.byIcon(Icons.notifications_none_rounded), findsOneWidget);
+      expect(find.text('1'), findsNothing);
+    });
+
+    testWidgets('непрочитанные показываются числом', (tester) async {
+      final repo = FakeShiftRepository()
+        ..pushNotification(note(id: 1))
+        ..pushNotification(note(id: 2, kind: NotificationKind.rated));
+
+      await openApp(tester, shifts: repo);
+
+      expect(find.text('2'), findsOneWidget);
+    });
+
+    testWidgets('колокольчик открывает список', (tester) async {
+      final repo = FakeShiftRepository()..pushNotification(note());
+
+      await openApp(tester, shifts: repo);
+      await tester.tap(find.byTooltip('Уведомления'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Уведомления'), findsOneWidget);
+      expect(find.text('Новая запись на смену'), findsOneWidget);
+    });
+
+    testWidgets('после просмотра число пропадает', (tester) async {
+      final repo = FakeShiftRepository()..pushNotification(note());
+
+      await openApp(tester, shifts: repo);
+      expect(find.text('1'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Уведомления'));
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(find.text('1'), findsNothing);
+    });
+
+    testWidgets('пустой список объясняет, что здесь будет', (tester) async {
+      await openApp(tester);
+      await tester.tap(find.byTooltip('Уведомления'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Уведомлений нет'), findsOneWidget);
     });
   });
 

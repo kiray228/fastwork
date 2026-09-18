@@ -3,6 +3,7 @@ import 'package:fastwork_core/data/auth_repository.dart';
 import 'package:fastwork_core/data/database.dart';
 import 'package:fastwork/data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
+import 'package:fastwork_core/notification.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Тесты против **настоящей** SQLite, только в памяти.
@@ -320,5 +321,87 @@ void main() {
 
     // В helper выход подтверждён — смена засчитана.
     expect((await auth.refresh(workerId))!.completedShifts, 1);
+  });
+
+  // ---------------------------------------------------------------------
+  // УВЕДОМЛЕНИЯ
+  //
+  // Проверяем не тексты, а главное: уведомление уходит **тому, кому надо**,
+  // и не уходит тому, кто сам это действие и совершил.
+  // ---------------------------------------------------------------------
+
+  test('запись на смену уведомляет заказчика, а не исполнителя', () async {
+    final (_, workerId, managerId) = await workedShift();
+
+    session.setUser(await auth.refresh(managerId));
+    final forManager = await shifts.notifications();
+    expect(
+      forManager.where((n) => n.kind == NotificationKind.applied),
+      hasLength(1),
+      reason: 'заказчик должен узнать о новой записи',
+    );
+
+    session.setUser(await auth.refresh(workerId));
+    final forWorker = await shifts.notifications();
+    expect(
+      forWorker.where((n) => n.kind == NotificationKind.applied),
+      isEmpty,
+      reason: 'самому себе уведомление о своём же действии не нужно',
+    );
+  });
+
+  test('подтверждение выхода уведомляет исполнителя', () async {
+    final (_, workerId, _) = await workedShift();
+
+    session.setUser(await auth.refresh(workerId));
+    final mine = await shifts.notifications();
+    final confirmed =
+        mine.where((n) => n.kind == NotificationKind.confirmed).toList();
+
+    expect(confirmed, hasLength(1));
+    // Сумма попадает в текст: уведомление должно читаться само по себе,
+    // без перехода на смену.
+    expect(confirmed.first.body, contains('₸'));
+  });
+
+  test('оценка уведомляет исполнителя', () async {
+    final (shiftId, workerId, managerId) = await workedShift();
+
+    session.setUser(await auth.refresh(managerId));
+    await shifts.rateWorker(shiftId: shiftId, workerId: workerId, rating: 5);
+
+    session.setUser(await auth.refresh(workerId));
+    final rated = (await shifts.notifications())
+        .where((n) => n.kind == NotificationKind.rated);
+    expect(rated, hasLength(1));
+    expect(rated.first.title, contains('5'));
+  });
+
+  test('прочитанные уведомления перестают считаться непрочитанными',
+      () async {
+    final (_, workerId, _) = await workedShift();
+    session.setUser(await auth.refresh(workerId));
+
+    expect(await shifts.unreadNotifications(), greaterThan(0));
+
+    await shifts.markNotificationsRead();
+    expect(await shifts.unreadNotifications(), 0);
+
+    // Сами уведомления никуда не делись — их просто прочитали.
+    expect(await shifts.notifications(), isNotEmpty);
+  });
+
+  test('уведомления одного человека не видны другому', () async {
+    final (_, workerId, managerId) = await workedShift();
+
+    session.setUser(await auth.refresh(workerId));
+    final mine = await shifts.notifications();
+
+    session.setUser(await auth.refresh(managerId));
+    final theirs = await shifts.notifications();
+
+    final myIds = mine.map((n) => n.id).toSet();
+    final theirIds = theirs.map((n) => n.id).toSet();
+    expect(myIds.intersection(theirIds), isEmpty);
   });
 }

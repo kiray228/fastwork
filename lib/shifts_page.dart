@@ -4,6 +4,7 @@ import 'data/session.dart';
 import 'package:fastwork_core/data/shift_filter.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/shift.dart';
+import 'notifications_page.dart';
 import 'shift_detail_page.dart';
 import 'theme/app_colors.dart';
 import 'widgets/async_state.dart';
@@ -49,12 +50,16 @@ class _ShiftsPageState extends State<ShiftsPage> {
   /// передать в окно фильтра и вернуть обратно.
   ShiftFilter filter = const ShiftFilter();
 
+  /// Сколько уведомлений не прочитано — число в кружке на колокольчике.
+  int unread = 0;
+
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
     today = DateTime(now.year, now.month, now.day);
     _load();
+    _loadUnread();
   }
 
   DateTime dayAt(int index) =>
@@ -91,6 +96,35 @@ class _ShiftsPageState extends State<ShiftsPage> {
           break;
       }
     });
+  }
+
+  /// Число непрочитанных грузим **отдельным** запросом, а не вместе
+  /// со сменами.
+  ///
+  /// Причина простая: если уведомления не ответят, лента всё равно должна
+  /// показаться. Свяжи мы их в один запрос — упало бы всё сразу, и человек
+  /// остался бы без смен из-за неработающего колокольчика.
+  Future<void> _loadUnread() async {
+    try {
+      final count = await widget.repository.unreadNotifications();
+      if (!mounted) return;
+      setState(() => unread = count);
+    } catch (_) {
+      // Не узнали — просто не показываем кружок.
+    }
+  }
+
+  Future<void> _openNotifications() async {
+    await Navigator.of(context).push(
+      appRoute(
+        NotificationsPage(
+          session: widget.session,
+          repository: widget.repository,
+        ),
+      ),
+    );
+    // Вернулись — уведомления уже прочитаны, кружок пора убрать.
+    await _loadUnread();
   }
 
   void _retry() {
@@ -149,10 +183,7 @@ class _ShiftsPageState extends State<ShiftsPage> {
       appBar: AppBar(
         title: const Wordmark(),
         actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_none_rounded),
-          ),
+          _BellButton(unread: unread, onPressed: _openNotifications),
           const SizedBox(width: 4),
         ],
       ),
@@ -329,6 +360,59 @@ class _FilterButton extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Колокольчик с числом непрочитанных.
+///
+/// Кружок рисуется поверх значка через `Stack` — это обычный способ
+/// положить одно на другое. Числа больше девяти не показываем: «12» уже
+/// не помещается в кружок, а «9+» читается и означает то же самое —
+/// «много».
+class _BellButton extends StatelessWidget {
+  final int unread;
+  final VoidCallback onPressed;
+
+  const _BellButton({required this.unread, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: onPressed,
+      tooltip: 'Уведомления',
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(
+            unread > 0
+                ? Icons.notifications_rounded
+                : Icons.notifications_none_rounded,
+          ),
+          if (unread > 0)
+            Positioned(
+              right: -4,
+              top: -4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                constraints: const BoxConstraints(minWidth: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.danger,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Text(
+                  unread > 9 ? '9+' : '$unread',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'package:fastwork_core/notification.dart';
 import 'package:fastwork_core/review.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
@@ -206,6 +207,25 @@ class ApiShiftRepository implements ShiftRepository {
         .map((e) => workerReviewFromJson(e as Map<String, dynamic>))
         .toList();
   }
+
+  @override
+  Future<List<AppNotification>> notifications() async {
+    final data = await client.get('/api/notifications') as List<dynamic>;
+    return data
+        .map((e) => notificationFromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<int> unreadNotifications() async {
+    final data =
+        await client.get('/api/notifications/unread') as Map<String, dynamic>;
+    return data['count'] as int;
+  }
+
+  @override
+  Future<void> markNotificationsRead() =>
+      client.post('/api/notifications/read', const {});
 
   @override
   Future<void> prepareDemoHistory(int userId) async {

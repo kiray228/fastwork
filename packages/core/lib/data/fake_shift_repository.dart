@@ -1,3 +1,4 @@
+import '../notification.dart';
 import '../review.dart';
 import '../shift.dart';
 import '../user.dart';
@@ -301,6 +302,40 @@ class FakeShiftRepository implements ShiftRepository {
   @override
   Future<void> prepareDemoHistory(int userId) async {
     // В памяти истории нет — тестам она не нужна.
+  }
+
+  /// Уведомления, которые кто-то «прислал» в памяти.
+  final List<AppNotification> _notifications = [];
+
+  /// Добавить уведомление руками — нужно тестам и демонстрации.
+  void pushNotification(AppNotification notification) =>
+      _notifications.add(notification);
+
+  @override
+  Future<List<AppNotification>> notifications() async =>
+      List.unmodifiable(_notifications.reversed);
+
+  @override
+  Future<int> unreadNotifications() async =>
+      _notifications.where((n) => n.isUnread).length;
+
+  @override
+  Future<void> markNotificationsRead() async {
+    final now = DateTime.now();
+    for (var i = 0; i < _notifications.length; i++) {
+      final n = _notifications[i];
+      if (n.isUnread) {
+        _notifications[i] = AppNotification(
+          id: n.id,
+          kind: n.kind,
+          title: n.title,
+          body: n.body,
+          shiftId: n.shiftId,
+          createdAt: n.createdAt,
+          readAt: now,
+        );
+      }
+    }
   }
 
   @override
