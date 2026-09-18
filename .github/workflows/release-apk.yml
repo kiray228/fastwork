@@ -57,7 +57,14 @@ jobs:
       - name: Проверить, что ничего не сломано
         run: flutter test
 
-      - name: Собрать APK
+      - name: Собрать APK под каждый процессор
+        # --split-per-abi делает не один файл, а три — по одному на тип
+        # процессора. Каждый весит около 20 МБ вместо 60, потому что внутри
+        # лежит машинный код только для «своего» процессора.
+        #
+        # Зачем: универсальный файл на 60 МБ телефон качает и распаковывает
+        # заметно дольше, и установка выглядит зависшей.
+        #
         # API_URL вшивается в сборку — именно отсюда приложение на телефоне
         # берёт смены и аккаунты. Без него оно полезло бы в локальную базу
         # на самом телефоне и не увидело бы ни одной чужой смены.
@@ -66,31 +73,60 @@ jobs:
         # растёт сам, поэтому каждая сборка получает свой номер, и Android
         # понимает, какая новее, когда ставишь обновление поверх старой.
         run: >
+          flutter build apk --release --split-per-abi
+          --dart-define=API_URL=https://fastwork-server.onrender.com
+          --build-name=1.0.${{ github.run_number }}
+          --build-number=${{ github.run_number }}
+
+      - name: Собрать универсальный APK
+        # Запасной вариант: подходит любому телефону, но тяжёлый.
+        # Нужен на случай, если непонятно, какой процессор в телефоне.
+        run: >
           flutter build apk --release
           --dart-define=API_URL=https://fastwork-server.onrender.com
           --build-name=1.0.${{ github.run_number }}
           --build-number=${{ github.run_number }}
 
-      - name: Дать файлу понятное имя
+      - name: Дать файлам понятные имена
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk \
-             dist/fastwork-1.0.${{ github.run_number }}.apk
+          cd build/app/outputs/flutter-apk
+          V=1.0.${{ github.run_number }}
+          cp app-arm64-v8a-release.apk   "$GITHUB_WORKSPACE/dist/fastwork-$V-arm64.apk"
+          cp app-armeabi-v7a-release.apk "$GITHUB_WORKSPACE/dist/fastwork-$V-arm32.apk"
+          cp app-release.apk             "$GITHUB_WORKSPACE/dist/fastwork-$V-universal.apk"
+          ls -lh "$GITHUB_WORKSPACE/dist"
 
       - name: Выложить в Releases
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: fastwork 1.0.${{ github.run_number }}
-          files: dist/fastwork-1.0.${{ github.run_number }}.apk
+          files: dist/*.apk
           body: |
             Приложение для Android.
 
+            **Какой файл скачивать**
+
+            | Файл | Кому |
+            | --- | --- |
+            | `fastwork-1.0.${{ github.run_number }}-arm64.apk` | почти всем — любой телефон новее 2016 года |
+            | `fastwork-1.0.${{ github.run_number }}-arm32.apk` | старым и очень дешёвым телефонам |
+            | `fastwork-1.0.${{ github.run_number }}-universal.apk` | если первые два не встали |
+
+            Бери **arm64**. Он втрое меньше универсального и ставится быстрее.
+
             **Как поставить на телефон**
             1. Скачай файл `.apk` ниже — прямо с телефона.
-            2. Открой его. Android спросит разрешение ставить приложения
-               из этого источника — разреши.
-            3. Готово.
+            2. Открой его через «Файлы» → «Загрузки», а не из уведомления
+               браузера: так видно, что файл скачался целиком.
+            3. Android спросит разрешение ставить приложения из этого
+               источника — разреши.
+
+            **Если установка подвисла надолго** — это Play Защита проверяет
+            незнакомый файл на серверах Google. Play Маркет → аватар →
+            «Play Защита» → шестерёнка → выключить «Сканировать приложения».
+            После установки можно включить обратно.
 
             Если ставишь поверх старой версии и Android ругается на подпись —
             удали старую и поставь заново. Ничего не потеряется: аккаунт и
