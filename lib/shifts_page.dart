@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'data/session.dart';
@@ -53,6 +55,16 @@ class _ShiftsPageState extends State<ShiftsPage> {
   /// Сколько уведомлений не прочитано — число в кружке на колокольчике.
   int unread = 0;
 
+  final TextEditingController searchController = TextEditingController();
+
+  /// Отложенный запуск поиска.
+  ///
+  /// Без него запрос к базе уходил бы на **каждую букву**: набрал
+  /// «грузчик» — семь запросов, из которых нужен только последний.
+  /// Ждём, пока человек остановится на треть секунды, и только тогда ищем.
+  /// Приём называется debounce.
+  Timer? searchDebounce;
+
   @override
   void initState() {
     super.initState();
@@ -60,6 +72,25 @@ class _ShiftsPageState extends State<ShiftsPage> {
     today = DateTime(now.year, now.month, now.day);
     _load();
     _loadUnread();
+  }
+
+  @override
+  void dispose() {
+    searchDebounce?.cancel();
+    searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    searchDebounce?.cancel();
+    searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      setState(() {
+        filter = filter.copyWith(query: value);
+        state = const Loading();
+      });
+      _load();
+    });
   }
 
   DateTime dayAt(int index) =>
@@ -196,6 +227,14 @@ class _ShiftsPageState extends State<ShiftsPage> {
             hasShiftsOn: (date) => daysWithShifts.contains(date),
             onDaySelected: _selectDay,
           ),
+          _SearchField(
+            controller: searchController,
+            onChanged: _onSearchChanged,
+            onClear: () {
+              searchController.clear();
+              _onSearchChanged('');
+            },
+          ),
           _ListHeader(
             date: selectedDate,
             count: count,
@@ -217,11 +256,15 @@ class _ShiftsPageState extends State<ShiftsPage> {
                         : Icons.filter_alt_off_rounded,
                     title: filter.isEmpty
                         ? 'На этот день смен нет'
-                        : 'Ничего не найдено',
+                        : filter.query.isNotEmpty
+                            ? 'По запросу ничего нет'
+                            : 'Ничего не найдено',
                     subtitle: filter.isEmpty
                         ? 'Выберите другую дату — зелёная точка\n'
                             'под числом означает, что смены есть'
-                        : 'Попробуйте убрать часть условий\nв фильтре',
+                        : filter.query.isNotEmpty
+                            ? 'Проверьте написание\nили поищите в другой день'
+                            : 'Попробуйте убрать часть условий\nв фильтре',
                   ),
                 Ready(:final value) => RefreshIndicator(
                     onRefresh: _load,
@@ -413,6 +456,50 @@ class _BellButton extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Строка поиска над лентой.
+class _SearchField extends StatelessWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
+
+  const _SearchField({
+    required this.controller,
+    required this.onChanged,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      // ValueListenableBuilder слушает сам контроллер: крестик должен
+      // появляться сразу при вводе, а не через треть секунды вместе
+      // с результатами поиска.
+      child: ValueListenableBuilder<TextEditingValue>(
+        valueListenable: controller,
+        builder: (context, value, _) => TextField(
+          controller: controller,
+          onChanged: onChanged,
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            hintText: 'Грузчик, Магнум, Абая…',
+            prefixIcon: const Icon(Icons.search_rounded, size: 20),
+            suffixIcon: value.text.isEmpty
+                ? null
+                : IconButton(
+                    onPressed: onClear,
+                    tooltip: 'Очистить',
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                  ),
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(vertical: 12),
+          ),
+        ),
       ),
     );
   }

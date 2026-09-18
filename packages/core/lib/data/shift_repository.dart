@@ -147,6 +147,23 @@ abstract class ShiftRepository {
 List<Shift> applyFilter(List<Shift> shifts, ShiftFilter filter) {
   var result = shifts;
 
+  // Поиск словами. Ищем по названию, компании и адресу сразу: человек
+  // набирает «грузчик», «Магнум» или «Абая», не задумываясь, что из этого
+  // куда относится.
+  //
+  // Приводим обе стороны к нижнему регистру — иначе «Магнум» и «магнум»
+  // оказались бы разными словами, а для человека это одно и то же.
+  final query = filter.query.trim().toLowerCase();
+  if (query.isNotEmpty) {
+    result = result.where((s) {
+      final haystack =
+          '${s.title} ${s.company} ${s.address}'.toLowerCase();
+      // Все слова запроса должны найтись — но в любом порядке.
+      // «грузчик магнум» и «магнум грузчик» дадут одно и то же.
+      return query.split(RegExp(r'\s+')).every(haystack.contains);
+    }).toList();
+  }
+
   if (filter.companies.isNotEmpty) {
     result =
         result.where((s) => filter.companies.contains(s.company)).toList();

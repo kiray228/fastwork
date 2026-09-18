@@ -17,14 +17,21 @@ class ShiftFilter {
   final bool onlyOpen; // только смены со свободными местами
   final ShiftSort sort;
 
+  /// Что человек ищет словами. Пустая строка — не ищет ничего.
+  final String query;
+
   const ShiftFilter({
     this.companies = const {},
     this.onlyOpen = false,
     this.sort = ShiftSort.byTime,
+    this.query = '',
   });
 
   bool get isEmpty =>
-      companies.isEmpty && !onlyOpen && sort == ShiftSort.byTime;
+      companies.isEmpty &&
+      !onlyOpen &&
+      sort == ShiftSort.byTime &&
+      query.isEmpty;
 
   /// Сколько условий выбрано — показываем числом на кнопке «Фильтр».
   int get activeCount => companies.length + (onlyOpen ? 1 : 0);
@@ -33,10 +40,12 @@ class ShiftFilter {
     Set<String>? companies,
     bool? onlyOpen,
     ShiftSort? sort,
+    String? query,
   }) =>
       ShiftFilter(
         companies: companies ?? this.companies,
         onlyOpen: onlyOpen ?? this.onlyOpen,
         sort: sort ?? this.sort,
+        query: query ?? this.query,
       );
 }

@@ -803,6 +803,83 @@ void main() {
     });
   });
 
+  group('поиск', () {
+    FakeShiftRepository twoShifts() {
+      final now = DateTime.now();
+      Shift make(int id, String title, String company, String address) => Shift(
+            id: id,
+            workDate: DateTime(now.year, now.month, now.day),
+            title: title,
+            company: company,
+            address: address,
+            city: 'Алматы',
+            startMinutes: 600,
+            endMinutes: 1200,
+            hourlyRate: 100000,
+            workersNeeded: 3,
+            workersHired: 0,
+          );
+
+      return FakeShiftRepository(shifts: [
+        make(1, 'Услуги грузчика', 'Magnum', 'г. Алматы, ул. Абая, 1'),
+        make(2, 'Услуги повара', 'Small', 'г. Алматы, ул. Сатпаева, 9'),
+      ]);
+    }
+
+    testWidgets('находит по названию', (tester) async {
+      await openApp(tester, shifts: twoShifts());
+
+      await tester.enterText(find.byType(TextField).first, 'повар');
+      // Поиск отложенный — надо дождаться, пока он сработает.
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Услуги повара'), findsOneWidget);
+      expect(find.text('Услуги грузчика'), findsNothing);
+    });
+
+    testWidgets('находит по компании и по адресу', (tester) async {
+      await openApp(tester, shifts: twoShifts());
+
+      await tester.enterText(find.byType(TextField).first, 'magnum');
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(find.text('Услуги грузчика'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField).first, 'сатпаева');
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(find.text('Услуги повара'), findsOneWidget);
+    });
+
+    testWidgets('по пустому запросу ничего не найдено — с объяснением',
+        (tester) async {
+      await openApp(tester, shifts: twoShifts());
+
+      await tester.enterText(find.byType(TextField).first, 'сварщик');
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+
+      expect(find.text('По запросу ничего нет'), findsOneWidget);
+    });
+
+    testWidgets('крестик возвращает весь список', (tester) async {
+      await openApp(tester, shifts: twoShifts());
+
+      await tester.enterText(find.byType(TextField).first, 'повар');
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(find.text('Услуги грузчика'), findsNothing);
+
+      await tester.tap(find.byTooltip('Очистить'));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Услуги грузчика'), findsOneWidget);
+      expect(find.text('Услуги повара'), findsOneWidget);
+    });
+  });
+
   group('отмена смены заказчиком', () {
     Shift todayShift() {
       final now = DateTime.now();
