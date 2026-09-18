@@ -1,0 +1,87 @@
+# Сборка приложения и выкладывание его на GitHub Pages.
+#
+# Это «действие» (GitHub Action) — программа, которую GitHub запускает у
+# себя при каждом пуше в main. Она собирает приложение и публикует его.
+#
+# Тебе больше ничего делать не надо: поправил код, запушил — через пару
+# минут новая версия уже в интернете.
+
+name: Выложить приложение
+
+on:
+  # При каждом пуше в главную ветку.
+  push:
+    branches: [main]
+  # И по кнопке вручную, во вкладке Actions.
+  workflow_dispatch:
+
+# Разрешения, без которых GitHub не даст опубликовать страницу.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Если пушей подряд несколько, доводим до конца только последний —
+# нет смысла выкладывать версию, которую уже успели заменить.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Собрать
+    runs-on: ubuntu-latest
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Поставить Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          # Версия зафиксирована, а не «последняя стабильная».
+          # Иначе однажды выйдет новая, что-то в ней изменится, и сборка
+          # сломается сама по себе — без единой правки в коде.
+          flutter-version: 3.47.4
+          channel: stable
+          cache: true
+
+      - name: Скачать зависимости
+        run: flutter pub get
+
+      - name: Проверить, что ничего не сломано
+        # Выкладывать непроверенное незачем: если тесты упали,
+        # до публикации дело не дойдёт.
+        run: flutter test
+
+      - name: Собрать приложение
+        # base-href нужен, потому что сайт лежит не в корне адреса,
+        # а в подпапке /fastwork/. Без него приложение искало бы свои
+        # файлы не там и показало бы белый экран.
+        #
+        # API_URL — адрес сервера на Render. Он вшивается в сборку:
+        # именно отсюда приложение берёт смены и аккаунты.
+        run: >
+          flutter build web --release
+          --no-web-resources-cdn
+          --base-href /fastwork/
+          --dart-define=API_URL=https://fastwork-server.onrender.com
+
+      - name: Подготовить публикацию
+        uses: actions/configure-pages@v5
+
+      - name: Отдать собранное GitHub
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    name: Опубликовать
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Опубликовать на GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
