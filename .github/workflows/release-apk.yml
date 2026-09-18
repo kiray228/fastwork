@@ -1,0 +1,103 @@
+# Сборка приложения для Android и выкладывание файла .apk,
+# который можно скачать на телефон и установить.
+#
+# Зачем это здесь, а не на твоём ноутбуке: чтобы собрать APK, нужен
+# Android SDK — несколько гигабайт инструментов. У GitHub они уже
+# установлены на его машинах. Значит, ставить ничего не надо: пушишь код —
+# GitHub сам собирает и кладёт готовый файл в раздел Releases.
+#
+# Где скачивать готовый файл:
+#   https://github.com/kiray228/fastwork/releases/latest
+
+name: Собрать APK для Android
+
+on:
+  push:
+    branches: [main]
+  # И по кнопке вручную, во вкладке Actions.
+  workflow_dispatch:
+
+# Право создавать релизы и прикладывать к ним файлы.
+permissions:
+  contents: write
+
+# Собираем только последний пуш: если их несколько подряд,
+# нет смысла выкладывать версию, которую уже успели заменить.
+concurrency:
+  group: apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Собрать и выложить
+    runs-on: ubuntu-latest
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Поставить Java
+        # Android собирается сборщиком Gradle, а он работает на Java.
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Поставить Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          # Та же версия, что и у сборки сайта: пусть обе сборки
+          # получаются из одного и того же инструмента.
+          flutter-version: 3.47.4
+          channel: stable
+          cache: true
+
+      - name: Скачать зависимости
+        run: flutter pub get
+
+      - name: Проверить, что ничего не сломано
+        run: flutter test
+
+      - name: Собрать APK
+        # API_URL вшивается в сборку — именно отсюда приложение на телефоне
+        # берёт смены и аккаунты. Без него оно полезло бы в локальную базу
+        # на самом телефоне и не увидело бы ни одной чужой смены.
+        #
+        # build-name/build-number — версия приложения. Номер запуска
+        # растёт сам, поэтому каждая сборка получает свой номер, и Android
+        # понимает, какая новее, когда ставишь обновление поверх старой.
+        run: >
+          flutter build apk --release
+          --dart-define=API_URL=https://fastwork-server.onrender.com
+          --build-name=1.0.${{ github.run_number }}
+          --build-number=${{ github.run_number }}
+
+      - name: Дать файлу понятное имя
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk \
+             dist/fastwork-1.0.${{ github.run_number }}.apk
+
+      - name: Выложить в Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: fastwork 1.0.${{ github.run_number }}
+          files: dist/fastwork-1.0.${{ github.run_number }}.apk
+          body: |
+            Приложение для Android.
+
+            **Как поставить на телефон**
+            1. Скачай файл `.apk` ниже — прямо с телефона.
+            2. Открой его. Android спросит разрешение ставить приложения
+               из этого источника — разреши.
+            3. Готово.
+
+            Если ставишь поверх старой версии и Android ругается на подпись —
+            удали старую и поставь заново. Ничего не потеряется: аккаунт и
+            смены хранятся на сервере, а не в телефоне.
+
+            Приложение работает с сервером
+            https://fastwork-server.onrender.com — аккаунт и смены те же,
+            что и на сайте https://kiray228.github.io/fastwork/
+
+            Собрано из коммита ${{ github.sha }}.
