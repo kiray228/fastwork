@@ -19,8 +19,9 @@ enum BookingResult {
   ratingTooLow, // рейтинг ниже порога заказчика
   tooLateToCancel, // срок отмены прошёл
   tooEarlyToCheckIn, // отметиться можно только в день смены
-  notMine, // чужую смену отменить нельзя
+  notMine, // чужую смену отменить или изменить нельзя
   alreadyCancelled, // смена уже отменена
+  fewerThanHired, // мест меньше, чем уже набрано людей
   notFound,
 }
 
@@ -95,6 +96,24 @@ abstract class ShiftRepository {
 
   /// Заказчик отменяет свою смену. Всем записавшимся уходит уведомление.
   Future<BookingResult> cancelShift(int shiftId);
+
+  /// Заказчик правит свою смену.
+  ///
+  /// Меняется не всё подряд: день, время, ставка, адрес, описание и число
+  /// мест. Компанию и город не трогаем — они берутся из профиля заказчика,
+  /// а не набираются руками.
+  Future<BookingResult> updateShift({
+    required int shiftId,
+    required DateTime workDate,
+    required String title,
+    required String address,
+    required int startMinutes,
+    required int endMinutes,
+    required int hourlyRate,
+    required int workersNeeded,
+    List<String> duties,
+    String? dressCode,
+  });
 
   /// Отметиться на смене: «я на месте».
   Future<BookingResult> checkIn(int shiftId);
@@ -910,6 +929,110 @@ class DbShiftRepository implements ShiftRepository {
 
       return BookingResult.ok;
     });
+  }
+
+  @override
+  Future<BookingResult> updateShift({
+    required int shiftId,
+    required DateTime workDate,
+    required String title,
+    required String address,
+    required int startMinutes,
+    required int endMinutes,
+    required int hourlyRate,
+    required int workersNeeded,
+    List<String> duties = const [],
+    String? dressCode,
+  }) async {
+    return db.transaction(() async {
+      final before = await shiftById(shiftId);
+      if (before == null) return BookingResult.notFound;
+      if (before.createdBy != _workerId) return BookingResult.notMine;
+      if (before.isCancelled) return BookingResult.alreadyCancelled;
+
+      // Мест не может стать меньше, чем людей уже набрано. Иначе кого-то
+      // пришлось бы выставить — а обещание работы уже дано.
+      if (workersNeeded < before.workersHired) {
+        return BookingResult.fewerThanHired;
+      }
+
+      await (db.update(db.shiftRows)..where((s) => s.id.equals(shiftId)))
+          .write(ShiftRowsCompanion(
+        workDate: Value(workDate),
+        title: Value(title),
+        address: Value(address),
+        startMinutes: Value(startMinutes),
+        endMinutes: Value(endMinutes),
+        hourlyRate: Value(hourlyRate),
+        workersNeeded: Value(workersNeeded),
+        duties: Value(duties.join('\n')),
+        dressCode: Value(dressCode),
+      ));
+
+      final changes = _describeChanges(
+        before,
+        workDate: workDate,
+        address: address,
+        startMinutes: startMinutes,
+        endMinutes: endMinutes,
+        hourlyRate: hourlyRate,
+      );
+
+      // Молчим, если поменяли мелочь вроде описания: уведомление о том,
+      // чего человек не заметит, только приучает не читать уведомления.
+      if (changes.isNotEmpty) {
+        final affected = await (db.select(db.applicationRows)
+              ..where((a) =>
+                  a.shiftId.equals(shiftId) &
+                  a.status.equals(ApplicationStatus.active)))
+            .get();
+
+        for (final application in affected) {
+          await _notify(
+            userId: application.workerId,
+            kind: NotificationKind.shiftChanged,
+            title: 'Смена изменилась',
+            body: '«${before.title}» ${_dayText(before.workDate)}: '
+                '${changes.join(', ')}.',
+            shiftId: shiftId,
+          );
+        }
+      }
+
+      return BookingResult.ok;
+    });
+  }
+
+  /// Что именно изменилось — человеческим языком, для уведомления.
+  ///
+  /// Сравниваем только то, ради чего стоит побеспокоить: день, время,
+  /// ставку и адрес. Из-за правки опечатки в описании писать не будем.
+  static List<String> _describeChanges(
+    Shift before, {
+    required DateTime workDate,
+    required String address,
+    required int startMinutes,
+    required int endMinutes,
+    required int hourlyRate,
+  }) {
+    final changes = <String>[];
+
+    final sameDay = before.workDate.year == workDate.year &&
+        before.workDate.month == workDate.month &&
+        before.workDate.day == workDate.day;
+    if (!sameDay) changes.add('новый день — ${_dayText(workDate)}');
+
+    if (before.startMinutes != startMinutes ||
+        before.endMinutes != endMinutes) {
+      changes.add('новое время — '
+          '${formatTime(startMinutes)}–${formatTime(endMinutes)}');
+    }
+    if (before.hourlyRate != hourlyRate) {
+      changes.add('новая ставка — ${formatMoney(hourlyRate)}/ч');
+    }
+    if (before.address != address) changes.add('новый адрес — $address');
+
+    return changes;
   }
 
   // -------------------------------------------------------------------------

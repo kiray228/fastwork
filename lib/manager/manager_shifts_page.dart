@@ -9,6 +9,7 @@ import '../widgets/async_state.dart';
 import '../widgets/common.dart';
 import '../widgets/nav.dart';
 import '../widgets/skeleton.dart';
+import 'create_shift_page.dart';
 
 /// Смены, созданные заказчиком, и кто на них записался.
 class ManagerShiftsPage extends StatefulWidget {
@@ -91,6 +92,20 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
     await _load();
   }
 
+  Future<void> _editShift(Shift shift) async {
+    await Navigator.of(context).push(
+      appRoute(
+        CreateShiftPage(
+          session: widget.session,
+          repository: widget.repository,
+          editing: shift,
+          onCreated: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+    await _load();
+  }
+
   Future<void> _openApplicants(Shift shift) async {
     await Navigator.of(context).push(
       appRoute(
@@ -131,6 +146,7 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
                     shift: value[index],
                     onTap: () => _openApplicants(value[index]),
                     onCancel: () => _cancelShift(value[index]),
+                    onEdit: () => _editShift(value[index]),
                   ),
                 ),
               ),
@@ -145,11 +161,13 @@ class _ManagerShiftCard extends StatelessWidget {
   final Shift shift;
   final VoidCallback onTap;
   final VoidCallback onCancel;
+  final VoidCallback onEdit;
 
   const _ManagerShiftCard({
     required this.shift,
     required this.onTap,
     required this.onCancel,
+    required this.onEdit,
   });
 
   @override
@@ -250,7 +268,23 @@ class _ManagerShiftCard extends StatelessWidget {
                 const Spacer(),
                 // Отменить можно только смену, которая ещё впереди:
                 // прошедшую отменять поздно, отменённую — незачем.
-                if (!isPast && !shift.isCancelled)
+                if (!isPast && !shift.isCancelled) ...[
+                  TextButton(
+                    onPressed: onEdit,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.brand,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      'Изменить',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
                   TextButton(
                     onPressed: onCancel,
                     style: TextButton.styleFrom(
@@ -266,8 +300,8 @@ class _ManagerShiftCard extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                  )
-                else
+                  ),
+                ] else
                   const Icon(Icons.chevron_right_rounded,
                       size: 18, color: AppColors.muted),
               ],

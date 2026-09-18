@@ -5,6 +5,7 @@ import 'package:fastwork_core/data/database.dart';
 import 'package:fastwork/data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/notification.dart';
+import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -452,6 +453,122 @@ void main() {
 
     expect(await shifts.cancelShift(shiftId), BookingResult.ok);
     expect(await shifts.cancelShift(shiftId), BookingResult.alreadyCancelled);
+  });
+
+  // ---------------------------------------------------------------------
+  // ПРАВКА СМЕНЫ
+  // ---------------------------------------------------------------------
+
+  Future<BookingResult> editTo(
+    int shiftId,
+    Shift base, {
+    int? hourlyRate,
+    int? workersNeeded,
+    int? startMinutes,
+    String? address,
+  }) =>
+      shifts.updateShift(
+        shiftId: shiftId,
+        workDate: base.workDate,
+        title: base.title,
+        address: address ?? base.address,
+        startMinutes: startMinutes ?? base.startMinutes,
+        endMinutes: base.endMinutes,
+        hourlyRate: hourlyRate ?? base.hourlyRate,
+        workersNeeded: workersNeeded ?? base.workersNeeded,
+      );
+
+  test('заказчик правит свою смену', () async {
+    final (shiftId, _, manager) = await upcomingShift();
+    session.setUser(manager);
+
+    final before = (await shifts.shiftById(shiftId))!;
+    expect(await editTo(shiftId, before, hourlyRate: 150000), BookingResult.ok);
+
+    final after = (await shifts.shiftById(shiftId))!;
+    expect(after.hourlyRate, 150000);
+    // Набранных правка не трогает.
+    expect(after.workersHired, before.workersHired);
+  });
+
+  test('записавшихся предупреждают о важных изменениях', () async {
+    final (shiftId, worker, manager) = await upcomingShift();
+    session.setUser(manager);
+    final before = (await shifts.shiftById(shiftId))!;
+
+    await editTo(shiftId, before, startMinutes: 480);
+
+    session.setUser(worker);
+    final changed = (await shifts.notifications())
+        .where((n) => n.kind == NotificationKind.shiftChanged)
+        .toList();
+    expect(changed, hasLength(1));
+    expect(changed.first.body, contains('08:00'));
+  });
+
+  test('о мелкой правке не пишут', () async {
+    final (shiftId, worker, manager) = await upcomingShift();
+    session.setUser(manager);
+    final before = (await shifts.shiftById(shiftId))!;
+
+    // Ничего важного не поменялось — только название.
+    await shifts.updateShift(
+      shiftId: shiftId,
+      workDate: before.workDate,
+      title: 'Услуги грузчика (склад)',
+      address: before.address,
+      startMinutes: before.startMinutes,
+      endMinutes: before.endMinutes,
+      hourlyRate: before.hourlyRate,
+      workersNeeded: before.workersNeeded,
+    );
+
+    session.setUser(worker);
+    expect(
+      (await shifts.notifications())
+          .where((n) => n.kind == NotificationKind.shiftChanged),
+      isEmpty,
+      reason: 'уведомление о незаметном изменении учит их не читать',
+    );
+  });
+
+  test('мест не может стать меньше, чем уже набрано', () async {
+    final (shiftId, _, manager) = await upcomingShift();
+    session.setUser(manager);
+
+    final before = (await shifts.shiftById(shiftId))!;
+    expect(before.workersHired, 1);
+
+    expect(
+      await editTo(shiftId, before, workersNeeded: 0),
+      BookingResult.fewerThanHired,
+    );
+    // Смена осталась как была.
+    expect((await shifts.shiftById(shiftId))!.workersNeeded, 2);
+  });
+
+  test('чужую смену править нельзя', () async {
+    final (shiftId, worker, manager) = await upcomingShift();
+    session.setUser(manager);
+    final before = (await shifts.shiftById(shiftId))!;
+
+    session.setUser(worker);
+    expect(
+      await editTo(shiftId, before, hourlyRate: 1),
+      BookingResult.notMine,
+    );
+  });
+
+  test('отменённую смену править нельзя', () async {
+    final (shiftId, _, manager) = await upcomingShift();
+    session.setUser(manager);
+    final before = (await shifts.shiftById(shiftId))!;
+
+    await shifts.cancelShift(shiftId);
+    expect(
+      await editTo(shiftId, before, hourlyRate: 150000),
+      BookingResult.alreadyCancelled,
+    );
   });
 
   // ---------------------------------------------------------------------

@@ -444,6 +444,32 @@ class Api {
       });
     });
 
+    // Правка смены. Адрес тот же, что у смены, — так принято: POST на
+    // адрес самой вещи означает «измени вот эту». Право менять проверяет
+    // хранилище: там же, где данные.
+    router.post('/api/shifts/<id|[0-9]+>', (Request request, String id) async {
+      return _authorized(request, (user) async {
+        if (!user.isManager) {
+          return _error('Только для заказчиков', status: 403);
+        }
+
+        final body = await _body(request);
+        final result = await _shiftsFor(user).updateShift(
+          shiftId: int.parse(id),
+          workDate: DateTime.parse(body['workDate'] as String),
+          title: body['title'] as String,
+          address: body['address'] as String,
+          startMinutes: body['startMinutes'] as int,
+          endMinutes: body['endMinutes'] as int,
+          hourlyRate: body['hourlyRate'] as int,
+          workersNeeded: body['workersNeeded'] as int,
+          duties: (body['duties'] as List<dynamic>? ?? []).cast<String>(),
+          dressCode: body['dressCode'] as String?,
+        );
+        return _json({'result': result.name});
+      });
+    });
+
     router.get('/api/manager/shifts', (Request request) async {
       return _authorized(request, (user) async {
         final shifts = await _shiftsFor(user).shiftsCreatedBy(user.id);

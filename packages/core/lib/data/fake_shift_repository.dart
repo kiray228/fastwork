@@ -320,6 +320,53 @@ class FakeShiftRepository implements ShiftRepository {
     return BookingResult.ok;
   }
 
+  @override
+  Future<BookingResult> updateShift({
+    required int shiftId,
+    required DateTime workDate,
+    required String title,
+    required String address,
+    required int startMinutes,
+    required int endMinutes,
+    required int hourlyRate,
+    required int workersNeeded,
+    List<String> duties = const [],
+    String? dressCode,
+  }) async {
+    final index = _shifts.indexWhere((s) => s.id == shiftId);
+    if (index < 0) return BookingResult.notFound;
+
+    final before = _decorate(_shifts[index]);
+    if (before.isCancelled) return BookingResult.alreadyCancelled;
+    if (workersNeeded < before.workersHired) {
+      return BookingResult.fewerThanHired;
+    }
+
+    final old = _shifts[index];
+    _shifts[index] = Shift(
+      id: old.id,
+      workDate: workDate,
+      title: title,
+      company: old.company,
+      address: address,
+      city: old.city,
+      startMinutes: startMinutes,
+      endMinutes: endMinutes,
+      breakMinutes: old.breakMinutes,
+      hourlyRate: hourlyRate,
+      workersNeeded: workersNeeded,
+      workersHired: old.workersHired,
+      duties: duties,
+      dressCode: dressCode,
+      employerComment: old.employerComment,
+      payoutDelayDays: old.payoutDelayDays,
+      cancelDeadlineHours: old.cancelDeadlineHours,
+      minRating: old.minRating,
+      createdBy: old.createdBy,
+    );
+    return BookingResult.ok;
+  }
+
   /// Номера отменённых смен. В памяти проще держать отдельным множеством,
   /// чем пересобирать сам объект смены.
   final Set<int> _cancelled = {};

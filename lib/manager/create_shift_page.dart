@@ -5,19 +5,32 @@ import '../data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
+import '../widgets/async_state.dart';
 import '../widgets/common.dart';
 
-/// Создание смены заказчиком.
+/// Создание смены заказчиком — и правка уже созданной.
+///
+/// Один экран на две задачи, а не два похожих.
+///
+/// Форма здесь не «поля на экране»: в ней живут проверки — ставка не ниже
+/// ста тенге, смена не короче часа, адрес не пустой. Сделай мы второй
+/// экран для правки, эти проверки пришлось бы повторить, и однажды они
+/// разошлись бы: поправили в одном месте, забыли в другом. Тогда через
+/// создание пройти было бы нельзя, а через правку — можно.
 class CreateShiftPage extends StatefulWidget {
   final AppSession session;
   final ShiftRepository repository;
   final VoidCallback onCreated;
+
+  /// Смена, которую правим. `null` — создаём новую.
+  final Shift? editing;
 
   const CreateShiftPage({
     super.key,
     required this.session,
     required this.repository,
     required this.onCreated,
+    this.editing,
   });
 
   @override
@@ -25,17 +38,45 @@ class CreateShiftPage extends StatefulWidget {
 }
 
 class _CreateShiftPageState extends State<CreateShiftPage> {
-  final titleController = TextEditingController(text: 'Услуги ');
-  final addressController = TextEditingController();
-  final rateController = TextEditingController(text: '1100');
-  final workersController = TextEditingController(text: '3');
-  final dutiesController = TextEditingController();
+  late final TextEditingController titleController;
+  late final TextEditingController addressController;
+  late final TextEditingController rateController;
+  late final TextEditingController workersController;
+  late final TextEditingController dutiesController;
 
-  DateTime date = DateTime.now().add(const Duration(days: 1));
-  TimeOfDay start = const TimeOfDay(hour: 10, minute: 0);
-  TimeOfDay end = const TimeOfDay(hour: 22, minute: 0);
+  late DateTime date;
+  late TimeOfDay start;
+  late TimeOfDay end;
   bool busy = false;
   String? error;
+
+  /// Правим уже существующую смену, а не заводим новую.
+  bool get isEditing => widget.editing != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final shift = widget.editing;
+
+    titleController = TextEditingController(text: shift?.title ?? 'Услуги ');
+    addressController = TextEditingController(text: shift?.address ?? '');
+    rateController = TextEditingController(
+      text: shift == null ? '1100' : '${shift.hourlyRate ~/ 100}',
+    );
+    workersController = TextEditingController(
+      text: '${shift?.workersNeeded ?? 3}',
+    );
+    dutiesController = TextEditingController(
+      text: shift?.duties.join('\n') ?? '',
+    );
+
+    date = shift?.workDate ?? DateTime.now().add(const Duration(days: 1));
+    start = _asTime(shift?.startMinutes ?? 600);
+    end = _asTime(shift?.endMinutes ?? 1320);
+  }
+
+  static TimeOfDay _asTime(int minutes) =>
+      TimeOfDay(hour: minutes ~/ 60, minute: minutes % 60);
 
   @override
   void dispose() {
@@ -62,14 +103,17 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
         endMinutes: _endMinutes,
         hourlyRate: (int.tryParse(rateController.text) ?? 0) * 100,
         workersNeeded: int.tryParse(workersController.text) ?? 1,
-        workersHired: 0,
+        workersHired: widget.editing?.workersHired ?? 0,
       );
 
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
       initialDate: date,
-      firstDate: DateTime.now(),
+      // При правке смена может быть уже на сегодня или даже на вчера —
+      // тогда её собственный день обязан остаться выбираемым, иначе
+      // календарь откажется открыться.
+      firstDate: date.isBefore(DateTime.now()) ? date : DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 90)),
     );
     if (picked != null) setState(() => date = picked);
@@ -116,28 +160,75 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
       error = null;
     });
 
-    await widget.repository.createShift(
-      workDate: DateTime(date.year, date.month, date.day),
-      title: title,
-      company: widget.session.user?.company ?? 'Компания',
-      address: address,
-      startMinutes: _startMinutes,
-      endMinutes: _endMinutes,
-      hourlyRate: rate * 100, // в тиынах
-      workersNeeded: workers,
-      createdBy: widget.session.workerId,
-      // Город берём из профиля заказчика: смену увидят исполнители
-      // того же города.
-      city: widget.session.city,
-      duties: dutiesController.text
-          .split('\n')
-          .map((line) => line.trim())
-          .where((line) => line.isNotEmpty)
-          .toList(),
+    final duties = dutiesController.text
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+
+    final existing = widget.editing;
+    if (existing != null) {
+      final result = await guarded(
+        context,
+        () => widget.repository.updateShift(
+          shiftId: existing.id,
+          workDate: DateTime(date.year, date.month, date.day),
+          title: title,
+          address: address,
+          startMinutes: _startMinutes,
+          endMinutes: _endMinutes,
+          hourlyRate: rate * 100,
+          workersNeeded: workers,
+          duties: duties,
+          dressCode: existing.dressCode,
+        ),
+      );
+
+      if (!mounted) return;
+      setState(() => busy = false);
+      if (result == null) return;
+
+      if (result != BookingResult.ok) {
+        setState(() => error = switch (result) {
+              BookingResult.fewerThanHired =>
+                'Уже набрано ${existing.workersHired} чел. — '
+                    'мест не может быть меньше',
+              BookingResult.notMine => 'Это не ваша смена',
+              BookingResult.alreadyCancelled => 'Смена отменена',
+              _ => 'Не получилось сохранить',
+            });
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Изменения сохранены')),
+      );
+      widget.onCreated();
+      return;
+    }
+
+    final created = await guardedDone(
+      context,
+      () => widget.repository.createShift(
+        workDate: DateTime(date.year, date.month, date.day),
+        title: title,
+        company: widget.session.user?.company ?? 'Компания',
+        address: address,
+        startMinutes: _startMinutes,
+        endMinutes: _endMinutes,
+        hourlyRate: rate * 100, // в тиынах
+        workersNeeded: workers,
+        createdBy: widget.session.workerId,
+        // Город берём из профиля заказчика: смену увидят исполнители
+        // того же города.
+        city: widget.session.city,
+        duties: duties,
+      ),
     );
 
     if (!mounted) return;
     setState(() => busy = false);
+    if (!created) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Смена опубликована')),
@@ -150,7 +241,9 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
     final preview = _preview;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Новая смена')),
+      appBar: AppBar(
+        title: Text(isEditing ? 'Изменить смену' : 'Новая смена'),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         children: [
@@ -317,7 +410,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
                       color: Colors.white,
                     ),
                   )
-                : const Text('Опубликовать смену'),
+                : Text(isEditing ? 'Сохранить' : 'Опубликовать смену'),
           ),
         ],
       ),

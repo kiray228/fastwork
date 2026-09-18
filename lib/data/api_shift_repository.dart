@@ -93,6 +93,31 @@ class ApiShiftRepository implements ShiftRepository {
       _result(await client.post('/api/shifts/$shiftId/cancel-shift'));
 
   @override
+  Future<BookingResult> updateShift({
+    required int shiftId,
+    required DateTime workDate,
+    required String title,
+    required String address,
+    required int startMinutes,
+    required int endMinutes,
+    required int hourlyRate,
+    required int workersNeeded,
+    List<String> duties = const [],
+    String? dressCode,
+  }) async =>
+      _result(await client.post('/api/shifts/$shiftId', {
+        'workDate': workDate.toIso8601String(),
+        'title': title,
+        'address': address,
+        'startMinutes': startMinutes,
+        'endMinutes': endMinutes,
+        'hourlyRate': hourlyRate,
+        'workersNeeded': workersNeeded,
+        'duties': duties,
+        'dressCode': dressCode,
+      }));
+
+  @override
   Future<void> confirmAttendance({
     required int shiftId,
     required int workerId,

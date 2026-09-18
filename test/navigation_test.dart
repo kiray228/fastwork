@@ -880,8 +880,8 @@ void main() {
     });
   });
 
-  group('отмена смены заказчиком', () {
-    Shift todayShift() {
+  group('смены заказчика: правка и отмена', () {
+    Shift todayShift({int hired = 0}) {
       final now = DateTime.now();
       return Shift(
         id: 1,
@@ -894,7 +894,7 @@ void main() {
         endMinutes: 1200,
         hourlyRate: 100000,
         workersNeeded: 3,
-        workersHired: 0,
+        workersHired: hired,
         createdBy: 1,
       );
     }
@@ -934,6 +934,52 @@ void main() {
 
       expect(find.text('Отменена'), findsOneWidget);
       expect((await repo.shiftById(1))!.isCancelled, isTrue);
+    });
+
+    testWidgets('«Изменить» открывает форму с заполненными полями',
+        (tester) async {
+      final repo = FakeShiftRepository(shifts: [todayShift()]);
+      await openApp(tester, role: UserRole.manager, shifts: repo);
+
+      await tester.tap(find.text('Изменить'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Изменить смену'), findsOneWidget);
+      // Поля не пустые — это правка, а не новая смена.
+      expect(find.text('Услуги грузчика'), findsWidgets);
+      expect(find.text('Сохранить'), findsOneWidget);
+    });
+
+    testWidgets('правка сохраняется', (tester) async {
+      final repo = FakeShiftRepository(shifts: [todayShift()]);
+      await openApp(tester, role: UserRole.manager, shifts: repo);
+
+      await tester.tap(find.text('Изменить'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).first, 'Услуги повара');
+      await tester.tap(find.text('Сохранить'));
+      await tester.pumpAndSettle();
+
+      expect((await repo.shiftById(1))!.title, 'Услуги повара');
+    });
+
+    testWidgets('нельзя оставить мест меньше, чем набрано', (tester) async {
+      // На смену уже набрали двоих.
+      final repo = FakeShiftRepository(shifts: [todayShift(hired: 2)]);
+
+      await openApp(tester, role: UserRole.manager, shifts: repo);
+      await tester.tap(find.text('Изменить'));
+      await tester.pumpAndSettle();
+
+      // Поле «сколько человек» — четвёртое по счёту на форме.
+      await tester.enterText(find.byType(TextField).at(3), '1');
+      await tester.tap(find.text('Сохранить'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('мест не может быть меньше'), findsOneWidget);
+      // И смена осталась нетронутой.
+      expect((await repo.shiftById(1))!.workersNeeded, 3);
     });
 
     testWidgets('отменённая смена исчезает из ленты исполнителя',
