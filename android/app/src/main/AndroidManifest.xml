@@ -1,5 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Без этой строки собранное приложение не может выйти в сеть.
+         В отладочной сборке Flutter добавляет разрешение сам, поэтому
+         на компьютере всё работает, а установленное на телефон
+         приложение молча не получает данные. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
+        android:networkSecurityConfig="@xml/network_security_config"
         android:label="fastwork"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
