@@ -1,11 +1,11 @@
 import 'dart:io';
 
-import 'package:drift/native.dart';
 import 'package:fastwork_core/data/database.dart';
 import 'package:fastwork_core/data/current_user.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_server/api.dart';
 import 'package:fastwork_server/code_sender.dart';
+import 'package:fastwork_server/open_database.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as io;
 
@@ -23,12 +23,11 @@ import 'package:shelf/shelf_io.dart' as io;
 /// без единой правки.
 Future<void> main(List<String> args) async {
   final port = int.parse(Platform.environment['PORT'] ?? '8080');
-  final dbPath = Platform.environment['DB_PATH'] ?? 'fastwork.sqlite';
 
-  // База — обычный файл. Никакого Flutter: поэтому мы и отделяли раньше
-  // описание таблиц от того, где они лежат.
-  final file = File(dbPath);
-  final db = AppDatabase(NativeDatabase(file));
+  // Файл SQLite или PostgreSQL — решает переменная DATABASE_URL.
+  // Никакого Flutter: поэтому мы и отделяли раньше описание таблиц
+  // от того, где они лежат.
+  final db = AppDatabase(openServerDatabase());
 
   // Настоящая отправка писем, если настроены SMTP_*, иначе код печатается
   // в это же окно. Приложение разницы не замечает.
@@ -48,7 +47,7 @@ Future<void> main(List<String> args) async {
   final server = await io.serve(handler, InternetAddress.anyIPv4, port);
 
   stdout.writeln('fastwork сервер слушает http://localhost:${server.port}');
-  stdout.writeln('база: ${file.absolute.path}');
+  stdout.writeln('база: ${describeDatabase()}');
   stdout.writeln(
     sender is ConsoleCodeSender
         ? 'письма НЕ отправляются — код входа будет напечатан здесь'

@@ -335,6 +335,47 @@ class ApplicationStatus {
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
+  /// Свой запрос к базе — с поправкой на диалект.
+  ///
+  /// Мы пишем запросы с вопросительными знаками:
+  ///
+  ///     WHERE email = ? AND created_at > ?
+  ///
+  /// Так принято в SQLite. PostgreSQL же нумерует подстановки:
+  ///
+  ///     WHERE email = $1 AND created_at > $2
+  ///
+  /// Одна и та же мысль, разная запись. SQL — общий язык, но у каждой
+  /// базы свой выговор.
+  ///
+  /// Чтобы не держать два набора запросов, переводим их здесь. Все свои
+  /// запросы в проекте идут через этот метод, а не через `customSelect`
+  /// напрямую: иначе однажды кто-нибудь напишет мимо, и сломается это
+  /// только на сервере, где PostgreSQL.
+  Selectable<QueryRow> query(
+    String sql, {
+    List<Variable> variables = const [],
+    Set<ResultSetImplementation<dynamic, dynamic>> readsFrom = const {},
+  }) =>
+      customSelect(
+        portableSql(sql),
+        variables: variables,
+        readsFrom: readsFrom,
+      );
+
+  /// Перевод подстановок под текущую базу.
+  ///
+  /// Замена работает потому, что во всех наших запросах вопросительный
+  /// знак встречается только как подстановка — внутри строковых значений
+  /// его нет. Будь иначе, такая замена испортила бы текст.
+  String portableSql(String sql) {
+    if (executor.dialect != SqlDialect.postgres) return sql;
+
+    var index = 0;
+    return sql.replaceAllMapped(RegExp(r'\?'), (_) => '\$${++index}');
+  }
+
+
   /// Версия схемы. Каждое изменение таблиц поднимает номер на единицу.
   @override
   int get schemaVersion => 8;
@@ -381,8 +422,15 @@ class AppDatabase extends _$AppDatabase {
           }
         },
         beforeOpen: (details) async {
-          // Без этой строки SQLite не проверяет внешние ключи.
-          await customStatement('PRAGMA foreign_keys = ON');
+          // Без этой строки SQLite не проверяет внешние ключи — редкая
+          // особенность: почти любая другая база следит за ними всегда.
+          //
+          // PostgreSQL как раз из «любых других», и слова PRAGMA он не
+          // знает вовсе — на нём сервер падал при запуске, пока эта
+          // строка выполнялась безусловно.
+          if (executor.dialect == SqlDialect.sqlite) {
+            await customStatement('PRAGMA foreign_keys = ON');
+          }
         },
       );
 }

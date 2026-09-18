@@ -111,7 +111,7 @@ class DbSupportRepository implements SupportRepository {
   Future<List<SupportTicket>> tickets() async {
     // Подзапросы достают последнее сообщение и их количество —
     // связь один-ко-многим, свёрнутая до одной строки на обращение.
-    final rows = await db.customSelect(
+    final rows = await db.query(
       '''
       SELECT t.*,
         (SELECT COUNT(*) FROM support_message_rows m

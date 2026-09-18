@@ -75,7 +75,7 @@ class AuthService {
           ..where((c) => c.createdAt.isSmallerThanValue(hourAgo)))
         .go();
 
-    final recent = await db.customSelect(
+    final recent = await db.query(
       '''
       SELECT COUNT(*) AS c FROM auth_code_rows
       WHERE email = ? AND created_at > ?

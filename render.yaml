@@ -19,5 +19,17 @@ services:
     envVars:
       # PORT хостинг задаёт сам — в коде он не записан, сервер берёт его
       # из окружения. Ровно ради этого.
-      - key: DB_PATH
-        value: /app/data/fastwork.sqlite
+      #
+      # DATABASE_URL подставляется из базы, описанной ниже. Сервер видит
+      # её и выбирает PostgreSQL вместо файла — сам, без правок в коде.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: fastwork-db
+          property: connectionString
+
+# Отдельная база. Она и есть причина всей затеи: файл на диске сервиса
+# пропадает при каждом перезапуске, а это — самостоятельная служба со
+# своим хранилищем.
+databases:
+  - name: fastwork-db
+    plan: free

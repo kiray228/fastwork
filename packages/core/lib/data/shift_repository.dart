@@ -216,7 +216,7 @@ class DbShiftRepository implements ShiftRepository {
 
     // Настоящий SQL-запрос — тот самый, про который читали в теории.
     // Город в условии: подработка в другом городе человеку не нужна.
-    final rows = await db.customSelect(
+    final rows = await db.query(
       '''
       SELECT s.*, $_hiredSql, $_mineSql
       FROM shift_rows s
@@ -235,7 +235,7 @@ class DbShiftRepository implements ShiftRepository {
 
   @override
   Future<Set<DateTime>> daysWithShifts() async {
-    final rows = await db.customSelect(
+    final rows = await db.query(
       'SELECT DISTINCT work_date FROM shift_rows WHERE city = ?',
       variables: [Variable.withString(session.city)],
       readsFrom: {db.shiftRows},
@@ -249,7 +249,7 @@ class DbShiftRepository implements ShiftRepository {
 
   @override
   Future<List<String>> companies() async {
-    final rows = await db.customSelect(
+    final rows = await db.query(
       'SELECT DISTINCT company FROM shift_rows WHERE city = ? ORDER BY company',
       variables: [Variable.withString(session.city)],
       readsFrom: {db.shiftRows},
@@ -259,7 +259,7 @@ class DbShiftRepository implements ShiftRepository {
 
   @override
   Future<Shift?> shiftById(int id) async {
-    final rows = await db.customSelect(
+    final rows = await db.query(
       'SELECT s.*, $_hiredSql, $_mineSql FROM shift_rows s WHERE s.id = ?',
       variables: [Variable.withInt(id)],
       readsFrom: {db.shiftRows, db.applicationRows},
@@ -342,7 +342,7 @@ class DbShiftRepository implements ShiftRepository {
         ? "(a.status != 'active' OR s.work_date < ?)"
         : "(a.status = 'active' AND s.work_date >= ?)";
 
-    final rows = await db.customSelect(
+    final rows = await db.query(
       '''
       SELECT s.*, $_hiredSql, $_mineSql
       FROM application_rows a
@@ -362,7 +362,7 @@ class DbShiftRepository implements ShiftRepository {
     // Раньше здесь было «запись жива и дата прошла». Это было неправдой:
     // прошедшая дата не значит, что человек работал — он мог не прийти.
     // Теперь в заработок идёт только то, что подтвердил заказчик.
-    final rows = await db.customSelect(
+    final rows = await db.query(
       '''
       SELECT s.*, $_hiredSql, $_mineSql
       FROM application_rows a
@@ -414,9 +414,10 @@ class DbShiftRepository implements ShiftRepository {
   Future<CompanyInfo> companyInfo(String company) async {
     // AVG и COUNT — агрегатные функции: они сворачивают много строк в одно
     // число. Средняя оценка компании нигде не хранится, она считается тут.
-    final agg = await db.customSelect(
+    final agg = await db.query(
       '''
-      SELECT AVG(r.rating) AS avg_rating, COUNT(*) AS cnt
+      SELECT CAST(AVG(r.rating) AS DOUBLE PRECISION) AS avg_rating,
+             COUNT(*) AS cnt
       FROM review_rows r
       JOIN shift_rows s ON s.id = r.shift_id
       WHERE s.company = ?
@@ -425,7 +426,7 @@ class DbShiftRepository implements ShiftRepository {
       readsFrom: {db.reviewRows, db.shiftRows},
     ).getSingle();
 
-    final rows = await db.customSelect(
+    final rows = await db.query(
       '''
       SELECT r.*, u.full_name AS author_name
       FROM review_rows r
@@ -503,7 +504,7 @@ class DbShiftRepository implements ShiftRepository {
   /// прошедших смен — это учебные данные, в боевом приложении их бы не было.
   @override
   Future<void> prepareDemoHistory(int userId) async {
-    final existing = await db.customSelect(
+    final existing = await db.query(
       'SELECT COUNT(*) AS c FROM application_rows WHERE worker_id = ?',
       variables: [Variable.withInt(userId)],
       readsFrom: {db.applicationRows},
@@ -586,7 +587,7 @@ class DbShiftRepository implements ShiftRepository {
 
   @override
   Future<List<Shift>> shiftsCreatedBy(int managerId) async {
-    final rows = await db.customSelect(
+    final rows = await db.query(
       '''
       SELECT s.*, $_hiredSql, $_mineSql
       FROM shift_rows s
@@ -605,16 +606,16 @@ class DbShiftRepository implements ShiftRepository {
     // JOIN соединяет отклики с пользователями: в откликах лежит только
     // номер работника, а имя и рейтинг — в таблице пользователей.
     // Из отклика заодно берём состояние и время отметки.
-    final rows = await db.customSelect(
+    final rows = await db.query(
       '''
       SELECT u.*,
              a.status          AS application_status,
              a.checked_in_at   AS checked_in_at,
-             COALESCE(
+             CAST(COALESCE(
                (SELECT AVG(w.rating) FROM worker_review_rows w
                  WHERE w.worker_id = u.id),
                u.rating
-             ) AS live_rating
+             ) AS DOUBLE PRECISION) AS live_rating
       FROM application_rows a
       JOIN user_rows u ON u.id = a.worker_id
       WHERE a.shift_id = ? AND a.status IN ('active', 'completed')
@@ -651,18 +652,18 @@ class DbShiftRepository implements ShiftRepository {
     //
     // NOT EXISTS отсекает тех, кого этот заказчик уже оценил. Это подзапрос
     // в роли условия: «оставь строку, если вот такой строки нигде нет».
-    final rows = await db.customSelect(
+    final rows = await db.query(
       '''
       SELECT s.id       AS shift_id,
              s.title    AS shift_title,
              s.work_date,
              u.id       AS worker_id,
              u.full_name,
-             COALESCE(
+             CAST(COALESCE(
                (SELECT AVG(w.rating) FROM worker_review_rows w
                  WHERE w.worker_id = u.id),
                u.rating
-             ) AS worker_rating
+             ) AS DOUBLE PRECISION) AS worker_rating
       FROM shift_rows s
       JOIN application_rows a ON a.shift_id = s.id
                              AND a.status = 'completed'
@@ -737,7 +738,7 @@ class DbShiftRepository implements ShiftRepository {
 
   @override
   Future<List<WorkerReview>> reviewsAbout(int workerId) async {
-    final rows = await db.customSelect(
+    final rows = await db.query(
       '''
       SELECT w.*, s.title AS shift_title, s.company
       FROM worker_review_rows w

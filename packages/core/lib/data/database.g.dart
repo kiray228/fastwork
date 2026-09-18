@@ -1520,9 +1520,10 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
     false,
     type: DriftSqlType.bool,
     requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("is_verified" IN (0, 1))',
-    ),
+    defaultConstraints: GeneratedColumn.constraintsDependsOnDialect({
+      SqlDialect.sqlite: 'CHECK ("is_verified" IN (0, 1))',
+      SqlDialect.postgres: '',
+    }),
     defaultValue: const Constant(false),
   );
   static const VerificationMeta _roleMeta = const VerificationMeta('role');
@@ -3508,9 +3509,10 @@ class $SupportMessageRowsTable extends SupportMessageRows
     false,
     type: DriftSqlType.bool,
     requiredDuringInsert: true,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("from_support" IN (0, 1))',
-    ),
+    defaultConstraints: GeneratedColumn.constraintsDependsOnDialect({
+      SqlDialect.sqlite: 'CHECK ("from_support" IN (0, 1))',
+      SqlDialect.postgres: '',
+    }),
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',

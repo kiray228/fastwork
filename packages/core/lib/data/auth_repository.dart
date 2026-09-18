@@ -84,7 +84,7 @@ class DbAuthRepository implements AuthRepository {
     // Считаем только подтверждённые заказчиком. Раньше здесь было
     // «запись жива и дата прошла», и это завышало счётчик: записался,
     // не пришёл — а смена всё равно засчитывалась.
-    final rows = await db.customSelect(
+    final rows = await db.query(
       '''
       SELECT COUNT(*) AS c
       FROM application_rows a
@@ -102,9 +102,14 @@ class DbAuthRepository implements AuthRepository {
     //
     // Так рейтинг физически не может разойтись с отзывами: он и есть
     // отзывы, свёрнутые в одно число.
-    final rating = await db.customSelect(
+    // CAST здесь не украшение. SQLite вернёт среднее обычным числом,
+    // а PostgreSQL — «точным» типом, который драйвер отдаёт строкой,
+    // и чтение как числа падает. Приведение делает ответ одинаковым
+    // в обеих базах.
+    final rating = await db.query(
       '''
-      SELECT AVG(rating) AS avg_rating, COUNT(*) AS cnt
+      SELECT CAST(AVG(rating) AS DOUBLE PRECISION) AS avg_rating,
+             COUNT(*) AS cnt
       FROM worker_review_rows
       WHERE worker_id = ?
       ''',
