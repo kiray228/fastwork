@@ -83,3 +83,4 @@ dart run bin/server.dart      # http://localhost:8080
 7. [Разбор кода](docs/07-razbor-koda.md)
 8. [Сервер](docs/08-server.md)
 9. [Приложение на телефоне](docs/09-prilozhenie-na-telefone.md)
+10. [Шпаргалка к показу проекта](docs/10-zashchita-proekta.md)
