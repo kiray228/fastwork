@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Установить fastwork</title>
+  <meta name="description" content="Как поставить fastwork на телефон">
+  <meta name="theme-color" content="#0FA36B">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <style>
+    /* Цвета те же, что в приложении — см. lib/theme/app_colors.dart.
+       Переменные, а не значения по месту: поменять фирменный цвет
+       нужно в одной строке, а не искать его по всему файлу. */
+    :root {
+      --brand: #0FA36B;
+      --brand-dark: #0B7A50;
+      --ink: #0F172A;
+      --body: #475569;
+      --muted: #94A3B8;
+      --bg: #F4F6F9;
+      --surface: #FFFFFF;
+      --border: #E6EAF0;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ink: #F1F5F9;
+        --body: #B6C2D2;
+        --muted: #7E8CA0;
+        --bg: #0B0F17;
+        --surface: #141B26;
+        --border: #243044;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px 16px 48px;
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    main { max-width: 440px; margin: 0 auto; }
+
+    header { text-align: center; margin-bottom: 28px; }
+    header img { width: 88px; height: 88px; border-radius: 22px; }
+    h1 { font-size: 26px; margin: 16px 0 6px; letter-spacing: -.02em; }
+    header p { color: var(--body); margin: 0; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card h2 {
+      font-size: 17px; margin: 0 0 4px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card .sub { color: var(--muted); font-size: 13.5px; margin: 0 0 16px; }
+
+    .btn {
+      display: block; text-align: center; text-decoration: none;
+      background: var(--brand); color: #fff;
+      padding: 15px 18px; border-radius: 14px;
+      font-weight: 700; font-size: 16px;
+    }
+    .btn:active { background: var(--brand-dark); }
+    .btn.ghost {
+      background: transparent; color: var(--brand);
+      border: 1.5px solid var(--brand); padding: 13px 18px;
+      font-size: 14.5px; margin-top: 10px;
+    }
+
+    ol { margin: 0; padding-left: 20px; }
+    ol li { margin-bottom: 10px; color: var(--body); }
+    ol li:last-child { margin-bottom: 0; }
+    ol li b { color: var(--ink); }
+
+    .note {
+      margin-top: 16px; padding: 13px 15px;
+      background: rgba(245,158,11,.12);
+      border-radius: 12px; font-size: 13.5px; color: var(--body);
+    }
+    .note b { color: var(--ink); }
+
+    /* Значок «Поделиться» из iOS — рисуем сами, чтобы не тянуть
+       картинку ради одной иконки. */
+    .ios-share {
+      display: inline-block; vertical-align: -3px;
+      width: 15px; height: 17px; margin: 0 2px;
+    }
+
+    footer {
+      text-align: center; margin-top: 28px;
+      font-size: 13px; color: var(--muted);
+    }
+    footer a { color: var(--muted); }
+
+    /* Карточки скрыты, пока скрипт не решит, какую показать.
+       Так на телефоне не мелькает лишнее. */
+    [data-platform] { display: none; }
+    [data-platform].show { display: block; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="icons/Icon-512.png" alt="">
+    <h1>fastwork</h1>
+    <p>Подработка по сменам</p>
+  </header>
+
+  <!-- ANDROID -->
+  <section class="card" data-platform="android">
+    <h2>📱 Android</h2>
+    <p class="sub">Скачивается файл, ставится за полминуты</p>
+    <a class="btn" id="apk"
+       href="https://github.com/kiray228/fastwork/releases/latest/download/fastwork.apk">
+      Скачать приложение
+    </a>
+    <a class="btn ghost"
+       href="https://github.com/kiray228/fastwork/releases/latest/download/fastwork-universal.apk">
+      Не установилось? Скачать другой файл
+    </a>
+    <div class="note">
+      <b>Установка зависла?</b> Это Play Защита проверяет незнакомый файл
+      на серверах Google. Play Маркет → нажми на свой значок →
+      «Play Защита» → шестерёнка → выключи «Сканировать приложения».
+      После установки можно включить обратно.
+    </div>
+  </section>
+
+  <!-- IPHONE -->
+  <section class="card" data-platform="ios">
+    <h2>🍏 iPhone и iPad</h2>
+    <p class="sub">Приложение добавляется прямо из Safari — без App&nbsp;Store</p>
+    <ol>
+      <li>Открой <a href="./">это приложение</a> — обязательно в
+          <b>Safari</b>, в других браузерах кнопки может не быть.</li>
+      <li>Нажми
+        <svg class="ios-share" viewBox="0 0 16 18" fill="none"
+             stroke="currentColor" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 1v11M4.5 4.5L8 1l3.5 3.5"/>
+          <path d="M3 8H1.5v8.5h13V8H13"/>
+        </svg>
+        <b>«Поделиться»</b> внизу экрана.</li>
+      <li>Пролистай список вниз и выбери
+          <b>«На экран „Домой“»</b>.</li>
+      <li>Готово — на рабочем столе появится значок.</li>
+    </ol>
+    <div class="note">
+      Запускается во весь экран, без адресной строки и вкладок —
+      от обычного приложения не отличить. Аккаунт и смены те же, что
+      на Android.
+    </div>
+  </section>
+
+  <!-- КОМПЬЮТЕР -->
+  <section class="card" data-platform="desktop">
+    <h2>💻 Компьютер</h2>
+    <p class="sub">Приложение работает прямо в браузере</p>
+    <a class="btn" href="./">Открыть fastwork</a>
+    <div class="note">
+      Чтобы поставить на телефон, открой эту страницу с него —
+      она сама покажет, что делать для Android и для iPhone.
+    </div>
+  </section>
+
+  <footer>
+    <a href="https://github.com/kiray228/fastwork">Исходный код на GitHub</a>
+  </footer>
+</main>
+
+<script>
+  // Какая это система — решаем по строке, которой представляется браузер.
+  //
+  // Способ не идеальный: строку можно подменить, и Safari на iPad
+  // с некоторых пор представляется как Mac. Поэтому iPad ловим отдельно —
+  // по признаку «это Mac, но с сенсорным экраном».
+  //
+  // Ошибка здесь не страшна: показываем не ту карточку, а не ломаем
+  // установку. Поэтому и оставили ссылки на все три способа.
+  var ua = navigator.userAgent;
+  var isIOS = /iPhone|iPad|iPod/.test(ua) ||
+              (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  var isAndroid = /Android/.test(ua);
+  var platform = isIOS ? 'ios' : isAndroid ? 'android' : 'desktop';
+
+  document.querySelector('[data-platform="' + platform + '"]')
+          .classList.add('show');
+
+  // На компьютере показываем всё: человек может просто смотреть,
+  // что вообще есть, или искать ссылку, чтобы переслать.
+  if (platform === 'desktop') {
+    document.querySelectorAll('[data-platform]')
+            .forEach(function (el) { el.classList.add('show'); });
+  }
+</script>
+</body>
+</html>

@@ -1,12 +1,14 @@
 {
-    "name": "fastwork",
+    "name": "fastwork — подработка по сменам",
     "short_name": "fastwork",
+    "description": "Найти смену на нужный день и записаться. Заказчику — выставить смену и отметить, кто вышел.",
     "start_url": ".",
+    "scope": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
     "orientation": "portrait-primary",
+    "lang": "ru",
+    "background_color": "#F4F6F9",
+    "theme_color": "#0FA36B",
     "prefer_related_applications": false,
     "icons": [
         {

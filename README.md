@@ -9,10 +9,14 @@
 
 ## Попробовать
 
+**Поставить на телефон: https://kiray228.github.io/fastwork/install.html**
+Страница сама определит Android или iPhone.
+
 | Где | Ссылка |
 | --- | --- |
 | В браузере | https://kiray228.github.io/fastwork/ |
-| Android | [последний релиз](https://github.com/kiray228/fastwork/releases/latest) — файл `.apk` |
+| Android | [`.apk` напрямую](https://github.com/kiray228/fastwork/releases/latest/download/fastwork.apk) |
+| iPhone | Safari → «Поделиться» → «На экран „Домой“» |
 | Сервер | https://fastwork-server.onrender.com/api/health |
 
 Вход по коду, который приходит на почту. Аккаунт общий: заведённый на

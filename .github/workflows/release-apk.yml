@@ -88,14 +88,26 @@ jobs:
           --build-number=${{ github.run_number }}
 
       - name: Дать файлам понятные имена
+        # Файлов получается шесть, и это не дубли.
+        #
+        # С номером версии — чтобы в списке релизов было видно, что откуда.
+        # Без номера — чтобы существовала ССЫЛКА, которая не протухает:
+        #   .../releases/latest/download/fastwork.apk
+        # GitHub отдаёт по ней файл из последнего релиза, какой бы он ни
+        # был. Иначе страницу установки пришлось бы править после каждой
+        # сборки — а значит, однажды забыть и оставить людям старый файл.
         run: |
           mkdir -p dist
           cd build/app/outputs/flutter-apk
           V=1.0.${{ github.run_number }}
-          cp app-arm64-v8a-release.apk   "$GITHUB_WORKSPACE/dist/fastwork-$V-arm64.apk"
-          cp app-armeabi-v7a-release.apk "$GITHUB_WORKSPACE/dist/fastwork-$V-arm32.apk"
-          cp app-release.apk             "$GITHUB_WORKSPACE/dist/fastwork-$V-universal.apk"
-          ls -lh "$GITHUB_WORKSPACE/dist"
+          D="$GITHUB_WORKSPACE/dist"
+          cp app-arm64-v8a-release.apk   "$D/fastwork-$V-arm64.apk"
+          cp app-armeabi-v7a-release.apk "$D/fastwork-$V-arm32.apk"
+          cp app-release.apk             "$D/fastwork-$V-universal.apk"
+          cp app-arm64-v8a-release.apk   "$D/fastwork.apk"
+          cp app-armeabi-v7a-release.apk "$D/fastwork-arm32.apk"
+          cp app-release.apk             "$D/fastwork-universal.apk"
+          ls -lh "$D"
 
       - name: Выложить в Releases
         uses: softprops/action-gh-release@v2
@@ -106,7 +118,11 @@ jobs:
           body: |
             Приложение для Android.
 
-            **Какой файл скачивать**
+            **Проще всего — открыть с телефона страницу установки:**
+            https://kiray228.github.io/fastwork/install.html
+            Она сама поймёт, Android у тебя или iPhone, и покажет нужное.
+
+            **Или скачать файл отсюда**
 
             | Файл | Кому |
             | --- | --- |
@@ -115,13 +131,6 @@ jobs:
             | `fastwork-1.0.${{ github.run_number }}-universal.apk` | если первые два не встали |
 
             Бери **arm64**. Он втрое меньше универсального и ставится быстрее.
-
-            **Как поставить на телефон**
-            1. Скачай файл `.apk` ниже — прямо с телефона.
-            2. Открой его через «Файлы» → «Загрузки», а не из уведомления
-               браузера: так видно, что файл скачался целиком.
-            3. Android спросит разрешение ставить приложения из этого
-               источника — разреши.
 
             **Если установка подвисла надолго** — это Play Защита проверяет
             незнакомый файл на серверах Google. Play Маркет → аватар →

@@ -1,46 +1,91 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
+  <!-- Подставляется при сборке из --base-href. Сайт лежит в подпапке
+       /fastwork/, и без этой строки приложение искало бы свои файлы
+       в корне адреса и показало бы белый экран. -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description"
+        content="Подработка по сменам: найти смену на нужный день и записаться.">
 
-  <!-- iOS meta tags & icons -->
+  <!-- Цвет полоски статуса в браузере телефона: фирменный, а не серый. -->
+  <meta name="theme-color" content="#0FA36B">
+
+  <!-- Эти строки превращают сайт в приложение на iPhone.
+       Добавил на «Домой» — открывается без адресной строки и вкладок,
+       во весь экран, со своим значком. Для iOS это единственный способ
+       получить приложение без Mac и оплаты Apple. -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="fastwork">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
-  <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
-
-  <title>fastwork</title>
   <link rel="manifest" href="manifest.json">
+
+  <title>fastwork — подработка по сменам</title>
+
+  <style>
+    /* Заставка, пока грузится приложение.
+       Без неё телефон показывает пустой белый экран несколько секунд —
+       и это выглядит как «не работает», а не как «загружается». */
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #F4F6F9;
+    }
+    @media (prefers-color-scheme: dark) {
+      html, body { background: #0B0F17; }
+    }
+    #splash {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 22px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    #splash img { width: 84px; height: 84px; border-radius: 20px; }
+    #splash .bar {
+      width: 120px; height: 4px; border-radius: 999px;
+      background: rgba(15,163,107,.18); overflow: hidden;
+    }
+    #splash .bar i {
+      display: block; width: 40%; height: 100%; border-radius: 999px;
+      background: #0FA36B; animation: slide 1.1s ease-in-out infinite;
+    }
+    @keyframes slide {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(300%); }
+    }
+    /* Заставка исчезает не рывком, а плавно. */
+    #splash.done { opacity: 0; transition: opacity .3s ease; }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
+  <div id="splash">
+    <img src="icons/Icon-192.png" alt="fastwork">
+    <div class="bar"><i></i></div>
+  </div>
 
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+  <script>
+    // Flutter сообщает событием, что нарисовал первый кадр. Вот тогда
+    // заставку и убираем — не по таймеру наугад, а точно в момент,
+    // когда за ней уже есть что показать.
+    window.addEventListener('flutter-first-frame', function () {
+      var splash = document.getElementById('splash');
+      if (!splash) return;
+      splash.classList.add('done');
+      setTimeout(function () { splash.remove(); }, 320);
+    });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
