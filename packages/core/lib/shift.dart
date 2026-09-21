@@ -121,6 +121,9 @@ class Shift {
   /// Смена подтверждена заказчиком — я на ней действительно работал.
   bool get isCompleted => myStatus == 'completed';
 
+  /// Заказчик отметил, что я не вышел на эту смену.
+  bool get isNoShow => myStatus == 'no_show';
+
   /// Место занято мной: и запись, и подтверждённая работа считаются.
   bool get isMine => isApplied || isCompleted;
 

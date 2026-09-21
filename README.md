@@ -56,7 +56,7 @@ fastwork/                 приложение на Flutter — всё, что �
 
 ```bash
 flutter pub get
-flutter test          # 119 тестов
+flutter test          # 128 тестов
 flutter run           # без сервера — на локальной базе
 ```
 

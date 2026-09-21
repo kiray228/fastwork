@@ -292,6 +292,17 @@ class _ArchiveFooter extends StatelessWidget {
       );
     }
 
+    // Невыход — не то же самое, что «запись отменена». Человек должен
+    // видеть отметку: она влияет на его надёжность, и если заказчик
+    // ошибся, есть повод написать в поддержку.
+    if (shift.isNoShow) {
+      return const TagChip(
+        text: 'Отмечен невыход',
+        icon: Icons.person_off_outlined,
+        color: AppColors.danger,
+      );
+    }
+
     if (shift.isUnconfirmedOn(now)) {
       return const TagChip(
         text: 'Выход не подтверждён заказчиком',

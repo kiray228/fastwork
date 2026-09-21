@@ -84,11 +84,20 @@ class DbAuthRepository implements AuthRepository {
     // Считаем только подтверждённые заказчиком. Раньше здесь было
     // «запись жива и дата прошла», и это завышало счётчик: записался,
     // не пришёл — а смена всё равно засчитывалась.
+    // Одним запросом считаем и выходы, и невыходы: две пробежки по той же
+    // таблице ради двух чисел — лишняя работа.
+    //
+    // CAST и COALESCE не для красоты: SUM по пустому набору строк даёт
+    // NULL, а не ноль, и у новичка счётчик был бы «ничего», а не «ноль».
     final rows = await db.query(
       '''
-      SELECT COUNT(*) AS c
+      SELECT
+        CAST(COALESCE(SUM(CASE WHEN a.status = 'completed'
+                               THEN 1 ELSE 0 END), 0) AS INTEGER) AS c,
+        CAST(COALESCE(SUM(CASE WHEN a.status = 'no_show'
+                               THEN 1 ELSE 0 END), 0) AS INTEGER) AS missed
       FROM application_rows a
-      WHERE a.worker_id = ? AND a.status = 'completed'
+      WHERE a.worker_id = ?
       ''',
       variables: [Variable.withInt(row.id)],
       readsFrom: {db.applicationRows},
@@ -129,6 +138,7 @@ class DbAuthRepository implements AuthRepository {
       role: row.role,
       company: row.company,
       completedShifts: rows.first.read<int>('c'),
+      noShows: rows.first.read<int>('missed'),
     );
   }
 

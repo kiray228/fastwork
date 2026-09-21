@@ -115,11 +115,12 @@ class FakeShiftRepository implements ShiftRepository {
   }
 
   @override
-  Future<void> confirmAttendance({
+  Future<BookingResult> confirmAttendance({
     required int shiftId,
     required int workerId,
   }) async {
     _myStatuses[shiftId] = ApplicationStatus.completed;
+    return BookingResult.ok;
   }
 
   @override
@@ -232,8 +233,12 @@ class FakeShiftRepository implements ShiftRepository {
   @override
   Future<List<ShiftApplicant>> applicantsFor(int shiftId) async {
     final status = _myStatuses[shiftId];
+    // Отменившиеся из списка выпадают, а не вышедшие — нет: заказчик
+    // должен видеть, кого он отметил, иначе непонятно, нажалась кнопка
+    // или нет.
     if (status != ApplicationStatus.active &&
-        status != ApplicationStatus.completed) {
+        status != ApplicationStatus.completed &&
+        status != ApplicationStatus.noShow) {
       return const [];
     }
 
@@ -246,6 +251,7 @@ class FakeShiftRepository implements ShiftRepository {
           city: 'Алматы',
           rating: userRating,
           isVerified: false,
+          noShows: status == ApplicationStatus.noShow ? 1 : 0,
         ),
         status: status!,
         checkedInAt: _checkIns[shiftId],
@@ -317,6 +323,15 @@ class FakeShiftRepository implements ShiftRepository {
 
     _cancelled.add(shiftId);
     _myStatuses.remove(shiftId);
+    return BookingResult.ok;
+  }
+
+  @override
+  Future<BookingResult> markNoShow({
+    required int shiftId,
+    required int workerId,
+  }) async {
+    _myStatuses[shiftId] = ApplicationStatus.noShow;
     return BookingResult.ok;
   }
 

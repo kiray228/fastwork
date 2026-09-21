@@ -21,6 +21,12 @@ class AppUser {
   /// это стартовое значение из колонки, а не настоящая средняя оценка.
   final int ratingCount;
 
+  /// Сколько раз записался и не вышел.
+  ///
+  /// Тоже считается запросом, а не хранится: это просто число откликов
+  /// в состоянии «не вышел».
+  final int noShows;
+
   const AppUser({
     required this.id,
     required this.phone,
@@ -33,9 +39,30 @@ class AppUser {
     this.company,
     this.completedShifts = 0,
     this.ratingCount = 0,
+    this.noShows = 0,
   });
 
   bool get isManager => role == 'manager';
+
+  /// Сколько смен человек вообще довёл до отметки — вышел или не вышел.
+  /// Пока их нет, говорить о надёжности нечего.
+  int get attendanceRecord => completedShifts + noShows;
+
+  bool get hasAttendanceRecord => attendanceRecord > 0;
+
+  /// Надёжность в процентах: из скольких смен человек вышел.
+  ///
+  /// Почему это **отдельное** число, а не поправка к рейтингу.
+  ///
+  /// Рейтинг отвечает на вопрос «как человек работает», надёжность —
+  /// «выходит ли он вообще». Это разные вопросы, и свернув их в одно
+  /// число, мы потеряли бы оба: четвёрка перестала бы значить «работает
+  /// хорошо», а «не вышел дважды» растворилось бы в среднем.
+  ///
+  /// К тому же оценку ставит человек и может передумать, а выход —
+  /// это факт: вышел или нет.
+  int get reliabilityPercent =>
+      hasAttendanceRecord ? (completedShifts * 100 / attendanceRecord).round() : 100;
 
   /// Есть ли у рейтинга основание. Пока оценок нет, показывать «4.0»
   /// как заслуженный рейтинг нечестно — это просто стартовое число.
@@ -106,6 +133,10 @@ class ShiftApplicant {
 
   bool get isCheckedIn => checkedInAt != null;
   bool get isConfirmed => status == 'completed';
+  bool get isNoShow => status == 'no_show';
+
+  /// Заказчик ещё не сказал, вышел человек или нет.
+  bool get isUnmarked => !isConfirmed && !isNoShow;
 }
 
 extension AppUserJson on AppUser {
@@ -121,6 +152,7 @@ extension AppUserJson on AppUser {
         'company': company,
         'completedShifts': completedShifts,
         'ratingCount': ratingCount,
+        'noShows': noShows,
       };
 }
 
@@ -136,6 +168,7 @@ AppUser userFromJson(Map<String, dynamic> json) => AppUser(
       company: json['company'] as String?,
       completedShifts: json['completedShifts'] as int? ?? 0,
       ratingCount: json['ratingCount'] as int? ?? 0,
+      noShows: json['noShows'] as int? ?? 0,
     );
 
 extension ShiftApplicantJson on ShiftApplicant {

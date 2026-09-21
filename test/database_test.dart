@@ -353,7 +353,14 @@ void main() {
     expect(people.first.isCheckedIn, isTrue);
     expect(people.first.isConfirmed, isFalse);
 
-    await shifts.confirmAttendance(shiftId: shiftId, workerId: worker.id);
+    // Подтверждает заказчик, а не исполнитель: раньше эта строка стояла
+    // без смены пользователя, и тест проходил — потому что права никто
+    // не проверял. Теперь проверяет.
+    session.setUser(manager);
+    expect(
+      await shifts.confirmAttendance(shiftId: shiftId, workerId: worker.id),
+      BookingResult.ok,
+    );
     final after = await shifts.applicantsFor(shiftId);
     expect(after.first.isConfirmed, isTrue);
   });
@@ -453,6 +460,132 @@ void main() {
 
     expect(await shifts.cancelShift(shiftId), BookingResult.ok);
     expect(await shifts.cancelShift(shiftId), BookingResult.alreadyCancelled);
+  });
+
+  // ---------------------------------------------------------------------
+  // НЕВЫХОД
+  // ---------------------------------------------------------------------
+
+  test('невыход не идёт ни в заработок, ни в число смен', () async {
+    final (shiftId, worker, manager) = await upcomingShift();
+
+    session.setUser(manager);
+    expect(
+      await shifts.markNoShow(shiftId: shiftId, workerId: worker.id),
+      BookingResult.ok,
+    );
+
+    final after = (await auth.refresh(worker.id))!;
+    expect(after.completedShifts, 0);
+    expect(after.noShows, 1);
+
+    session.setUser(after);
+    expect(await shifts.completedShifts(), isEmpty);
+  });
+
+  test('надёжность — это доля выходов, а не оценка', () async {
+    final (firstShift, worker, manager) = await upcomingShift();
+
+    // Одна смена отработана, вторая — нет.
+    session.setUser(manager);
+    await shifts.confirmAttendance(shiftId: firstShift, workerId: worker.id);
+
+    final secondShift = await shifts.createShift(
+      workDate: daysAgo(0),
+      title: 'Ещё смена',
+      company: 'Magnum',
+      address: 'г. Алматы, ул. Абая, 2',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 1,
+      createdBy: manager.id,
+      city: 'Алматы',
+    );
+    session.setUser(worker);
+    await shifts.apply(secondShift);
+    session.setUser(manager);
+    await shifts.markNoShow(shiftId: secondShift, workerId: worker.id);
+
+    final after = (await auth.refresh(worker.id))!;
+    expect(after.completedShifts, 1);
+    expect(after.noShows, 1);
+    expect(after.reliabilityPercent, 50);
+
+    // А рейтинг невыход не трогает: это разные вопросы.
+    expect(after.ratingCount, 0, reason: 'оценок никто не ставил');
+  });
+
+  test('о невыходе сообщают самому человеку', () async {
+    final (shiftId, worker, manager) = await upcomingShift();
+    session.setUser(manager);
+    await shifts.markNoShow(shiftId: shiftId, workerId: worker.id);
+
+    session.setUser(worker);
+    final notes = (await shifts.notifications())
+        .where((n) => n.kind == NotificationKind.noShow)
+        .toList();
+    expect(notes, hasLength(1));
+    // Куда идти, если заказчик ошибся.
+    expect(notes.first.body, contains('поддержку'));
+  });
+
+  test('чужому человеку невыход не поставишь', () async {
+    final (shiftId, worker, _) = await upcomingShift();
+
+    // Заказчик с другой смены — не хозяин этой.
+    final stranger = await auth.register(
+      phone: '77045550001',
+      fullName: 'Чужой Заказчик',
+      city: 'Алматы',
+      role: UserRole.manager,
+      company: 'Small',
+    );
+    session.setUser(stranger);
+    expect(
+      await shifts.markNoShow(shiftId: shiftId, workerId: worker.id),
+      BookingResult.notMine,
+    );
+
+    expect((await auth.refresh(worker.id))!.noShows, 0);
+  });
+
+  test('чужую смену нельзя и засчитать', () async {
+    final (shiftId, worker, _) = await upcomingShift();
+
+    final stranger = await auth.register(
+      phone: '77045550002',
+      fullName: 'Чужой Заказчик',
+      city: 'Алматы',
+      role: UserRole.manager,
+      company: 'Small',
+    );
+    session.setUser(stranger);
+    expect(
+      await shifts.confirmAttendance(shiftId: shiftId, workerId: worker.id),
+      BookingResult.notMine,
+    );
+
+    expect((await auth.refresh(worker.id))!.completedShifts, 0);
+  });
+
+  test('заказчик видит надёжность записавшегося', () async {
+    final (shiftId, worker, manager) = await upcomingShift();
+    session.setUser(manager);
+    await shifts.markNoShow(shiftId: shiftId, workerId: worker.id);
+
+    final people = await shifts.applicantsFor(shiftId);
+    expect(people, hasLength(1));
+    expect(people.first.isNoShow, isTrue);
+    expect(people.first.user.noShows, 1);
+  });
+
+  test('без истории надёжность равна ста процентам', () async {
+    final (_, worker, _) = await upcomingShift();
+    final fresh = (await auth.refresh(worker.id))!;
+
+    expect(fresh.hasAttendanceRecord, isFalse);
+    expect(fresh.reliabilityPercent, 100);
   });
 
   // ---------------------------------------------------------------------

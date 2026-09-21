@@ -307,12 +307,25 @@ class _Stats extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: _StatTile(
-            icon: Icons.emoji_events_rounded,
-            value: user.level,
-            label: 'Уровень',
-            color: const Color(0xFF6366F1),
-          ),
+          // Третья клетка меняется по обстоятельствам.
+          //
+          // Пока человек выходит на все смены, уровень интереснее:
+          // «100% выходов» у того, кто ни разу не подвёл, — очевидность.
+          // А вот появился невыход — и это важнее уровня, потому что
+          // именно по этому числу его будут выбирать заказчики.
+          child: user.noShows > 0
+              ? _StatTile(
+                  icon: Icons.event_available_rounded,
+                  value: '${user.reliabilityPercent}%',
+                  label: 'Выходов',
+                  color: AppColors.warning,
+                )
+              : _StatTile(
+                  icon: Icons.emoji_events_rounded,
+                  value: user.level,
+                  label: 'Уровень',
+                  color: const Color(0xFF6366F1),
+                ),
         ),
       ],
     );

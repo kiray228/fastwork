@@ -89,6 +89,14 @@ class ApiShiftRepository implements ShiftRepository {
       _result(await client.post('/api/shifts/$shiftId/checkin'));
 
   @override
+  Future<BookingResult> markNoShow({
+    required int shiftId,
+    required int workerId,
+  }) async =>
+      _result(await client
+          .post('/api/shifts/$shiftId/no-show', {'workerId': workerId}));
+
+  @override
   Future<BookingResult> cancelShift(int shiftId) async =>
       _result(await client.post('/api/shifts/$shiftId/cancel-shift'));
 
@@ -118,12 +126,12 @@ class ApiShiftRepository implements ShiftRepository {
       }));
 
   @override
-  Future<void> confirmAttendance({
+  Future<BookingResult> confirmAttendance({
     required int shiftId,
     required int workerId,
-  }) async {
-    await client.post('/api/shifts/$shiftId/confirm', {'workerId': workerId});
-  }
+  }) async =>
+      _result(await client
+          .post('/api/shifts/$shiftId/confirm', {'workerId': workerId}));
 
   @override
   Future<List<Shift>> myShifts({required bool archived}) async => _shifts(

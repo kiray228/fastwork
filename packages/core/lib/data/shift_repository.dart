@@ -120,7 +120,17 @@ abstract class ShiftRepository {
 
   /// Заказчик подтверждает, что человек отработал.
   /// Только после этого смена идёт в заработок и в рейтинг.
-  Future<void> confirmAttendance({
+  Future<BookingResult> confirmAttendance({
+    required int shiftId,
+    required int workerId,
+  });
+
+  /// Заказчик отмечает, что человек не вышел.
+  ///
+  /// Только вручную и только заказчиком. Соблазнительно было бы считать
+  /// невыходом любую прошедшую смену без подтверждения — но это наказывало
+  /// бы исполнителя за то, что заказчик забыл нажать кнопку.
+  Future<BookingResult> markNoShow({
     required int shiftId,
     required int workerId,
   });
@@ -489,10 +499,14 @@ class DbShiftRepository implements ShiftRepository {
   }
 
   @override
-  Future<void> confirmAttendance({
+  Future<BookingResult> confirmAttendance({
     required int shiftId,
     required int workerId,
   }) async {
+    final shift = await _myShiftOr(shiftId);
+    if (shift is BookingResult) return shift;
+    shift as Shift;
+
     await (db.update(db.applicationRows)
           ..where((a) =>
               a.shiftId.equals(shiftId) & a.workerId.equals(workerId)))
@@ -500,8 +514,6 @@ class DbShiftRepository implements ShiftRepository {
       status: Value(ApplicationStatus.completed),
     ));
 
-    final shift = await shiftById(shiftId);
-    if (shift == null) return;
     await _notify(
       userId: workerId,
       kind: NotificationKind.confirmed,
@@ -511,6 +523,50 @@ class DbShiftRepository implements ShiftRepository {
           'Начислено ${formatMoney(shift.totalPay)}.',
       shiftId: shiftId,
     );
+    return BookingResult.ok;
+  }
+
+  /// Смена, которой распоряжается текущий заказчик, — или причина отказа.
+  ///
+  /// Проверка вынесена отдельно, потому что нужна дважды: и когда выход
+  /// подтверждают, и когда отмечают невыход. Оба действия меняют чужую
+  /// репутацию, и права на них ровно у одного человека — того, кто смену
+  /// создал.
+  Future<Object> _myShiftOr(int shiftId) async {
+    final shift = await shiftById(shiftId);
+    if (shift == null) return BookingResult.notFound;
+    if (shift.createdBy != _workerId) return BookingResult.notMine;
+    return shift;
+  }
+
+  @override
+  Future<BookingResult> markNoShow({
+    required int shiftId,
+    required int workerId,
+  }) async {
+    final shift = await _myShiftOr(shiftId);
+    if (shift is BookingResult) return shift;
+    shift as Shift;
+
+    await (db.update(db.applicationRows)
+          ..where((a) =>
+              a.shiftId.equals(shiftId) & a.workerId.equals(workerId)))
+        .write(const ApplicationRowsCompanion(
+      status: Value(ApplicationStatus.noShow),
+    ));
+
+    // Человек обязан узнать: отметка влияет на его надёжность, и если
+    // заказчик ошибся, у него должен быть повод написать в поддержку.
+    await _notify(
+      userId: workerId,
+      kind: NotificationKind.noShow,
+      title: 'Отмечен невыход',
+      body: 'Заказчик отметил, что вы не вышли на «${shift.title}» '
+          '${_dayText(shift.workDate)}. Если это ошибка — напишите в '
+          'поддержку.',
+      shiftId: shiftId,
+    );
+    return BookingResult.ok;
   }
 
   @override
@@ -718,10 +774,17 @@ class DbShiftRepository implements ShiftRepository {
                (SELECT AVG(w.rating) FROM worker_review_rows w
                  WHERE w.worker_id = u.id),
                u.rating
-             ) AS DOUBLE PRECISION) AS live_rating
+             ) AS DOUBLE PRECISION) AS live_rating,
+             CAST(COALESCE((SELECT COUNT(*) FROM application_rows d
+               WHERE d.worker_id = u.id AND d.status = 'completed'
+             ), 0) AS INTEGER) AS done_count,
+             CAST(COALESCE((SELECT COUNT(*) FROM application_rows n
+               WHERE n.worker_id = u.id AND n.status = 'no_show'
+             ), 0) AS INTEGER) AS missed_count
       FROM application_rows a
       JOIN user_rows u ON u.id = a.worker_id
-      WHERE a.shift_id = ? AND a.status IN ('active', 'completed')
+      WHERE a.shift_id = ?
+        AND a.status IN ('active', 'completed', 'no_show')
       ORDER BY live_rating DESC
       ''',
       variables: [Variable.withInt(shiftId)],
@@ -738,6 +801,8 @@ class DbShiftRepository implements ShiftRepository {
                 rating: r.read<double>('live_rating'),
                 isVerified: r.read<bool>('is_verified'),
                 role: r.read<String>('role'),
+                completedShifts: r.read<int>('done_count'),
+                noShows: r.read<int>('missed_count'),
               ),
               status: r.read<String>('application_status'),
               checkedInAt: r.readNullable<DateTime>('checked_in_at'),

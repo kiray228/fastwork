@@ -340,19 +340,66 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
     setState(() => state = result);
   }
 
+  Future<void> _markNoShow(ShiftApplicant applicant) async {
+    final agreed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Отметить невыход?'),
+        content: Text(
+          '${applicant.user.fullName} не вышел на смену. '
+          'Отметка видна другим заказчикам и влияет на надёжность — '
+          'ставьте её, только если человек действительно не пришёл.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: const Text('Не вышел'),
+          ),
+        ],
+      ),
+    );
+    if (agreed != true || !mounted) return;
+
+    final result = await guarded(
+      context,
+      () => widget.repository.markNoShow(
+        shiftId: widget.shift.id,
+        workerId: applicant.user.id,
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result == BookingResult.ok
+            ? 'Отмечено: ${applicant.user.fullName} не вышел'
+            : 'Не получилось отметить'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    await _load();
+  }
+
   Future<void> _confirm(ShiftApplicant applicant) async {
-    final done = await guardedDone(
+    final result = await guarded(
       context,
       () => widget.repository.confirmAttendance(
         shiftId: widget.shift.id,
         workerId: applicant.user.id,
       ),
     );
-    if (!mounted || !done) return;
+    if (result == null || !mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Смена засчитана: ${applicant.user.fullName}'),
+        content: Text(result == BookingResult.ok
+            ? 'Смена засчитана: ${applicant.user.fullName}'
+            : 'Это не ваша смена'),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -385,12 +432,23 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
               itemBuilder: (context, index) {
                 if (index == 0) return _AttendanceHint(shift: widget.shift);
                 final item = value[index - 1];
+                final canMark = DateTime.now().isAfter(widget.shift.startsAt);
                 return AnimatedEntrance(
                   index: index,
                   child: _ApplicantTile(
                     applicant: item,
-                    onConfirm: item.isCheckedIn && !item.isConfirmed
+                    // Отмечать можно только после начала смены: раньше
+                    // просто не о чем говорить — человек ещё не опоздал.
+                    //
+                    // Раньше «Подтвердить» показывалось лишь тем, кто
+                    // отметился. Но отметка — дело добровольное: человек
+                    // мог отработать и не нажать кнопку, и заказчик
+                    // оставался без возможности засчитать ему смену.
+                    onConfirm: canMark && item.isUnmarked
                         ? () => _confirm(item)
+                        : null,
+                    onNoShow: canMark && item.isUnmarked
+                        ? () => _markNoShow(item)
                         : null,
                   ),
                 );
@@ -440,8 +498,13 @@ class _AttendanceHint extends StatelessWidget {
 class _ApplicantTile extends StatelessWidget {
   final ShiftApplicant applicant;
   final VoidCallback? onConfirm;
+  final VoidCallback? onNoShow;
 
-  const _ApplicantTile({required this.applicant, this.onConfirm});
+  const _ApplicantTile({
+    required this.applicant,
+    this.onConfirm,
+    this.onNoShow,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -527,6 +590,12 @@ class _ApplicantTile extends StatelessWidget {
                     icon: Icons.check_circle_outline_rounded,
                     color: AppColors.brand,
                   )
+                else if (applicant.isNoShow)
+                  const TagChip(
+                    text: 'Не вышел',
+                    icon: Icons.person_off_outlined,
+                    color: AppColors.danger,
+                  )
                 else if (applicant.isCheckedIn)
                   const TagChip(
                     text: 'На месте',
@@ -537,6 +606,34 @@ class _ApplicantTile extends StatelessWidget {
                   const TagChip(text: 'Записан'),
               ],
             ),
+            // Надёжность показываем, только если есть о чём говорить:
+            // у новичка «100%» из ниоткуда — не похвала, а пустой звук.
+            if (applicant.user.hasAttendanceRecord &&
+                applicant.user.noShows > 0) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Icon(Icons.person_off_outlined,
+                      size: 14, color: AppColors.warning),
+                  const SizedBox(width: 6),
+                  // Flexible с многоточием: на узкой карточке строка
+                  // не помещалась и вылезала полосатой лентой за край.
+                  Flexible(
+                    child: Text(
+                      'Выходит: ${applicant.user.reliabilityPercent}% · '
+                      'невыходов ${applicant.user.noShows}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.warning,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             if (applicant.checkedInAt != null) ...[
               const SizedBox(height: 10),
               Row(
@@ -555,18 +652,37 @@ class _ApplicantTile extends StatelessWidget {
                 ],
               ),
             ],
-            if (onConfirm != null) ...[
+            if (onConfirm != null || onNoShow != null) ...[
               const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: onConfirm,
-                  icon: const Icon(Icons.check_rounded, size: 18),
-                  label: const Text('Подтвердить выход'),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(44),
-                  ),
-                ),
+              Row(
+                children: [
+                  if (onConfirm != null)
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: onConfirm,
+                        icon: const Icon(Icons.check_rounded, size: 18),
+                        label: const Text('Вышел'),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size.fromHeight(44),
+                        ),
+                      ),
+                    ),
+                  if (onConfirm != null && onNoShow != null)
+                    const SizedBox(width: 10),
+                  if (onNoShow != null)
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: onNoShow,
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                        label: const Text('Не вышел'),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(44),
+                          foregroundColor: AppColors.danger,
+                          side: const BorderSide(color: AppColors.danger),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ],
           ],

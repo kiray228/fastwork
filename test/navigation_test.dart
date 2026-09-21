@@ -752,11 +752,107 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('На месте'), findsOneWidget);
-      await tester.tap(find.text('Подтвердить выход'));
+      await tester.tap(find.text('Вышел'));
       await tester.pumpAndSettle();
 
       expect(find.text('Отработал'), findsOneWidget);
-      expect(find.text('Подтвердить выход'), findsNothing);
+      expect(find.text('Вышел'), findsNothing);
+    });
+
+    testWidgets('заказчик отмечает невыход, но сначала его переспросят',
+        (tester) async {
+      final now = DateTime.now();
+      final repo = FakeShiftRepository(
+        userRating: 5.0,
+        shifts: [
+          Shift(
+            id: 1,
+            workDate: DateTime(now.year, now.month, now.day),
+            title: 'Услуги фасовщика',
+            company: 'Magnum',
+            address: 'г. Алматы, ул. Абая, 1',
+            startMinutes: now.hour * 60 + now.minute,
+            endMinutes: 1439,
+            hourlyRate: 100000,
+            workersNeeded: 3,
+            workersHired: 0,
+            createdBy: 1,
+          ),
+        ],
+      );
+      await repo.apply(1);
+
+      await openApp(
+        tester,
+        role: UserRole.manager,
+        repos: buildRepos(
+          shifts: repo,
+          signedIn: testUser(role: UserRole.manager),
+        ),
+      );
+
+      await tester.tap(find.text('Услуги фасовщика'));
+      await tester.pumpAndSettle();
+
+      // Человек не отмечался — но засчитать выход всё равно можно:
+      // отметка добровольная, а работал он или нет, знает заказчик.
+      expect(find.text('Вышел'), findsOneWidget);
+
+      await tester.tap(find.text('Не вышел'));
+      await tester.pumpAndSettle();
+      expect(find.text('Отметить невыход?'), findsOneWidget);
+
+      // Передумал — ничего не произошло.
+      await tester.tap(find.text('Отмена'));
+      await tester.pumpAndSettle();
+      expect(find.text('Не вышел'), findsOneWidget);
+
+      // А теперь подтверждаем.
+      await tester.tap(find.text('Не вышел'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Не вышел'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Не вышел'), findsOneWidget); // это уже ярлык
+      expect(find.text('Вышел'), findsNothing);
+    });
+
+    testWidgets('до начала смены отмечать нечего', (tester) async {
+      final now = DateTime.now().add(const Duration(days: 1));
+      final repo = FakeShiftRepository(
+        userRating: 5.0,
+        shifts: [
+          Shift(
+            id: 1,
+            workDate: DateTime(now.year, now.month, now.day),
+            title: 'Завтрашняя смена',
+            company: 'Magnum',
+            address: 'г. Алматы, ул. Абая, 1',
+            startMinutes: 600,
+            endMinutes: 1200,
+            hourlyRate: 100000,
+            workersNeeded: 3,
+            workersHired: 0,
+            createdBy: 1,
+          ),
+        ],
+      );
+      await repo.apply(1);
+
+      await openApp(
+        tester,
+        role: UserRole.manager,
+        repos: buildRepos(
+          shifts: repo,
+          signedIn: testUser(role: UserRole.manager),
+        ),
+      );
+
+      await tester.tap(find.text('Завтрашняя смена'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Вышел'), findsNothing);
+      expect(find.text('Не вышел'), findsNothing);
     });
   });
 

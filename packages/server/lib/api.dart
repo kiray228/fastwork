@@ -499,11 +499,28 @@ class Api {
           return _error('Только для заказчиков', status: 403);
         }
         final body = await _body(request);
-        await _shiftsFor(user).confirmAttendance(
+        final result = await _shiftsFor(user).confirmAttendance(
           shiftId: int.parse(id),
           workerId: body['workerId'] as int,
         );
-        return _json({'ok': true});
+        return _json({'result': result.name});
+      });
+    });
+
+    // Отметка «не вышел». Отдельный адрес, а не флаг в подтверждении:
+    // это противоположное по смыслу действие, и путать их нельзя.
+    router.post('/api/shifts/<id|[0-9]+>/no-show',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        if (!user.isManager) {
+          return _error('Только для заказчиков', status: 403);
+        }
+        final body = await _body(request);
+        final result = await _shiftsFor(user).markNoShow(
+          shiftId: int.parse(id),
+          workerId: body['workerId'] as int,
+        );
+        return _json({'result': result.name});
       });
     });
 
