@@ -1,0 +1,61 @@
+# Проверка, что приложение собирается под iPhone.
+#
+# Поставить то, что здесь получится, на телефон НЕЛЬЗЯ: iOS запускает
+# только приложения, подписанные Apple, а подпись даётся вместе с платным
+# аккаунтом разработчика. Здесь мы собираем без подписи.
+#
+# Зачем тогда собирать. Чтобы код под iPhone не сгнил незаметно. Мы его
+# не запускаем месяцами, и однажды какая-нибудь зависимость перестанет
+# собираться — узнать об этом лучше сегодня, чем в день, когда решишь
+# выкладывать приложение и будешь торопиться.
+#
+# Маковские машины GitHub для открытых репозиториев бесплатны, так что
+# своего Mac для этой проверки не нужно.
+
+name: Проверить сборку под iPhone
+
+on:
+  # Не на каждый пуш: маковская сборка идёт минут десять, а трогаем мы
+  # её редко. Запускаем, только когда поменялось что-то, что на неё
+  # влияет, — и по кнопке вручную.
+  push:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'packages/**'
+      - 'ios/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/build-ios.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ios
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Собрать без подписи
+    runs-on: macos-latest
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Поставить Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.4
+          channel: stable
+          cache: true
+
+      - name: Скачать зависимости
+        run: flutter pub get
+
+      - name: Собрать под iPhone
+        # --no-codesign — «собери, но не подписывай». Без этого сборка
+        # остановится с требованием сертификата, которого у нас нет.
+        run: >
+          flutter build ios --release --no-codesign
+          --dart-define=API_URL=https://fastwork-server.onrender.com
+
+      - name: Сколько весит
+        run: du -sh build/ios/iphoneos/Runner.app
