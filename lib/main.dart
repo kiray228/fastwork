@@ -35,7 +35,7 @@ Future<void> main() async {
 
   final session = AppSession();
   final repos = apiUrl.isEmpty
-      ? await _localRepositories()
+      ? await _localRepositories(session)
       : await _serverRepositories(apiUrl);
 
   // Кто входил в прошлый раз — если кто-то входил, сразу пускаем внутрь.
@@ -45,8 +45,11 @@ Future<void> main() async {
 }
 
 /// Всё хранится на самом устройстве.
-Future<AppRepositories> _localRepositories() async {
-  final session = AppSession();
+///
+/// Сессию берём ту же, что получит приложение. Раньше здесь заводилась
+/// своя, отдельная, — и хранилище так и не узнавало, кто вошёл: город
+/// у него был пустой, и лента без сервера всегда оставалась пустой.
+Future<AppRepositories> _localRepositories(AppSession session) async {
   try {
     final database = AppDatabase(openAppDatabase());
     // Один шлюз на оба хранилища — как один провайдер у настоящего
