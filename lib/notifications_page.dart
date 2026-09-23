@@ -7,6 +7,7 @@ import 'shift_detail_page.dart';
 import 'theme/app_colors.dart';
 import 'widgets/async_state.dart';
 import 'widgets/common.dart';
+import 'widgets/nav.dart';
 import 'widgets/skeleton.dart';
 
 /// Уведомления — то, что показывает колокольчик.
@@ -62,8 +63,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
     final shiftId = notification.shiftId;
     if (shiftId == null) return;
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ShiftDetailPage(
+      appRoute(
+        ShiftDetailPage(
           shiftId: shiftId,
           repository: widget.repository,
           session: widget.session,

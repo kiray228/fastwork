@@ -11,22 +11,9 @@ import 'app_colors.dart';
 class AppTheme {
   AppTheme._();
 
-  static const radius = 20.0;
-
-  /// Мягкая тень под карточками. Именно она отличает «плоский» вид
-  /// от аккуратного: карточка должна чуть приподниматься над фоном.
-  static const cardShadow = [
-    BoxShadow(
-      color: Color(0x0F0F172A),
-      blurRadius: 24,
-      offset: Offset(0, 6),
-    ),
-    BoxShadow(
-      color: Color(0x08000000),
-      blurRadius: 2,
-      offset: Offset(0, 1),
-    ),
-  ];
+  /// Скругление карточек. В «жидком стекле» углы круглее: стекло не
+  /// режут под прямым углом, его отливают.
+  static const radius = 26.0;
 
   static ThemeData light() => _build(Brightness.light);
   static ThemeData dark() => _build(Brightness.dark);
@@ -76,10 +63,26 @@ class AppTheme {
       fontFamilyFallback: const ['Roboto', 'Noto Sans', 'Arial'],
     );
 
+    // Поля ввода — тоже стекло: полупрозрачная заливка и светлая кромка.
+    final fieldFill = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.white.withValues(alpha: 0.65);
+    final fieldEdge = isDark
+        ? Colors.white.withValues(alpha: 0.12)
+        : Colors.white.withValues(alpha: 0.9);
+    OutlineInputBorder field(Color color, [double width = 1]) =>
+        OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: color, width: width),
+        );
+
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
-      scaffoldBackgroundColor: bg,
+      // Экраны прозрачные: под ними живой фон `LiquidBackground`, и
+      // стекло карточек должно видеть его, а не сплошную заливку.
+      scaffoldBackgroundColor: Colors.transparent,
+      canvasColor: bg,
       textTheme: textThemeWithFallback,
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.brand,
@@ -91,7 +94,7 @@ class AppTheme {
         onSurface: ink,
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: bg,
+        backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
@@ -105,13 +108,40 @@ class AppTheme {
           disabledBackgroundColor:
               isDark ? AppColors.darkBorder : AppColors.border,
           disabledForegroundColor: AppColors.muted,
-          minimumSize: const Size.fromHeight(52),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
+          minimumSize: const Size.fromHeight(54),
+          // Кнопка-капля: полностью круглые края.
+          shape: const StadiumBorder(),
           textStyle: textThemeWithFallback.labelLarge?.copyWith(fontSize: 16),
           elevation: 0,
         ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          shape: const StadiumBorder(),
+          side: BorderSide(color: fieldEdge),
+          backgroundColor: fieldFill,
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(shape: const StadiumBorder()),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: fieldFill,
+        border: field(fieldEdge),
+        enabledBorder: field(fieldEdge),
+        focusedBorder: field(AppColors.brand, 1.6),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: isDark
+            ? AppColors.darkSurface.withValues(alpha: 0.94)
+            : Colors.white.withValues(alpha: 0.94),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
       ),
       dividerTheme: DividerThemeData(
         color: isDark ? AppColors.darkBorder : AppColors.border,
@@ -126,7 +156,7 @@ class AppTheme {
         ),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(18),
         ),
       ),
     );

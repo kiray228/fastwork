@@ -19,6 +19,7 @@ import 'package:fastwork_core/data/wallet_repository.dart';
 import 'package:fastwork_core/payment.dart';
 import 'home_shell.dart';
 import 'theme/app_theme.dart';
+import 'theme/glass.dart';
 
 /// Адрес сервера. Пусто — работаем на своей базе, без сети.
 ///
@@ -128,8 +129,9 @@ class FastworkApp extends StatelessWidget {
       themeMode: ThemeMode.system,
       // Ограничиваем ширину, чтобы на компьютере приложение выглядело как
       // телефон, а не растягивалось на весь монитор.
-      builder: (context, child) => ColoredBox(
-        color: Theme.of(context).scaffoldBackgroundColor,
+      // Фон на всю ширину окна — на компьютере по бокам от «телефона»
+      // тоже живой фон, а не серые поля.
+      builder: (context, child) => LiquidBackground(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 440),
@@ -137,7 +139,9 @@ class FastworkApp extends StatelessWidget {
           ),
         ),
       ),
-      home: _AuthGate(session: session, repos: repos),
+      home: LiquidBackground(
+        child: _AuthGate(session: session, repos: repos),
+      ),
     );
   }
 }

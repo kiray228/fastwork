@@ -5,6 +5,7 @@ import 'package:fastwork_core/data/auth_repository.dart';
 import 'package:fastwork_core/data/database.dart';
 import '../data/session.dart';
 import '../theme/app_colors.dart';
+import '../theme/glass.dart';
 import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_core/user.dart';
 import '../widgets/async_state.dart';
@@ -551,8 +552,6 @@ class _RoleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -561,12 +560,12 @@ class _RoleCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected
               ? AppColors.brand.withValues(alpha: 0.12)
-              : (isDark ? AppColors.darkSurface : Colors.white),
+              : glassFieldFill(context),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: selected
                 ? AppColors.brand
-                : (isDark ? AppColors.darkBorder : AppColors.border),
+                : glassFieldEdge(context),
             width: selected ? 1.6 : 1,
           ),
         ),
@@ -622,8 +621,6 @@ class _Field extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -646,19 +643,19 @@ class _Field extends StatelessWidget {
           decoration: InputDecoration(
             hintText: hint,
             filled: true,
-            fillColor: isDark ? AppColors.darkSurface : Colors.white,
+            fillColor: glassFieldFill(context),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide(
-                color: isDark ? AppColors.darkBorder : AppColors.border,
+                color: glassFieldEdge(context),
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide(
-                color: isDark ? AppColors.darkBorder : AppColors.border,
+                color: glassFieldEdge(context),
               ),
             ),
             focusedBorder: OutlineInputBorder(

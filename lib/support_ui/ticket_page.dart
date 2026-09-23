@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fastwork_core/data/support_repository.dart';
 import 'package:fastwork_core/support.dart';
 import '../theme/app_colors.dart';
+import '../theme/glass.dart';
 import '../widgets/skeleton.dart';
 
 /// Переписка внутри одного обращения.
@@ -91,7 +92,6 @@ class _Bubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final mine = !message.fromSupport;
 
     return Align(
@@ -105,7 +105,7 @@ class _Bubble extends StatelessWidget {
         decoration: BoxDecoration(
           color: mine
               ? AppColors.brand
-              : (isDark ? AppColors.darkSurface : Colors.white),
+              : glassFieldFill(context),
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -115,7 +115,7 @@ class _Bubble extends StatelessWidget {
           border: mine
               ? null
               : Border.all(
-                  color: isDark ? AppColors.darkBorder : AppColors.border,
+                  color: glassFieldEdge(context),
                 ),
         ),
         child: Column(
@@ -157,15 +157,13 @@ class _Composer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: GlassTokens.of(context).strongFill,
         border: Border(
           top: BorderSide(
-            color: isDark ? AppColors.darkBorder : AppColors.border,
+            color: glassFieldEdge(context),
           ),
         ),
       ),
@@ -184,7 +182,7 @@ class _Composer extends StatelessWidget {
                   hintText: 'Сообщение',
                   isDense: true,
                   filled: true,
-                  fillColor: isDark ? AppColors.darkBg : AppColors.bg,
+                  fillColor: glassFieldFill(context),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 12,

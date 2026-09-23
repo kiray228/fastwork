@@ -8,6 +8,7 @@ import '../data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
+import '../theme/glass.dart';
 import '../widgets/async_state.dart';
 import '../widgets/category_icon.dart';
 import '../widgets/common.dart';
@@ -617,8 +618,6 @@ class _Input extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
@@ -629,19 +628,19 @@ class _Input extends StatelessWidget {
         hintText: hint,
         isDense: true,
         filled: true,
-        fillColor: isDark ? AppColors.darkBg : AppColors.bg,
+        fillColor: glassFieldFill(context),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
-            color: isDark ? AppColors.darkBorder : AppColors.border,
+            color: glassFieldEdge(context),
           ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
-            color: isDark ? AppColors.darkBorder : AppColors.border,
+            color: glassFieldEdge(context),
           ),
         ),
         focusedBorder: OutlineInputBorder(
@@ -702,7 +701,6 @@ class _CategoryPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final chosen = category;
 
     return InkWell(
@@ -711,10 +709,10 @@ class _CategoryPicker extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: isDark ? AppColors.darkBg : AppColors.bg,
+          color: glassFieldFill(context),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isDark ? AppColors.darkBorder : AppColors.border,
+            color: glassFieldEdge(context),
           ),
         ),
         child: Row(
@@ -779,10 +777,7 @@ class _CategorySheetState extends State<_CategorySheet> {
         .where((c) => q.isEmpty || c.name.toLowerCase().contains(q))
         .toList();
 
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
-      clipBehavior: Clip.antiAlias,
+    return GlassSheet(
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.85,

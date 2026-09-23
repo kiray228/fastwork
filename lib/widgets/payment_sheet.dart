@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
+import '../theme/glass.dart';
 import 'async_state.dart';
 
 /// Строка расшифровки: за что именно платят.
@@ -143,10 +144,7 @@ class _PaymentSheetState extends State<_PaymentSheet> {
     return Padding(
       // Клавиатура не должна закрывать поля карты.
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Material(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
-        clipBehavior: Clip.antiAlias,
+      child: GlassSheet(
         child: ConstrainedBox(
           constraints: BoxConstraints(
             maxHeight: MediaQuery.of(context).size.height * 0.9,

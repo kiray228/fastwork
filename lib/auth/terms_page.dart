@@ -6,6 +6,7 @@ import '../data/session.dart';
 import '../theme/app_colors.dart';
 import '../widgets/async_state.dart';
 import '../widgets/common.dart';
+import '../widgets/nav.dart';
 
 /// Правила сервиса целиком — чтобы прочитать.
 class TermsPage extends StatelessWidget {
@@ -186,7 +187,7 @@ class TermsCheckbox extends StatelessWidget {
                 ),
                 GestureDetector(
                   onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(builder: (_) => const TermsPage()),
+                    appRoute(const TermsPage()),
                   ),
                   child: const Text(
                     'правила сервиса',

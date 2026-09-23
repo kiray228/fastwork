@@ -9,6 +9,7 @@ import 'package:fastwork_core/shift.dart';
 import 'notifications_page.dart';
 import 'shift_detail_page.dart';
 import 'theme/app_colors.dart';
+import 'theme/glass.dart';
 import 'widgets/async_state.dart';
 import 'widgets/common.dart';
 import 'widgets/date_strip.dart';
@@ -366,7 +367,6 @@ class _FilterButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final on = activeCount > 0;
 
     return GestureDetector(
@@ -376,12 +376,12 @@ class _FilterButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: on
               ? AppColors.brand
-              : (isDark ? AppColors.darkSurface : Colors.white),
+              : glassFieldFill(context),
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
             color: on
                 ? AppColors.brand
-                : (isDark ? AppColors.darkBorder : AppColors.border),
+                : glassFieldEdge(context),
           ),
         ),
         child: Row(

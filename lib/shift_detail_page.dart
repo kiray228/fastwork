@@ -5,6 +5,7 @@ import 'package:fastwork_core/data/shift_repository.dart';
 import 'company_page.dart';
 import 'package:fastwork_core/shift.dart';
 import 'theme/app_colors.dart';
+import 'theme/glass.dart';
 import 'widgets/booking_confirm_sheet.dart';
 import 'widgets/async_state.dart';
 import 'widgets/common.dart';
@@ -798,7 +799,6 @@ class _BottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final canCancel = shift.canCancelAt(DateTime.now());
     final allowed = shift.ratingAllows(userRating);
 
@@ -844,78 +844,68 @@ class _BottomBar extends StatelessWidget {
       outlined = false;
     }
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(
-          top: BorderSide(
-            color: isDark ? AppColors.darkBorder : AppColors.border,
-          ),
-        ),
-        boxShadow: isDark
-            ? null
-            : const [
-                BoxShadow(
-                  color: Color(0x14000000),
-                  blurRadius: 20,
-                  offset: Offset(0, -6),
-                ),
-              ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.account_balance_wallet_outlined,
-                  size: 15,
-                  color: AppColors.muted,
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    shift.payoutDelayDays == 1
-                        ? 'Вознаграждение на следующий день после смены'
-                        : 'Вознаграждение через ${shift.payoutDelayDays} дня',
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      color: AppColors.muted,
-                    ),
-                    textAlign: TextAlign.center,
+    // Низ экрана — стеклянная панель: лента под ней видна размытой,
+    // и ясно, что содержимое продолжается, а не обрезано.
+    return Glass(
+      strong: true,
+      elevated: true,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.account_balance_wallet_outlined,
+                    size: 15,
+                    color: AppColors.muted,
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: busy ? null : action,
-                style: outlined
-                    ? FilledButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        foregroundColor: AppColors.body,
-                        side: const BorderSide(color: AppColors.border),
-                      )
-                    : null,
-                child: busy
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(label),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      shift.payoutDelayDays == 1
+                          ? 'Вознаграждение на следующий день после смены'
+                          : 'Вознаграждение через ${shift.payoutDelayDays} дня',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.muted,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: busy ? null : action,
+                  style: outlined
+                      ? FilledButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: AppColors.body,
+                          side: const BorderSide(color: AppColors.border),
+                        )
+                      : null,
+                  child: busy
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(label),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

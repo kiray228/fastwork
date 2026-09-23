@@ -7,6 +7,7 @@ import 'documents_page.dart';
 import 'my_reviews_page.dart';
 import 'support_ui/support_page.dart';
 import 'theme/app_colors.dart';
+import 'theme/glass.dart';
 import 'package:fastwork_core/user.dart';
 import 'wallet_page.dart';
 import 'widgets/common.dart';
@@ -30,10 +31,7 @@ class ProfilePage extends StatelessWidget {
     final picked = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => Material(
-        color: Theme.of(sheetContext).colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
-        clipBehavior: Clip.antiAlias,
+      builder: (sheetContext) => GlassSheet(
         child: SafeArea(
           top: false,
           child: Column(

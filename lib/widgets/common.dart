@@ -3,6 +3,7 @@ import 'package:fastwork_core/category.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
+import '../theme/glass.dart';
 import 'category_icon.dart';
 
 /// Логотип-надпись. Две части разного цвета — простой приём, который
@@ -140,7 +141,11 @@ class GuaranteeChip extends StatelessWidget {
       );
 }
 
-/// Белая карточка со скруглением и мягкой тенью — основа всей вёрстки.
+/// Карточка из стекла — основа всей вёрстки.
+///
+/// Раньше это была белая плашка с тенью. Теперь — матовое стекло: сквозь
+/// неё виден размытый живой фон. Экраны этого не заметили: они как
+/// создавали `SurfaceCard`, так и создают, а поменялся один этот класс.
 class SurfaceCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -155,18 +160,8 @@ class SurfaceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppTheme.radius),
-        border: isDark
-            ? Border.all(color: AppColors.darkBorder)
-            : Border.all(color: AppColors.border.withValues(alpha: 0.7)),
-        boxShadow: isDark ? null : AppTheme.cardShadow,
-      ),
-      clipBehavior: Clip.antiAlias,
+    return Glass(
+      borderRadius: BorderRadius.circular(AppTheme.radius),
       child: Material(
         color: Colors.transparent,
         child: InkWell(

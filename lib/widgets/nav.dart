@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/glass.dart';
+
 /// Переход между экранами: новый выезжает справа и проявляется.
 ///
 /// Стандартный `MaterialPageRoute` на каждой системе выглядит по-своему —
@@ -8,7 +10,10 @@ import 'package:flutter/material.dart';
 /// вместо 300, разница едва заметна глазу, но ощущается как отзывчивость.
 Route<T> appRoute<T>(Widget page) {
   return PageRouteBuilder<T>(
-    pageBuilder: (context, animation, secondary) => page,
+    // Свой фон у каждого экрана: иначе при переходе сквозь прозрачный
+    // новый экран был бы виден старый.
+    pageBuilder: (context, animation, secondary) =>
+        LiquidBackground(child: page),
     transitionDuration: const Duration(milliseconds: 260),
     reverseTransitionDuration: const Duration(milliseconds: 220),
     transitionsBuilder: (context, animation, secondary, child) {

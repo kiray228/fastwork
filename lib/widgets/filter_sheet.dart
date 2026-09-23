@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fastwork_core/category.dart';
 import 'package:fastwork_core/data/shift_filter.dart';
 import '../theme/app_colors.dart';
+import '../theme/glass.dart';
 import 'category_icon.dart';
 
 /// Окно фильтра и сортировки ленты.
@@ -65,10 +66,7 @@ class _FilterSheetState extends State<_FilterSheet> {
     // Material, а не Container с цветом: списочные элементы вроде
     // RadioListTile рисуют подсветку нажатия на ближайшем Material.
     // Если его нет, Flutter честно предупреждает, что эффекты не видны.
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
-      clipBehavior: Clip.antiAlias,
+    return GlassSheet(
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.85,
@@ -216,8 +214,6 @@ class _Choice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -226,12 +222,12 @@ class _Choice extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected
               ? AppColors.brand
-              : (isDark ? AppColors.darkBorder : AppColors.bg),
+              : glassFieldFill(context),
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
             color: selected
                 ? AppColors.brand
-                : (isDark ? AppColors.darkBorder : AppColors.border),
+                : glassFieldEdge(context),
           ),
         ),
         child: Row(
