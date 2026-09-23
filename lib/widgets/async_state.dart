@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/api_client.dart';
+import 'package:fastwork_core/errors.dart';
 
 /// Состояние любой загрузки данных.
 ///
@@ -58,6 +59,9 @@ String describeError(Object error) {
   // Раньше мы его выбрасывали и подставляли своё общее «что-то пошло не
   // так»: человек видел, что сломалось, но не узнавал почему.
   if (error is ApiException) return error.message;
+
+  // Отказ по правилам — его текст и есть объяснение.
+  if (error is UserError) return error.message;
 
   final text = error.toString().toLowerCase();
 

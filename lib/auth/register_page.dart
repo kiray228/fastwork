@@ -5,9 +5,12 @@ import 'package:fastwork_core/data/auth_repository.dart';
 import 'package:fastwork_core/data/database.dart';
 import '../data/session.dart';
 import '../theme/app_colors.dart';
+import '../theme/glass.dart';
+import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_core/user.dart';
 import '../widgets/async_state.dart';
 import '../widgets/common.dart';
+import 'terms_page.dart';
 
 /// Вход и регистрация в одном экране.
 ///
@@ -44,6 +47,10 @@ class _RegisterPageState extends State<RegisterPage> {
   bool get isManager => role == UserRole.manager;
   bool busy = false;
   String? error;
+
+  /// Согласие с правилами. Без него аккаунт не создаётся — это проверяет
+  /// и экран, и хранилище.
+  bool acceptedTerms = false;
 
   late _Step step =
       widget.auth.requiresEmailCode ? _Step.email : _Step.profile;
@@ -153,17 +160,24 @@ class _RegisterPageState extends State<RegisterPage> {
 
       if (widget.auth.requiresEmailCode) {
         // Почту сервер возьмёт из токена, выданного за код.
+        if (!_termsOk()) return;
         user = await widget.auth.register(
           phone: _digits,
           fullName: nameController.text.trim(),
           city: city,
           role: role,
           company: isManager ? companyController.text.trim() : null,
+          acceptedTermsVersion: kTermsVersion,
         );
       } else {
         // На своём устройстве: если таким номером уже входили — пускаем,
         // иначе создаём.
+        //
+        // Галочку спрашиваем только у новых: вошедший раньше уже
+        // соглашался, а если правила с тех пор поменялись, его встретит
+        // отдельный экран согласия.
         final existing = await widget.auth.findByPhone(_digits);
+        if (existing == null && !_termsOk()) return;
         user = existing ??
             await widget.auth.register(
               phone: _digits,
@@ -171,6 +185,7 @@ class _RegisterPageState extends State<RegisterPage> {
               city: city,
               role: role,
               company: isManager ? companyController.text.trim() : null,
+              acceptedTermsVersion: kTermsVersion,
             );
         if (existing != null) await widget.auth.signIn(user);
       }
@@ -178,6 +193,16 @@ class _RegisterPageState extends State<RegisterPage> {
       if (!mounted) return;
       widget.session.setUser(user);
     });
+  }
+
+  /// Проверить галочку. Нет её — показываем причину и не идём дальше.
+  ///
+  /// Проверка внутри `_run`, а не до него: на своём устройстве галочка
+  /// нужна только новому человеку, а новый он или нет, выясняется лишь
+  /// после запроса к базе.
+  bool _termsOk() {
+    if (acceptedTerms) return true;
+    throw TermsNotAccepted();
   }
 
   @override
@@ -216,6 +241,17 @@ class _RegisterPageState extends State<RegisterPage> {
               duration: const Duration(milliseconds: 250),
               child: KeyedSubtree(key: ValueKey(step), child: _stepBody()),
             ),
+
+            if (step == _Step.profile) ...[
+              const SizedBox(height: 18),
+              TermsCheckbox(
+                value: acceptedTerms,
+                onChanged: (v) => setState(() {
+                  acceptedTerms = v;
+                  error = null;
+                }),
+              ),
+            ],
 
             if (error != null) ...[
               const SizedBox(height: 18),
@@ -266,14 +302,16 @@ class _RegisterPageState extends State<RegisterPage> {
               ),
             ],
 
-            const SizedBox(height: 14),
-            const Text(
-              'Нажимая кнопку, вы соглашаетесь с условиями оказания услуг '
-              'и обработкой персональных данных.',
-              textAlign: TextAlign.center,
-              style:
-                  TextStyle(fontSize: 11.5, color: AppColors.muted, height: 1.4),
-            ),
+            if (step != _Step.profile) ...[
+              const SizedBox(height: 14),
+              const Text(
+                'Правила сервиса покажем на следующем шаге — перед тем, '
+                'как создать аккаунт.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 11.5, color: AppColors.muted, height: 1.4),
+              ),
+            ],
           ],
         ),
       ),
@@ -514,8 +552,6 @@ class _RoleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -524,12 +560,12 @@ class _RoleCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected
               ? AppColors.brand.withValues(alpha: 0.12)
-              : (isDark ? AppColors.darkSurface : Colors.white),
+              : glassFieldFill(context),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: selected
                 ? AppColors.brand
-                : (isDark ? AppColors.darkBorder : AppColors.border),
+                : glassFieldEdge(context),
             width: selected ? 1.6 : 1,
           ),
         ),
@@ -585,8 +621,6 @@ class _Field extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -609,19 +643,19 @@ class _Field extends StatelessWidget {
           decoration: InputDecoration(
             hintText: hint,
             filled: true,
-            fillColor: isDark ? AppColors.darkSurface : Colors.white,
+            fillColor: glassFieldFill(context),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide(
-                color: isDark ? AppColors.darkBorder : AppColors.border,
+                color: glassFieldEdge(context),
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide(
-                color: isDark ? AppColors.darkBorder : AppColors.border,
+                color: glassFieldEdge(context),
               ),
             ),
             focusedBorder: OutlineInputBorder(

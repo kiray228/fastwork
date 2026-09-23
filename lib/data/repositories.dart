@@ -1,6 +1,7 @@
 import 'package:fastwork_core/data/auth_repository.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/data/support_repository.dart';
+import 'package:fastwork_core/data/wallet_repository.dart';
 
 /// Все хранилища приложения в одном месте.
 ///
@@ -12,11 +13,13 @@ class AppRepositories {
   final AuthRepository auth;
   final DocumentRepository documents;
   final SupportRepository support;
+  final WalletRepository wallet;
 
   const AppRepositories({
     required this.shifts,
     required this.auth,
     required this.documents,
     required this.support,
+    required this.wallet,
   });
 }

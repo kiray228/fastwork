@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
+import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
 import 'package:fastwork_core/user.dart';
@@ -219,6 +220,20 @@ class _ManagerShiftCard extends StatelessWidget {
               text: '${formatMoney(shift.totalPay)} за смену · '
                   '${formatMoney(shift.hourlyRate)}/ч',
             ),
+            // Где сейчас деньги: у сервиса или уже вернулись.
+            if (shift.isFunded)
+              InfoRow(
+                icon: Icons.verified_user_outlined,
+                iconColor: AppColors.success,
+                text: 'Оплачено ${formatMoney(ShiftCost.of(shift).total)} — '
+                    'деньги у сервиса до подтверждения выхода',
+              )
+            else if (shift.isCancelled)
+              const InfoRow(
+                icon: Icons.undo_rounded,
+                iconColor: AppColors.muted,
+                text: 'Неизрасходованное возвращено на карту',
+              ),
             const SizedBox(height: 12),
             Row(
               children: [

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
+import 'category_icon.dart';
 import 'common.dart';
 
 /// Карточка смены в ленте.
@@ -93,30 +94,33 @@ class ShiftCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            InfoRow(icon: Icons.work_outline, text: shift.title),
+            InfoRow(icon: categoryIcon(shift.category), text: shift.title),
             InfoRow(icon: Icons.place_outlined, text: shift.address),
 
-            if (shift.tags.isNotEmpty || !allowed) ...[
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  if (!allowed)
-                    TagChip(
-                      text: 'Нужен рейтинг '
-                          '${shift.minRating!.toStringAsFixed(1)}',
-                      icon: Icons.lock_outline_rounded,
-                      color: AppColors.accent,
-                    ),
-                  for (final tag in shift.tags)
-                    TagChip(
-                      text: tag,
-                      color: tag == 'Мало мест' ? AppColors.accent : null,
-                    ),
-                ],
-              ),
-            ],
+            // Ярлыки есть всегда: как минимум категория работ.
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                CategoryChip(category: shift.category),
+                // Деньги уже у сервиса — самое важное, что исполнитель
+                // может узнать о заказчике до записи.
+                if (shift.isFunded) const GuaranteeChip(),
+                if (!allowed)
+                  TagChip(
+                    text: 'Нужен рейтинг '
+                        '${shift.minRating!.toStringAsFixed(1)}',
+                    icon: Icons.lock_outline_rounded,
+                    color: AppColors.accent,
+                  ),
+                for (final tag in shift.tags)
+                  TagChip(
+                    text: tag,
+                    color: tag == 'Мало мест' ? AppColors.accent : null,
+                  ),
+              ],
+            ),
 
             const SizedBox(height: 16),
 

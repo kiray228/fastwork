@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
+import '../theme/glass.dart';
 import '../theme/app_theme.dart';
 
 /// Серая «косточка» на месте будущего текста.
@@ -106,18 +106,14 @@ class ShiftCardSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: GlassTokens.of(context).fill,
         borderRadius: BorderRadius.circular(AppTheme.radius),
         border: Border.all(
-          color: isDark
-              ? AppColors.darkBorder
-              : AppColors.border.withValues(alpha: 0.7),
+          color: glassFieldEdge(context),
         ),
       ),
       child: Column(
@@ -184,8 +180,6 @@ class TileListSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Shimmer(
       child: ListView(
         physics: const NeverScrollableScrollPhysics(),
@@ -197,12 +191,10 @@ class TileListSkeleton extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
+                color: GlassTokens.of(context).fill,
                 borderRadius: BorderRadius.circular(AppTheme.radius),
                 border: Border.all(
-                  color: isDark
-                      ? AppColors.darkBorder
-                      : AppColors.border.withValues(alpha: 0.7),
+                  color: glassFieldEdge(context),
                 ),
               ),
               child: Row(

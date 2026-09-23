@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:fastwork_core/category.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
+import '../theme/glass.dart';
+import 'category_icon.dart';
 
 /// Логотип-надпись. Две части разного цвета — простой приём, который
 /// превращает обычный текст в узнаваемый знак.
@@ -108,7 +111,41 @@ class TagChip extends StatelessWidget {
   }
 }
 
-/// Белая карточка со скруглением и мягкой тенью — основа всей вёрстки.
+/// Ярлык категории работ: значок и название.
+///
+/// Отдельный виджет, а не `TagChip` с параметрами в каждом месте: категорию
+/// показывают карточка, экран смены и форма заказчика, и выглядеть она
+/// должна везде одинаково.
+class CategoryChip extends StatelessWidget {
+  final String category;
+
+  const CategoryChip({super.key, required this.category});
+
+  @override
+  Widget build(BuildContext context) => TagChip(
+        text: categoryById(category).name,
+        icon: categoryIcon(category),
+        color: AppColors.brand,
+      );
+}
+
+/// Ярлык «оплата гарантирована»: заказчик уже внёс деньги.
+class GuaranteeChip extends StatelessWidget {
+  const GuaranteeChip({super.key});
+
+  @override
+  Widget build(BuildContext context) => const TagChip(
+        text: 'Оплата гарантирована',
+        icon: Icons.verified_user_rounded,
+        color: AppColors.success,
+      );
+}
+
+/// Карточка из стекла — основа всей вёрстки.
+///
+/// Раньше это была белая плашка с тенью. Теперь — матовое стекло: сквозь
+/// неё виден размытый живой фон. Экраны этого не заметили: они как
+/// создавали `SurfaceCard`, так и создают, а поменялся один этот класс.
 class SurfaceCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -123,18 +160,8 @@ class SurfaceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppTheme.radius),
-        border: isDark
-            ? Border.all(color: AppColors.darkBorder)
-            : Border.all(color: AppColors.border.withValues(alpha: 0.7)),
-        boxShadow: isDark ? null : AppTheme.cardShadow,
-      ),
-      clipBehavior: Clip.antiAlias,
+    return Glass(
+      borderRadius: BorderRadius.circular(AppTheme.radius),
       child: Material(
         color: Colors.transparent,
         child: InkWell(

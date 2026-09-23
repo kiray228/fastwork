@@ -1,11 +1,15 @@
 import 'package:drift/drift.dart';
 
+import '../category.dart';
+import '../mrp.dart';
 import '../notification.dart';
+import '../payment.dart';
 import '../review.dart';
 import '../user.dart';
 import '../shift.dart';
 import 'database.dart';
 import 'current_user.dart';
+import 'mrp_store.dart';
 import 'shift_filter.dart';
 
 /// Чем закончилась попытка записаться или отменить запись.
@@ -22,6 +26,8 @@ enum BookingResult {
   notMine, // чужую смену отменить или изменить нельзя
   alreadyCancelled, // смена уже отменена
   fewerThanHired, // мест меньше, чем уже набрано людей
+  earningsLimit, // с этой сменой доход за месяц превысит 300 МРП
+  paymentRequired, // правка удорожает смену — нужна доплата картой
   notFound,
 }
 
@@ -43,6 +49,11 @@ abstract class ShiftRepository {
   /// Список компаний — чтобы построить фильтр.
   Future<List<String>> companies();
 
+  /// Ключи категорий, по которым в городе есть смены, — тоже для фильтра.
+  /// Показывать в фильтре все сорок незачем: выбрав пустую, человек
+  /// получил бы пустой список и решил бы, что приложение сломалось.
+  Future<List<String>> categories();
+
   /// Одна смена по её номеру.
   Future<Shift?> shiftById(int id);
 
@@ -58,6 +69,10 @@ abstract class ShiftRepository {
   /// Отработанные смены — из них складывается заработок.
   Future<List<Shift>> completedShifts();
 
+  /// Сколько текущий исполнитель заработал и набрал записей за месяц —
+  /// и сколько ему можно по лимиту в 300 МРП.
+  Future<EarningsLimit> earningsLimit(DateTime month);
+
   /// Сводка по компании: описание, средняя оценка, отзывы.
   Future<CompanyInfo> companyInfo(String company);
 
@@ -72,6 +87,10 @@ abstract class ShiftRepository {
   });
 
   /// Создать смену. Доступно роли «заказчик».
+  ///
+  /// Смена без денег не публикуется: `card` — чем заплатить. Сначала
+  /// списываем деньги, потом создаём смену. Не прошла оплата — смены нет,
+  /// а исключение `PaymentDeclined` объясняет почему.
   Future<int> createShift({
     required DateTime workDate,
     required String title,
@@ -83,6 +102,8 @@ abstract class ShiftRepository {
     required int workersNeeded,
     required int createdBy,
     required String city,
+    required PaymentCard card,
+    String category,
     List<String> duties,
     String? dressCode,
     double? minRating,
@@ -111,8 +132,10 @@ abstract class ShiftRepository {
     required int endMinutes,
     required int hourlyRate,
     required int workersNeeded,
+    String? category, // null — оставить как было
     List<String> duties,
     String? dressCode,
+    PaymentCard? card, // чем доплатить, если смена подорожала
   });
 
   /// Отметиться на смене: «я на месте».
@@ -185,8 +208,11 @@ List<Shift> applyFilter(List<Shift> shifts, ShiftFilter filter) {
   final query = filter.query.trim().toLowerCase();
   if (query.isNotEmpty) {
     result = result.where((s) {
-      final haystack =
-          '${s.title} ${s.company} ${s.address}'.toLowerCase();
+      // Категория тоже участвует: «сантехник» найдёт смену, даже если
+      // заказчик назвал её «Замена смесителя».
+      final haystack = '${s.title} ${s.categoryInfo.name} '
+              '${s.company} ${s.address}'
+          .toLowerCase();
       // Все слова запроса должны найтись — но в любом порядке.
       // «грузчик магнум» и «магнум грузчик» дадут одно и то же.
       return query.split(RegExp(r'\s+')).every(haystack.contains);
@@ -196,6 +222,10 @@ List<Shift> applyFilter(List<Shift> shifts, ShiftFilter filter) {
   if (filter.companies.isNotEmpty) {
     result =
         result.where((s) => filter.companies.contains(s.company)).toList();
+  }
+  if (filter.categories.isNotEmpty) {
+    result =
+        result.where((s) => filter.categories.contains(s.category)).toList();
   }
   if (filter.onlyOpen) {
     result = result.where((s) => s.hasFreeSlots).toList();
@@ -213,6 +243,19 @@ List<Shift> applyFilter(List<Shift> shifts, ShiftFilter filter) {
   return result;
 }
 
+/// Ключи категорий — в том порядке, в каком они стоят в справочнике.
+///
+/// Порядок справочника осмысленный: склад рядом со складом, общепит
+/// рядом с общепитом. По алфавиту «Бариста» оказалась бы между
+/// «Аниматором» и «Водителем», и фильтр читался бы как случайный набор.
+List<String> sortCategories(Iterable<String> ids) {
+  final present = ids.toSet();
+  return [
+    for (final c in kShiftCategories)
+      if (present.contains(c.id)) c.id,
+  ];
+}
+
 // ---------------------------------------------------------------------------
 // РЕАЛИЗАЦИЯ НА SQLite
 // ---------------------------------------------------------------------------
@@ -221,7 +264,12 @@ class DbShiftRepository implements ShiftRepository {
   final AppDatabase db;
   final CurrentUser session;
 
-  DbShiftRepository(this.db, this.session);
+  /// Через кого идут деньги. По умолчанию — тестовый шлюз: на телефоне
+  /// без сервера настоящему провайдеру взяться неоткуда.
+  final PaymentGateway payments;
+
+  DbShiftRepository(this.db, this.session, {PaymentGateway? payments})
+      : payments = payments ?? SandboxPaymentGateway();
 
   int get _workerId => session.workerId;
 
@@ -231,6 +279,11 @@ class DbShiftRepository implements ShiftRepository {
     (SELECT COUNT(*) FROM application_rows a
       WHERE a.shift_id = s.id
         AND a.status IN ('active', 'completed')) AS hired''';
+
+  /// Подзапрос: держит ли сервис деньги за эту смену.
+  static const _fundedSql = '''
+    (SELECT COUNT(*) FROM payment_rows p
+      WHERE p.shift_id = s.id AND p.status = 'held') AS funded''';
 
   /// Подзапросы про мою запись: её состояние и время отметки.
   String get _mineSql => '''
@@ -246,6 +299,7 @@ class DbShiftRepository implements ShiftRepository {
         id: row.read<int>('id'),
         workDate: row.read<DateTime>('work_date'),
         title: row.read<String>('title'),
+        category: row.read<String>('category'),
         company: row.read<String>('company'),
         address: row.read<String>('address'),
         city: row.read<String>('city'),
@@ -266,6 +320,7 @@ class DbShiftRepository implements ShiftRepository {
         minRating: row.readNullable<double>('min_rating'),
         createdBy: row.readNullable<int>('created_by'),
         cancelledAt: row.readNullable<DateTime>('cancelled_at'),
+        isFunded: row.read<int>('funded') > 0,
       );
 
   static List<String> _splitDuties(String raw) =>
@@ -283,7 +338,7 @@ class DbShiftRepository implements ShiftRepository {
     // Город в условии: подработка в другом городе человеку не нужна.
     final rows = await db.query(
       '''
-      SELECT s.*, $_hiredSql, $_mineSql
+      SELECT s.*, $_hiredSql, $_mineSql, $_fundedSql
       FROM shift_rows s
       WHERE s.work_date >= ? AND s.work_date < ? AND s.city = ?
         AND s.cancelled_at IS NULL
@@ -326,9 +381,20 @@ class DbShiftRepository implements ShiftRepository {
   }
 
   @override
+  Future<List<String>> categories() async {
+    final rows = await db.query(
+      'SELECT DISTINCT category FROM shift_rows '
+      'WHERE city = ? AND cancelled_at IS NULL',
+      variables: [Variable.withString(session.city)],
+      readsFrom: {db.shiftRows},
+    ).get();
+    return sortCategories(rows.map((r) => r.read<String>('category')));
+  }
+
+  @override
   Future<Shift?> shiftById(int id) async {
     final rows = await db.query(
-      'SELECT s.*, $_hiredSql, $_mineSql FROM shift_rows s WHERE s.id = ?',
+      'SELECT s.*, $_hiredSql, $_mineSql, $_fundedSql FROM shift_rows s WHERE s.id = ?',
       variables: [Variable.withInt(id)],
       readsFrom: {db.shiftRows, db.applicationRows},
     ).get();
@@ -352,6 +418,11 @@ class DbShiftRepository implements ShiftRepository {
         return BookingResult.ratingTooLow;
       }
       if (!shift.hasFreeSlots) return BookingResult.noSlots;
+
+      // Лимит дохода проверяем здесь же, внутри транзакции записи: иначе
+      // две записи подряд обе увидели бы «лимит ещё не достигнут».
+      final limit = await earningsLimit(shift.workDate);
+      if (!limit.allows(shift.totalPay)) return BookingResult.earningsLimit;
 
       final existing = await (db.select(db.applicationRows)
             ..where((a) =>
@@ -445,7 +516,7 @@ class DbShiftRepository implements ShiftRepository {
 
     final rows = await db.query(
       '''
-      SELECT s.*, $_hiredSql, $_mineSql
+      SELECT s.*, $_hiredSql, $_mineSql, $_fundedSql
       FROM application_rows a
       JOIN shift_rows s ON s.id = a.shift_id
       WHERE a.worker_id = $_workerId AND $condition
@@ -465,7 +536,7 @@ class DbShiftRepository implements ShiftRepository {
     // Теперь в заработок идёт только то, что подтвердил заказчик.
     final rows = await db.query(
       '''
-      SELECT s.*, $_hiredSql, $_mineSql
+      SELECT s.*, $_hiredSql, $_mineSql, $_fundedSql
       FROM application_rows a
       JOIN shift_rows s ON s.id = a.shift_id
       WHERE a.worker_id = $_workerId AND a.status = 'completed'
@@ -475,6 +546,43 @@ class DbShiftRepository implements ShiftRepository {
     ).get();
 
     return rows.map(_toShift).toList();
+  }
+
+  @override
+  Future<EarningsLimit> earningsLimit(DateTime month) async {
+    final from = monthOf(month);
+    final to = DateTime(from.year, from.month + 1);
+
+    // Суммы складываем в Dart, а не через SUM в SQL: сумма за смену
+    // вычисляется формулой из модели (ставка, длительность, обед), и
+    // повторять её в запросе значило бы держать правило в двух местах.
+    final rows = await db.query(
+      '''
+      SELECT s.*, $_hiredSql, $_mineSql, $_fundedSql
+      FROM application_rows a
+      JOIN shift_rows s ON s.id = a.shift_id
+      WHERE a.worker_id = $_workerId
+        AND a.status IN ('active', 'completed')
+        AND s.cancelled_at IS NULL
+        AND s.work_date >= ? AND s.work_date < ?
+      ''',
+      variables: [Variable.withDateTime(from), Variable.withDateTime(to)],
+      readsFrom: {db.shiftRows, db.applicationRows},
+    ).get();
+
+    final shifts = rows.map(_toShift);
+    final rates = await MrpStore(db).rates();
+    return EarningsLimit(
+      month: from,
+      earned: shifts
+          .where((s) => s.isCompleted)
+          .fold(0, (sum, s) => sum + s.totalPay),
+      booked: shifts
+          .where((s) => s.isApplied)
+          .fold(0, (sum, s) => sum + s.totalPay),
+      limit: monthlyEarningsLimit(from, rates),
+      mrp: mrpOn(DateTime(from.year, 1, 1), rates),
+    );
   }
 
   @override
@@ -507,12 +615,35 @@ class DbShiftRepository implements ShiftRepository {
     if (shift is BookingResult) return shift;
     shift as Shift;
 
-    await (db.update(db.applicationRows)
-          ..where((a) =>
-              a.shiftId.equals(shiftId) & a.workerId.equals(workerId)))
-        .write(const ApplicationRowsCompanion(
-      status: Value(ApplicationStatus.completed),
-    ));
+    final status = await _statusOf(shiftId, workerId);
+    if (status == null) return BookingResult.notFound;
+    // Второе нажатие ничего не меняет — и второй раз не платит.
+    if (status == ApplicationStatus.completed) return BookingResult.ok;
+    // Невыход уже отмечен, и деньги за место вернулись заказчику.
+    // Передумать можно только через поддержку: иначе одна кнопка
+    // двигала бы деньги туда-обратно.
+    if (status != ApplicationStatus.active) return BookingResult.alreadyBooked;
+
+    await db.transaction(() async {
+      await (db.update(db.applicationRows)
+            ..where((a) =>
+                a.shiftId.equals(shiftId) & a.workerId.equals(workerId)))
+          .write(const ApplicationRowsCompanion(
+        status: Value(ApplicationStatus.completed),
+      ));
+
+      // Вот он, момент гарантии: деньги, которые сервис держал, уходят
+      // исполнителю. У старых смен без оплаты начислять нечего.
+      if (shift.isFunded) {
+        await _record(
+          userId: workerId,
+          shiftId: shiftId,
+          kind: WalletEntryKind.earning,
+          amount: shift.totalPay,
+          title: '«${shift.title}», ${_dayText(shift.workDate)}',
+        );
+      }
+    });
 
     await _notify(
       userId: workerId,
@@ -548,12 +679,32 @@ class DbShiftRepository implements ShiftRepository {
     if (shift is BookingResult) return shift;
     shift as Shift;
 
+    final status = await _statusOf(shiftId, workerId);
+    if (status == null) return BookingResult.notFound;
+    if (status == ApplicationStatus.noShow) return BookingResult.ok;
+    if (status != ApplicationStatus.active) return BookingResult.alreadyBooked;
+
     await (db.update(db.applicationRows)
           ..where((a) =>
               a.shiftId.equals(shiftId) & a.workerId.equals(workerId)))
         .write(const ApplicationRowsCompanion(
       status: Value(ApplicationStatus.noShow),
     ));
+
+    // Человек не вышел — заказчик не должен за него платить. Возвращаем
+    // деньги за одно место вместе с комиссией за него.
+    final payment = await _heldPayment(shiftId);
+    if (payment != null) {
+      final cost = ShiftCost(slotPay: shift.totalPay, slots: 1);
+      await payments.refund(operation: payment.operation, amount: cost.total);
+      await _record(
+        userId: payment.payerId,
+        shiftId: shiftId,
+        kind: WalletEntryKind.refund,
+        amount: cost.total,
+        title: 'Возврат за невыход: «${shift.title}»',
+      );
+    }
 
     // Человек обязан узнать: отметка влияет на его надёжность, и если
     // заказчик ошибся, у него должен быть повод написать в поддержку.
@@ -675,17 +826,19 @@ class DbShiftRepository implements ShiftRepository {
         DateTime(now.year, now.month, now.day - minus);
 
     final history = [
-      (day(3), 'Услуги сотрудника склада', 'Золотое яблоко',
+      (day(3), 'Услуги сотрудника склада', 'warehouse', 'Золотое яблоко',
           'г. Алматы, ул. Султана Бейбарыса, 1', 600, 1320, 110000),
-      (day(9), 'Услуги работника торгового зала', 'Zara',
+      (day(9), 'Услуги работника торгового зала', 'sales_floor', 'Zara',
           'г. Алматы, ул. Розыбакиева, 247А', 600, 1260, 70000),
     ];
 
-    for (final (date, title, company, address, start, end, rate) in history) {
+    for (final (date, title, category, company, address, start, end, rate)
+        in history) {
       final id = await db.into(db.shiftRows).insert(
             ShiftRowsCompanion.insert(
               workDate: date,
               title: title,
+              category: Value(category),
               company: company,
               address: address,
               startMinutes: start,
@@ -694,6 +847,27 @@ class DbShiftRepository implements ShiftRepository {
               workersNeeded: 1,
             ),
           );
+      final demo = Shift(
+        id: id,
+        workDate: date,
+        title: title,
+        company: company,
+        address: address,
+        startMinutes: start,
+        endMinutes: end,
+        hourlyRate: rate,
+        workersNeeded: 1,
+        workersHired: 1,
+      );
+      await _fundDemo(id, demo);
+      // Смена подтверждена — значит, деньги уже начислены.
+      await _record(
+        userId: userId,
+        shiftId: id,
+        kind: WalletEntryKind.earning,
+        amount: demo.totalPay,
+        title: '«$title», ${_dayText(date)}',
+      );
       await db.into(db.applicationRows).insert(
             ApplicationRowsCompanion.insert(
               shiftId: id,
@@ -721,14 +895,104 @@ class DbShiftRepository implements ShiftRepository {
     required int workersNeeded,
     required int createdBy,
     required String city,
+    required PaymentCard card,
+    String category = kOtherCategory,
     List<String> duties = const [],
     String? dressCode,
     double? minRating,
+  }) async {
+    // Сколько это стоит, считаем той же моделью, что и экран: сумма за
+    // смену — формула, и держать её в двух местах нельзя.
+    final cost = ShiftCost.of(Shift(
+      id: 0,
+      workDate: workDate,
+      title: title,
+      company: company,
+      address: address,
+      startMinutes: startMinutes,
+      endMinutes: endMinutes,
+      hourlyRate: hourlyRate,
+      workersNeeded: workersNeeded,
+      workersHired: 0,
+    ));
+
+    // Сначала деньги, потом смена. Наоборот нельзя: иначе на секунду в
+    // ленте появилась бы смена, за которую никто не заплатил, — а если
+    // карту отклонят, на неё успели бы записаться.
+    final operation = await payments.charge(
+      amount: cost.total,
+      card: card,
+      description: 'Смена «$title»',
+    );
+
+    try {
+      return await db.transaction(() async {
+        final id = await _insertShift(
+          workDate: workDate,
+          title: title,
+          category: category,
+          company: company,
+          address: address,
+          city: city,
+          startMinutes: startMinutes,
+          endMinutes: endMinutes,
+          hourlyRate: hourlyRate,
+          workersNeeded: workersNeeded,
+          createdBy: createdBy,
+          duties: duties,
+          dressCode: dressCode,
+          minRating: minRating,
+        );
+        await db.into(db.paymentRows).insert(PaymentRowsCompanion.insert(
+              shiftId: id,
+              payerId: createdBy,
+              amount: cost.pay,
+              fee: cost.fee,
+              status: PaymentStatus.held,
+              cardLast4: card.last4,
+              cardBrand: card.brand,
+              operation: operation,
+              createdAt: DateTime.now(),
+            ));
+        await _record(
+          userId: createdBy,
+          shiftId: id,
+          kind: WalletEntryKind.charge,
+          amount: -cost.total,
+          title: 'Оплата смены «$title» · ${card.masked}',
+        );
+        return id;
+      });
+    } catch (_) {
+      // Деньги списали, а смена не сохранилась — возвращаем их сразу.
+      // Взять деньги и ничего не дать взамен — худшее, что может
+      // сделать гарант.
+      await payments.refund(operation: operation, amount: cost.total);
+      rethrow;
+    }
+  }
+
+  Future<int> _insertShift({
+    required DateTime workDate,
+    required String title,
+    required String category,
+    required String company,
+    required String address,
+    required String city,
+    required int startMinutes,
+    required int endMinutes,
+    required int hourlyRate,
+    required int workersNeeded,
+    required int createdBy,
+    required List<String> duties,
+    required String? dressCode,
+    required double? minRating,
   }) {
     return db.into(db.shiftRows).insert(
           ShiftRowsCompanion.insert(
             workDate: workDate,
             title: title,
+            category: Value(category),
             company: company,
             address: address,
             city: Value(city),
@@ -748,7 +1012,7 @@ class DbShiftRepository implements ShiftRepository {
   Future<List<Shift>> shiftsCreatedBy(int managerId) async {
     final rows = await db.query(
       '''
-      SELECT s.*, $_hiredSql, $_mineSql
+      SELECT s.*, $_hiredSql, $_mineSql, $_fundedSql
       FROM shift_rows s
       WHERE s.created_by = ?
       ORDER BY s.work_date DESC, s.start_minutes
@@ -981,6 +1245,8 @@ class DbShiftRepository implements ShiftRepository {
         status: Value(ApplicationStatus.cancelled),
       ));
 
+      await _refundRest(shift);
+
       for (final application in affected) {
         await _notify(
           userId: application.workerId,
@@ -1006,8 +1272,10 @@ class DbShiftRepository implements ShiftRepository {
     required int endMinutes,
     required int hourlyRate,
     required int workersNeeded,
+    String? category,
     List<String> duties = const [],
     String? dressCode,
+    PaymentCard? card,
   }) async {
     return db.transaction(() async {
       final before = await shiftById(shiftId);
@@ -1021,10 +1289,32 @@ class DbShiftRepository implements ShiftRepository {
         return BookingResult.fewerThanHired;
       }
 
+      // Деньги — до правки смены: не хватило доплаты — смена остаётся
+      // прежней, и транзакция ничего не меняет.
+      final settled = await _settleEdit(
+        before,
+        Shift(
+          id: before.id,
+          workDate: workDate,
+          title: title,
+          company: before.company,
+          address: address,
+          startMinutes: startMinutes,
+          endMinutes: endMinutes,
+          breakMinutes: before.breakMinutes,
+          hourlyRate: hourlyRate,
+          workersNeeded: workersNeeded,
+          workersHired: before.workersHired,
+        ),
+        card,
+      );
+      if (settled != BookingResult.ok) return settled;
+
       await (db.update(db.shiftRows)..where((s) => s.id.equals(shiftId)))
           .write(ShiftRowsCompanion(
         workDate: Value(workDate),
         title: Value(title),
+        category: Value.absentIfNull(category),
         address: Value(address),
         startMinutes: Value(startMinutes),
         endMinutes: Value(endMinutes),
@@ -1098,6 +1388,155 @@ class DbShiftRepository implements ShiftRepository {
     if (before.address != address) changes.add('новый адрес — $address');
 
     return changes;
+  }
+
+  // -------------------------------------------------------------------------
+  // ДЕНЬГИ
+  // -------------------------------------------------------------------------
+
+  /// Записать движение денег в журнал.
+  Future<void> _record({
+    required int userId,
+    required int? shiftId,
+    required String kind,
+    required int amount,
+    required String title,
+  }) async {
+    // Учебные смены «оплатил» сам сервис — у него кошелька нет.
+    if (userId == 0) return;
+    await db.into(db.walletEntryRows).insert(WalletEntryRowsCompanion.insert(
+          userId: userId,
+          shiftId: Value(shiftId),
+          kind: kind,
+          amount: amount,
+          title: title,
+          createdAt: DateTime.now(),
+        ));
+  }
+
+  /// Состояние записи человека на смену. null — записи нет.
+  Future<String?> _statusOf(int shiftId, int workerId) async {
+    final row = await (db.select(db.applicationRows)
+          ..where((a) =>
+              a.shiftId.equals(shiftId) & a.workerId.equals(workerId)))
+        .getSingleOrNull();
+    return row?.status;
+  }
+
+  /// Оплата смены, если сервис её ещё держит.
+  Future<PaymentRow?> _heldPayment(int shiftId) =>
+      (db.select(db.paymentRows)
+            ..where((p) =>
+                p.shiftId.equals(shiftId) &
+                p.status.equals(PaymentStatus.held)))
+          .getSingleOrNull();
+
+  /// Вернуть заказчику всё, что сервис ещё держит по смене.
+  ///
+  /// Остаток не хранится — он считается: внесено, минус начислено
+  /// исполнителям (вместе с комиссией за их места), минус уже возвращено.
+  /// Храни мы его отдельной колонкой, её пришлось бы править при каждом
+  /// движении — и однажды забыли бы.
+  Future<void> _refundRest(Shift shift) async {
+    final payment = await _heldPayment(shift.id);
+    if (payment == null) return;
+
+    final moved = await (db.select(db.walletEntryRows)
+          ..where((e) => e.shiftId.equals(shift.id)))
+        .get();
+    var rest = payment.amount + payment.fee;
+    for (final e in moved) {
+      if (e.kind == WalletEntryKind.earning) {
+        rest -= e.amount + platformFee(e.amount);
+      } else if (e.kind == WalletEntryKind.refund &&
+          e.userId == payment.payerId) {
+        rest -= e.amount;
+      }
+    }
+
+    if (rest > 0) {
+      await payments.refund(operation: payment.operation, amount: rest);
+      await _record(
+        userId: payment.payerId,
+        shiftId: shift.id,
+        kind: WalletEntryKind.refund,
+        amount: rest,
+        title: 'Возврат: смена «${shift.title}» отменена',
+      );
+    }
+    await (db.update(db.paymentRows)..where((p) => p.id.equals(payment.id)))
+        .write(const PaymentRowsCompanion(
+      status: Value(PaymentStatus.refunded),
+    ));
+  }
+
+  /// Правка изменила цену — доплатить или вернуть разницу.
+  ///
+  /// Подорожала — нужна карта для доплаты, без неё правка не проходит.
+  /// Подешевела — разницу возвращаем сами, ни о чём не спрашивая: это
+  /// деньги заказчика, и держать их у себя у сервиса нет причин.
+  Future<BookingResult> _settleEdit(
+    Shift before,
+    Shift after,
+    PaymentCard? card,
+  ) async {
+    final payment = await _heldPayment(before.id);
+    if (payment == null) return BookingResult.ok;
+
+    final cost = ShiftCost.of(after);
+    final diff = cost.total - (payment.amount + payment.fee);
+
+    if (diff > 0) {
+      if (card == null) return BookingResult.paymentRequired;
+      await payments.charge(
+        amount: diff,
+        card: card,
+        description: 'Доплата за смену «${after.title}»',
+      );
+      await _record(
+        userId: payment.payerId,
+        shiftId: before.id,
+        kind: WalletEntryKind.charge,
+        amount: -diff,
+        title: 'Доплата за смену «${after.title}» · ${card.masked}',
+      );
+    } else if (diff < 0) {
+      await payments.refund(operation: payment.operation, amount: -diff);
+      await _record(
+        userId: payment.payerId,
+        shiftId: before.id,
+        kind: WalletEntryKind.refund,
+        amount: -diff,
+        title: 'Возврат разницы: смена «${after.title}» подешевела',
+      );
+    }
+
+    if (diff != 0) {
+      await (db.update(db.paymentRows)..where((p) => p.id.equals(payment.id)))
+          .write(PaymentRowsCompanion(
+        amount: Value(cost.pay),
+        fee: Value(cost.fee),
+      ));
+    }
+    return BookingResult.ok;
+  }
+
+  /// Учебная смена считается оплаченной — её «оплатил» сам сервис.
+  /// Иначе на демо-данных нечего было бы показать ни в кошельке, ни
+  /// на карточке с пометкой «оплата гарантирована».
+  Future<void> _fundDemo(int shiftId, Shift demo) {
+    final cost = ShiftCost.of(demo);
+    return db.into(db.paymentRows).insert(PaymentRowsCompanion.insert(
+          shiftId: shiftId,
+          payerId: 0,
+          amount: cost.pay,
+          fee: cost.fee,
+          status: PaymentStatus.held,
+          cardLast4: '0000',
+          cardBrand: 'Демо',
+          operation: 'demo',
+          createdAt: DateTime.now(),
+        ));
   }
 
   // -------------------------------------------------------------------------
@@ -1192,6 +1631,7 @@ class DbShiftRepository implements ShiftRepository {
             ShiftRowsCompanion.insert(
               workDate: demo.workDate,
               title: demo.title,
+              category: Value(demo.category),
               company: demo.company,
               address: demo.address,
               city: Value(demo.city),
@@ -1208,6 +1648,8 @@ class DbShiftRepository implements ShiftRepository {
               minRating: Value(demo.minRating),
             ),
           );
+
+      await _fundDemo(id, demo);
 
       // Часть мест уже занята другими работниками — заводим их отклики.
       // Номера с 100-го, чтобы не пересекаться с настоящими пользователями.

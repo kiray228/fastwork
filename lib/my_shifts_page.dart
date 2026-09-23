@@ -5,6 +5,7 @@ import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/shift.dart';
 import 'shift_detail_page.dart';
 import 'theme/app_colors.dart';
+import 'theme/glass.dart';
 import 'widgets/async_state.dart';
 import 'widgets/common.dart';
 import 'widgets/nav.dart';
@@ -193,16 +194,14 @@ class _Tabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : Colors.white,
+        color: glassFieldFill(context),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isDark ? AppColors.darkBorder : AppColors.border,
+          color: glassFieldEdge(context),
         ),
       ),
       child: Row(

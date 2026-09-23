@@ -1,4 +1,7 @@
+import '../category.dart';
+import '../mrp.dart';
 import '../notification.dart';
+import '../payment.dart';
 import '../review.dart';
 import '../shift.dart';
 import '../user.dart';
@@ -42,6 +45,9 @@ class FakeShiftRepository implements ShiftRepository {
       clearMyStatus: status == null,
       myCheckedInAt: _checkIns[s.id],
       cancelledAt: _cancelled.contains(s.id) ? DateTime.now() : null,
+      // В памяти любая смена оплачена: демо-смены «оплатил» сервис,
+      // новые без оплаты не создаются.
+      isFunded: !_refunded.contains(s.id),
     );
   }
 
@@ -78,6 +84,11 @@ class FakeShiftRepository implements ShiftRepository {
   }
 
   @override
+  Future<List<String>> categories() async => sortCategories(_shifts
+      .where((s) => s.city == city && !_cancelled.contains(s.id))
+      .map((s) => s.category));
+
+  @override
   Future<Shift?> shiftById(int id) async {
     for (final s in _shifts) {
       if (s.id == id) return _decorate(s);
@@ -93,6 +104,8 @@ class FakeShiftRepository implements ShiftRepository {
     if (shift.isApplied) return BookingResult.alreadyBooked;
     if (!shift.ratingAllows(userRating)) return BookingResult.ratingTooLow;
     if (!shift.hasFreeSlots) return BookingResult.noSlots;
+    final limit = await earningsLimit(shift.workDate);
+    if (!limit.allows(shift.totalPay)) return BookingResult.earningsLimit;
 
     _myStatuses[shiftId] = ApplicationStatus.active;
     return BookingResult.ok;
@@ -119,9 +132,48 @@ class FakeShiftRepository implements ShiftRepository {
     required int shiftId,
     required int workerId,
   }) async {
+    final status = _myStatuses[shiftId];
+    if (status == null) return BookingResult.notFound;
+    if (status == ApplicationStatus.completed) return BookingResult.ok;
+    if (status != ApplicationStatus.active) return BookingResult.alreadyBooked;
+
     _myStatuses[shiftId] = ApplicationStatus.completed;
+    final shift = (await shiftById(shiftId))!;
+    _record(WalletEntryKind.earning, shift.totalPay, '«${shift.title}»',
+        shiftId: shiftId);
     return BookingResult.ok;
   }
+
+  // -------------------------------------------------------------------------
+  // Деньги в памяти
+  // -------------------------------------------------------------------------
+
+  /// Тестовый шлюз — тесты смотрят в его список операций.
+  final payments = SandboxPaymentGateway();
+
+  /// Журнал движений. В памяти один человек на всё, поэтому и журнал один.
+  final List<WalletEntry> ledger = [];
+  int _nextEntryId = 1;
+
+  /// Сколько внесено за смену сверх расчётной цены — после правок.
+  /// Нет записи — внесено ровно по цене смены.
+  final Map<int, int> _paid = {};
+
+  /// Смены, остаток по которым уже вернули.
+  final Set<int> _refunded = {};
+
+  void _record(String kind, int amount, String title, {int? shiftId}) {
+    ledger.add(WalletEntry(
+      id: _nextEntryId++,
+      kind: kind,
+      amount: amount,
+      shiftId: shiftId,
+      title: title,
+      createdAt: DateTime.now(),
+    ));
+  }
+
+  int _paidFor(Shift shift) => _paid[shift.id] ?? ShiftCost.of(shift).total;
 
   @override
   Future<BookingResult> cancelApplication(int shiftId) async {
@@ -146,6 +198,32 @@ class FakeShiftRepository implements ShiftRepository {
         .where((s) => _myStatuses[s.id] == ApplicationStatus.completed)
         .map(_decorate)
         .toList();
+  }
+
+  /// Значения МРП. Тесты могут подставить свои — например, крошечный МРП,
+  /// чтобы упереться в лимит одной сменой.
+  List<MrpRate> mrpRates = kMrpHistory;
+
+  @override
+  Future<EarningsLimit> earningsLimit(DateTime month) async {
+    final from = monthOf(month);
+    final mine = _shifts
+        .where((s) =>
+            s.workDate.year == from.year &&
+            s.workDate.month == from.month &&
+            !_cancelled.contains(s.id))
+        .map(_decorate);
+    return EarningsLimit(
+      month: from,
+      earned: mine
+          .where((s) => s.isCompleted)
+          .fold(0, (sum, s) => sum + s.totalPay),
+      booked: mine
+          .where((s) => s.isApplied)
+          .fold(0, (sum, s) => sum + s.totalPay),
+      limit: monthlyEarningsLimit(from, mrpRates),
+      mrp: mrpOn(DateTime(from.year, 1, 1), mrpRates),
+    );
   }
 
   @override
@@ -201,15 +279,18 @@ class FakeShiftRepository implements ShiftRepository {
     required int workersNeeded,
     required int createdBy,
     required String city,
+    String category = kOtherCategory,
     List<String> duties = const [],
     String? dressCode,
     double? minRating,
+    required PaymentCard card,
   }) async {
     final id = (_shifts.map((s) => s.id).fold<int>(0, (a, b) => a > b ? a : b)) + 1;
-    _shifts.add(Shift(
+    final shift = Shift(
       id: id,
       workDate: workDate,
       title: title,
+      category: category,
       company: company,
       address: address,
       city: city,
@@ -222,7 +303,12 @@ class FakeShiftRepository implements ShiftRepository {
       dressCode: dressCode,
       minRating: minRating,
       createdBy: createdBy,
-    ));
+    );
+    final total = ShiftCost.of(shift).total;
+    await payments.charge(amount: total, card: card, description: title);
+    _shifts.add(shift);
+    _record(WalletEntryKind.charge, -total, 'Оплата смены «$title»',
+        shiftId: id);
     return id;
   }
 
@@ -321,7 +407,23 @@ class FakeShiftRepository implements ShiftRepository {
     if (index < 0) return BookingResult.notFound;
     if (_shifts[index].isCancelled) return BookingResult.alreadyCancelled;
 
+    final shift = _decorate(_shifts[index]);
+    var rest = _paidFor(shift);
+    for (final e in ledger.where((e) => e.shiftId == shiftId)) {
+      if (e.kind == WalletEntryKind.earning) {
+        rest -= e.amount + platformFee(e.amount);
+      } else if (e.kind == WalletEntryKind.refund) {
+        rest -= e.amount;
+      }
+    }
+    if (rest > 0) {
+      await payments.refund(operation: 'fake', amount: rest);
+      _record(WalletEntryKind.refund, rest, 'Возврат: смена отменена',
+          shiftId: shiftId);
+    }
+
     _cancelled.add(shiftId);
+    _refunded.add(shiftId);
     _myStatuses.remove(shiftId);
     return BookingResult.ok;
   }
@@ -331,7 +433,17 @@ class FakeShiftRepository implements ShiftRepository {
     required int shiftId,
     required int workerId,
   }) async {
+    final status = _myStatuses[shiftId];
+    if (status == null) return BookingResult.notFound;
+    if (status == ApplicationStatus.noShow) return BookingResult.ok;
+    if (status != ApplicationStatus.active) return BookingResult.alreadyBooked;
+
     _myStatuses[shiftId] = ApplicationStatus.noShow;
+    final shift = (await shiftById(shiftId))!;
+    final slot = ShiftCost(slotPay: shift.totalPay, slots: 1).total;
+    await payments.refund(operation: 'fake', amount: slot);
+    _record(WalletEntryKind.refund, slot, 'Возврат за невыход',
+        shiftId: shiftId);
     return BookingResult.ok;
   }
 
@@ -345,8 +457,10 @@ class FakeShiftRepository implements ShiftRepository {
     required int endMinutes,
     required int hourlyRate,
     required int workersNeeded,
+    String? category,
     List<String> duties = const [],
     String? dressCode,
+    PaymentCard? card,
   }) async {
     final index = _shifts.indexWhere((s) => s.id == shiftId);
     if (index < 0) return BookingResult.notFound;
@@ -358,10 +472,11 @@ class FakeShiftRepository implements ShiftRepository {
     }
 
     final old = _shifts[index];
-    _shifts[index] = Shift(
+    final updated = Shift(
       id: old.id,
       workDate: workDate,
       title: title,
+      category: category ?? old.category,
       company: old.company,
       address: address,
       city: old.city,
@@ -379,6 +494,21 @@ class FakeShiftRepository implements ShiftRepository {
       minRating: old.minRating,
       createdBy: old.createdBy,
     );
+
+    final paid = _paidFor(before);
+    final diff = ShiftCost.of(updated).total - paid;
+    if (diff > 0) {
+      if (card == null) return BookingResult.paymentRequired;
+      await payments.charge(amount: diff, card: card, description: title);
+      _record(WalletEntryKind.charge, -diff, 'Доплата за смену «$title»',
+          shiftId: shiftId);
+    } else if (diff < 0) {
+      await payments.refund(operation: 'fake', amount: -diff);
+      _record(WalletEntryKind.refund, -diff, 'Возврат разницы',
+          shiftId: shiftId);
+    }
+    _paid[shiftId] = paid + diff;
+    _shifts[index] = updated;
     return BookingResult.ok;
   }
 

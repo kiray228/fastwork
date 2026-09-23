@@ -1,10 +1,16 @@
 // Здесь живут данные: что такое смена и как считается оплата.
 // Экранов в этом файле нет — только «суть».
 
+import 'category.dart';
+
 class Shift {
   final int id;
   final DateTime workDate; // в какой день смена
   final String title; // «Услуги грузчика»
+
+  /// Категория работ — ключ из `kShiftCategories`: `loader`, `cook`...
+  /// Название уточняет подробности, категория отвечает, что это за работа.
+  final String category;
   final String company; // «Заммлер Казахстан»
   final String address; // адрес точки
   final String city; // город смены
@@ -32,6 +38,9 @@ class Shift {
   /// Когда смену отменил заказчик. null — смена в силе.
   final DateTime? cancelledAt;
 
+  /// Заказчик уже внёс деньги, и сервис их держит — оплата гарантирована.
+  final bool isFunded;
+
   const Shift({
     required this.id,
     required this.workDate,
@@ -55,7 +64,12 @@ class Shift {
     this.myCheckedInAt,
     this.cancelledAt,
     this.city = 'Алматы',
+    this.category = kOtherCategory,
+    this.isFunded = false,
   });
+
+  /// Категория целиком — с названием и разделом.
+  ShiftCategory get categoryInfo => categoryById(category);
 
   /// Смену отменил заказчик.
   bool get isCancelled => cancelledAt != null;
@@ -69,11 +83,13 @@ class Shift {
     bool clearMyStatus = false,
     DateTime? myCheckedInAt,
     DateTime? cancelledAt,
+    bool? isFunded,
   }) =>
       Shift(
         id: id,
         workDate: workDate,
         title: title,
+        category: category,
         company: company,
         address: address,
         city: city,
@@ -93,6 +109,7 @@ class Shift {
         myStatus: clearMyStatus ? null : (myStatus ?? this.myStatus),
         myCheckedInAt: myCheckedInAt ?? this.myCheckedInAt,
         cancelledAt: cancelledAt ?? this.cancelledAt,
+        isFunded: isFunded ?? this.isFunded,
       );
 
   /// Сколько всего длится смена.
@@ -257,6 +274,7 @@ List<Shift> buildDemoShifts() {
       id: 1,
       workDate: day(0),
       title: 'Услуги сотрудника склада',
+      category: 'warehouse',
       company: 'Золотое яблоко',
       address: 'г. Алматы, ул. Султана Бейбарыса, 1',
       startMinutes: 600, // 10:00
@@ -279,6 +297,7 @@ List<Shift> buildDemoShifts() {
       id: 2,
       workDate: day(0),
       title: 'Услуги работника торгового зала',
+      category: 'sales_floor',
       company: 'Zara',
       address: 'г. Алматы, ул. Розыбакиева, 247А',
       startMinutes: 600,
@@ -297,6 +316,7 @@ List<Shift> buildDemoShifts() {
       id: 3,
       workDate: day(1),
       title: 'Услуги грузчика (ночная смена)',
+      category: 'loader',
       company: 'Заммлер Казахстан',
       address: 'г. Шымкент, Орманшы ж/м, Енбекшинский район',
       startMinutes: 1080, // 18:00
@@ -316,6 +336,7 @@ List<Shift> buildDemoShifts() {
       id: 4,
       workDate: day(1),
       title: 'Услуги курьера',
+      category: 'courier',
       company: 'Magnum',
       address: 'г. Алматы, пр. Абая, 109',
       startMinutes: 540, // 09:00
@@ -332,6 +353,7 @@ List<Shift> buildDemoShifts() {
       id: 5,
       workDate: day(3),
       title: 'Услуги промоутера',
+      category: 'promoter',
       company: 'Sinsay',
       address: 'г. Шымкент, ТРЦ Mega Planet',
       startMinutes: 660, // 11:00
@@ -354,6 +376,7 @@ List<Shift> buildDemoShifts() {
       id: 6,
       workDate: day(-3),
       title: 'Услуги сотрудника склада',
+      category: 'warehouse',
       company: 'Золотое яблоко',
       address: 'г. Алматы, ул. Султана Бейбарыса, 1',
       startMinutes: 600,
@@ -389,6 +412,7 @@ extension ShiftJson on Shift {
         // '2026-09-17T00:00:00.000' — так её поймёт любой язык, не только Dart.
         'workDate': workDate.toIso8601String(),
         'title': title,
+        'category': category,
         'company': company,
         'address': address,
         'city': city,
@@ -408,6 +432,7 @@ extension ShiftJson on Shift {
         'myStatus': myStatus,
         'myCheckedInAt': myCheckedInAt?.toIso8601String(),
         'cancelledAt': cancelledAt?.toIso8601String(),
+        'isFunded': isFunded,
       };
 }
 
@@ -415,6 +440,8 @@ Shift shiftFromJson(Map<String, dynamic> json) => Shift(
       id: json['id'] as int,
       workDate: DateTime.parse(json['workDate'] as String),
       title: json['title'] as String,
+      // Старый сервер категорию не присылает — значит, «Другое».
+      category: json['category'] as String? ?? kOtherCategory,
       company: json['company'] as String,
       address: json['address'] as String,
       city: json['city'] as String? ?? 'Алматы',
@@ -439,4 +466,5 @@ Shift shiftFromJson(Map<String, dynamic> json) => Shift(
       cancelledAt: json['cancelledAt'] == null
           ? null
           : DateTime.parse(json['cancelledAt'] as String),
+      isFunded: json['isFunded'] as bool? ?? false,
     );

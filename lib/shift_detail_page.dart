@@ -5,6 +5,7 @@ import 'package:fastwork_core/data/shift_repository.dart';
 import 'company_page.dart';
 import 'package:fastwork_core/shift.dart';
 import 'theme/app_colors.dart';
+import 'theme/glass.dart';
 import 'widgets/booking_confirm_sheet.dart';
 import 'widgets/async_state.dart';
 import 'widgets/common.dart';
@@ -72,6 +73,9 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
         BookingResult.alreadyBooked => 'Вы уже записаны на эту смену',
         BookingResult.ratingTooLow =>
           'Ваш рейтинг ниже требуемого для этой смены',
+        BookingResult.earningsLimit =>
+          'С этой сменой доход за месяц превысит 300 МРП — '
+              'это предел для платформенной занятости',
         _ => 'Не получилось записаться',
       },
     );
@@ -505,20 +509,20 @@ class _HeroCard extends StatelessWidget {
                 ' · ${formatDuration(shift.durationMinutes)}',
           ),
           InfoRow(icon: Icons.place_outlined, text: shift.address),
-          if (shift.tags.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final tag in shift.tags)
-                  TagChip(
-                    text: tag,
-                    color: tag == 'Мало мест' ? AppColors.accent : null,
-                  ),
-              ],
-            ),
-          ],
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              CategoryChip(category: shift.category),
+              if (shift.isFunded) const GuaranteeChip(),
+              for (final tag in shift.tags)
+                TagChip(
+                  text: tag,
+                  color: tag == 'Мало мест' ? AppColors.accent : null,
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -593,6 +597,27 @@ class _PayCard extends StatelessWidget {
                   value: formatDuration(shift.paidMinutes),
                   highlight: true,
                 ),
+                if (shift.isFunded) ...[
+                  const SizedBox(height: 10),
+                  const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.verified_user_rounded,
+                        size: 14,
+                        color: AppColors.success,
+                      ),
+                      SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Заказчик уже оплатил смену — деньги у сервиса. '
+                          'Вы получите их, когда он подтвердит ваш выход.',
+                          style: TextStyle(fontSize: 12, height: 1.3),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 if (shift.hasUnpaidBreak) ...[
                   const SizedBox(height: 10),
                   Row(
@@ -774,7 +799,6 @@ class _BottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final canCancel = shift.canCancelAt(DateTime.now());
     final allowed = shift.ratingAllows(userRating);
 
@@ -820,78 +844,68 @@ class _BottomBar extends StatelessWidget {
       outlined = false;
     }
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(
-          top: BorderSide(
-            color: isDark ? AppColors.darkBorder : AppColors.border,
-          ),
-        ),
-        boxShadow: isDark
-            ? null
-            : const [
-                BoxShadow(
-                  color: Color(0x14000000),
-                  blurRadius: 20,
-                  offset: Offset(0, -6),
-                ),
-              ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.account_balance_wallet_outlined,
-                  size: 15,
-                  color: AppColors.muted,
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    shift.payoutDelayDays == 1
-                        ? 'Вознаграждение на следующий день после смены'
-                        : 'Вознаграждение через ${shift.payoutDelayDays} дня',
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      color: AppColors.muted,
-                    ),
-                    textAlign: TextAlign.center,
+    // Низ экрана — стеклянная панель: лента под ней видна размытой,
+    // и ясно, что содержимое продолжается, а не обрезано.
+    return Glass(
+      strong: true,
+      elevated: true,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.account_balance_wallet_outlined,
+                    size: 15,
+                    color: AppColors.muted,
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: busy ? null : action,
-                style: outlined
-                    ? FilledButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        foregroundColor: AppColors.body,
-                        side: const BorderSide(color: AppColors.border),
-                      )
-                    : null,
-                child: busy
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(label),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      shift.payoutDelayDays == 1
+                          ? 'Вознаграждение на следующий день после смены'
+                          : 'Вознаграждение через ${shift.payoutDelayDays} дня',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.muted,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: busy ? null : action,
+                  style: outlined
+                      ? FilledButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: AppColors.body,
+                          side: const BorderSide(color: AppColors.border),
+                        )
+                      : null,
+                  child: busy
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(label),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

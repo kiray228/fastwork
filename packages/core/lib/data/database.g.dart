@@ -42,6 +42,18 @@ class $ShiftRowsTable extends ShiftRows
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+    'category',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(kOtherCategory),
+  );
   static const VerificationMeta _companyMeta = const VerificationMeta(
     'company',
   );
@@ -223,6 +235,7 @@ class $ShiftRowsTable extends ShiftRows
     id,
     workDate,
     title,
+    category,
     company,
     address,
     city,
@@ -270,6 +283,12 @@ class $ShiftRowsTable extends ShiftRows
       );
     } else if (isInserting) {
       context.missing(_titleMeta);
+    }
+    if (data.containsKey('category')) {
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
+      );
     }
     if (data.containsKey('company')) {
       context.handle(
@@ -421,6 +440,10 @@ class $ShiftRowsTable extends ShiftRows
         DriftSqlType.string,
         data['${effectivePrefix}title'],
       )!,
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      )!,
       company: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}company'],
@@ -498,6 +521,10 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
   final int id;
   final DateTime workDate;
   final String title;
+
+  /// Категория работ — ключ из `kShiftCategories`. Добавлена в
+  /// одиннадцатой версии; у смен, созданных раньше, будет «Другое».
+  final String category;
   final String company;
   final String address;
 
@@ -536,6 +563,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     required this.id,
     required this.workDate,
     required this.title,
+    required this.category,
     required this.company,
     required this.address,
     required this.city,
@@ -559,6 +587,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     map['id'] = Variable<int>(id);
     map['work_date'] = Variable<DateTime>(workDate);
     map['title'] = Variable<String>(title);
+    map['category'] = Variable<String>(category);
     map['company'] = Variable<String>(company);
     map['address'] = Variable<String>(address);
     map['city'] = Variable<String>(city);
@@ -593,6 +622,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       id: Value(id),
       workDate: Value(workDate),
       title: Value(title),
+      category: Value(category),
       company: Value(company),
       address: Value(address),
       city: Value(city),
@@ -631,6 +661,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       id: serializer.fromJson<int>(json['id']),
       workDate: serializer.fromJson<DateTime>(json['workDate']),
       title: serializer.fromJson<String>(json['title']),
+      category: serializer.fromJson<String>(json['category']),
       company: serializer.fromJson<String>(json['company']),
       address: serializer.fromJson<String>(json['address']),
       city: serializer.fromJson<String>(json['city']),
@@ -658,6 +689,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       'id': serializer.toJson<int>(id),
       'workDate': serializer.toJson<DateTime>(workDate),
       'title': serializer.toJson<String>(title),
+      'category': serializer.toJson<String>(category),
       'company': serializer.toJson<String>(company),
       'address': serializer.toJson<String>(address),
       'city': serializer.toJson<String>(city),
@@ -681,6 +713,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     int? id,
     DateTime? workDate,
     String? title,
+    String? category,
     String? company,
     String? address,
     String? city,
@@ -701,6 +734,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     id: id ?? this.id,
     workDate: workDate ?? this.workDate,
     title: title ?? this.title,
+    category: category ?? this.category,
     company: company ?? this.company,
     address: address ?? this.address,
     city: city ?? this.city,
@@ -725,6 +759,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       id: data.id.present ? data.id.value : this.id,
       workDate: data.workDate.present ? data.workDate.value : this.workDate,
       title: data.title.present ? data.title.value : this.title,
+      category: data.category.present ? data.category.value : this.category,
       company: data.company.present ? data.company.value : this.company,
       address: data.address.present ? data.address.value : this.address,
       city: data.city.present ? data.city.value : this.city,
@@ -768,6 +803,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
           ..write('id: $id, ')
           ..write('workDate: $workDate, ')
           ..write('title: $title, ')
+          ..write('category: $category, ')
           ..write('company: $company, ')
           ..write('address: $address, ')
           ..write('city: $city, ')
@@ -793,6 +829,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     id,
     workDate,
     title,
+    category,
     company,
     address,
     city,
@@ -817,6 +854,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
           other.id == this.id &&
           other.workDate == this.workDate &&
           other.title == this.title &&
+          other.category == this.category &&
           other.company == this.company &&
           other.address == this.address &&
           other.city == this.city &&
@@ -839,6 +877,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
   final Value<int> id;
   final Value<DateTime> workDate;
   final Value<String> title;
+  final Value<String> category;
   final Value<String> company;
   final Value<String> address;
   final Value<String> city;
@@ -859,6 +898,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     this.id = const Value.absent(),
     this.workDate = const Value.absent(),
     this.title = const Value.absent(),
+    this.category = const Value.absent(),
     this.company = const Value.absent(),
     this.address = const Value.absent(),
     this.city = const Value.absent(),
@@ -880,6 +920,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     this.id = const Value.absent(),
     required DateTime workDate,
     required String title,
+    this.category = const Value.absent(),
     required String company,
     required String address,
     this.city = const Value.absent(),
@@ -908,6 +949,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     Expression<int>? id,
     Expression<DateTime>? workDate,
     Expression<String>? title,
+    Expression<String>? category,
     Expression<String>? company,
     Expression<String>? address,
     Expression<String>? city,
@@ -929,6 +971,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
       if (id != null) 'id': id,
       if (workDate != null) 'work_date': workDate,
       if (title != null) 'title': title,
+      if (category != null) 'category': category,
       if (company != null) 'company': company,
       if (address != null) 'address': address,
       if (city != null) 'city': city,
@@ -953,6 +996,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     Value<int>? id,
     Value<DateTime>? workDate,
     Value<String>? title,
+    Value<String>? category,
     Value<String>? company,
     Value<String>? address,
     Value<String>? city,
@@ -974,6 +1018,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
       id: id ?? this.id,
       workDate: workDate ?? this.workDate,
       title: title ?? this.title,
+      category: category ?? this.category,
       company: company ?? this.company,
       address: address ?? this.address,
       city: city ?? this.city,
@@ -1004,6 +1049,9 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     }
     if (title.present) {
       map['title'] = Variable<String>(title.value);
+    }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
     }
     if (company.present) {
       map['company'] = Variable<String>(company.value);
@@ -1062,6 +1110,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
           ..write('id: $id, ')
           ..write('workDate: $workDate, ')
           ..write('title: $title, ')
+          ..write('category: $category, ')
           ..write('company: $company, ')
           ..write('address: $address, ')
           ..write('city: $city, ')
@@ -1619,6 +1668,30 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _termsVersionMeta = const VerificationMeta(
+    'termsVersion',
+  );
+  @override
+  late final GeneratedColumn<int> termsVersion = GeneratedColumn<int>(
+    'terms_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _termsAcceptedAtMeta = const VerificationMeta(
+    'termsAcceptedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> termsAcceptedAt =
+      GeneratedColumn<DateTime>(
+        'terms_accepted_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1631,6 +1704,8 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
     role,
     company,
     createdAt,
+    termsVersion,
+    termsAcceptedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1709,6 +1784,24 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('terms_version')) {
+      context.handle(
+        _termsVersionMeta,
+        termsVersion.isAcceptableOrUnknown(
+          data['terms_version']!,
+          _termsVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('terms_accepted_at')) {
+      context.handle(
+        _termsAcceptedAtMeta,
+        termsAcceptedAt.isAcceptableOrUnknown(
+          data['terms_accepted_at']!,
+          _termsAcceptedAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1758,6 +1851,14 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      termsVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}terms_version'],
+      )!,
+      termsAcceptedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}terms_accepted_at'],
+      ),
     );
   }
 
@@ -1793,6 +1894,15 @@ class UserRow extends DataClass implements Insertable<UserRow> {
   /// Название компании для менеджера. У исполнителя пусто.
   final String? company;
   final DateTime createdAt;
+
+  /// Какую версию правил человек принял. 0 — никакую: так у аккаунтов,
+  /// заведённых до появления правил. Добавлена в двенадцатой версии.
+  final int termsVersion;
+
+  /// Когда принял. Хранить момент, а не галочку, — то же правило, что и
+  /// с отметкой о выходе: из времени галочку получить можно, наоборот нет.
+  /// А при споре «я ни с чем не соглашался» время — единственный довод.
+  final DateTime? termsAcceptedAt;
   const UserRow({
     required this.id,
     required this.phone,
@@ -1804,6 +1914,8 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     required this.role,
     this.company,
     required this.createdAt,
+    required this.termsVersion,
+    this.termsAcceptedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1822,6 +1934,10 @@ class UserRow extends DataClass implements Insertable<UserRow> {
       map['company'] = Variable<String>(company);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    map['terms_version'] = Variable<int>(termsVersion);
+    if (!nullToAbsent || termsAcceptedAt != null) {
+      map['terms_accepted_at'] = Variable<DateTime>(termsAcceptedAt);
+    }
     return map;
   }
 
@@ -1841,6 +1957,10 @@ class UserRow extends DataClass implements Insertable<UserRow> {
           ? const Value.absent()
           : Value(company),
       createdAt: Value(createdAt),
+      termsVersion: Value(termsVersion),
+      termsAcceptedAt: termsAcceptedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(termsAcceptedAt),
     );
   }
 
@@ -1860,6 +1980,8 @@ class UserRow extends DataClass implements Insertable<UserRow> {
       role: serializer.fromJson<String>(json['role']),
       company: serializer.fromJson<String?>(json['company']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      termsVersion: serializer.fromJson<int>(json['termsVersion']),
+      termsAcceptedAt: serializer.fromJson<DateTime?>(json['termsAcceptedAt']),
     );
   }
   @override
@@ -1876,6 +1998,8 @@ class UserRow extends DataClass implements Insertable<UserRow> {
       'role': serializer.toJson<String>(role),
       'company': serializer.toJson<String?>(company),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'termsVersion': serializer.toJson<int>(termsVersion),
+      'termsAcceptedAt': serializer.toJson<DateTime?>(termsAcceptedAt),
     };
   }
 
@@ -1890,6 +2014,8 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     String? role,
     Value<String?> company = const Value.absent(),
     DateTime? createdAt,
+    int? termsVersion,
+    Value<DateTime?> termsAcceptedAt = const Value.absent(),
   }) => UserRow(
     id: id ?? this.id,
     phone: phone ?? this.phone,
@@ -1901,6 +2027,10 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     role: role ?? this.role,
     company: company.present ? company.value : this.company,
     createdAt: createdAt ?? this.createdAt,
+    termsVersion: termsVersion ?? this.termsVersion,
+    termsAcceptedAt: termsAcceptedAt.present
+        ? termsAcceptedAt.value
+        : this.termsAcceptedAt,
   );
   UserRow copyWithCompanion(UserRowsCompanion data) {
     return UserRow(
@@ -1916,6 +2046,12 @@ class UserRow extends DataClass implements Insertable<UserRow> {
       role: data.role.present ? data.role.value : this.role,
       company: data.company.present ? data.company.value : this.company,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      termsVersion: data.termsVersion.present
+          ? data.termsVersion.value
+          : this.termsVersion,
+      termsAcceptedAt: data.termsAcceptedAt.present
+          ? data.termsAcceptedAt.value
+          : this.termsAcceptedAt,
     );
   }
 
@@ -1931,7 +2067,9 @@ class UserRow extends DataClass implements Insertable<UserRow> {
           ..write('isVerified: $isVerified, ')
           ..write('role: $role, ')
           ..write('company: $company, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('termsVersion: $termsVersion, ')
+          ..write('termsAcceptedAt: $termsAcceptedAt')
           ..write(')'))
         .toString();
   }
@@ -1948,6 +2086,8 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     role,
     company,
     createdAt,
+    termsVersion,
+    termsAcceptedAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -1962,7 +2102,9 @@ class UserRow extends DataClass implements Insertable<UserRow> {
           other.isVerified == this.isVerified &&
           other.role == this.role &&
           other.company == this.company &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.termsVersion == this.termsVersion &&
+          other.termsAcceptedAt == this.termsAcceptedAt);
 }
 
 class UserRowsCompanion extends UpdateCompanion<UserRow> {
@@ -1976,6 +2118,8 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
   final Value<String> role;
   final Value<String?> company;
   final Value<DateTime> createdAt;
+  final Value<int> termsVersion;
+  final Value<DateTime?> termsAcceptedAt;
   const UserRowsCompanion({
     this.id = const Value.absent(),
     this.phone = const Value.absent(),
@@ -1987,6 +2131,8 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     this.role = const Value.absent(),
     this.company = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.termsVersion = const Value.absent(),
+    this.termsAcceptedAt = const Value.absent(),
   });
   UserRowsCompanion.insert({
     this.id = const Value.absent(),
@@ -1999,6 +2145,8 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     this.role = const Value.absent(),
     this.company = const Value.absent(),
     required DateTime createdAt,
+    this.termsVersion = const Value.absent(),
+    this.termsAcceptedAt = const Value.absent(),
   }) : phone = Value(phone),
        fullName = Value(fullName),
        city = Value(city),
@@ -2014,6 +2162,8 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     Expression<String>? role,
     Expression<String>? company,
     Expression<DateTime>? createdAt,
+    Expression<int>? termsVersion,
+    Expression<DateTime>? termsAcceptedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2026,6 +2176,8 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
       if (role != null) 'role': role,
       if (company != null) 'company': company,
       if (createdAt != null) 'created_at': createdAt,
+      if (termsVersion != null) 'terms_version': termsVersion,
+      if (termsAcceptedAt != null) 'terms_accepted_at': termsAcceptedAt,
     });
   }
 
@@ -2040,6 +2192,8 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     Value<String>? role,
     Value<String?>? company,
     Value<DateTime>? createdAt,
+    Value<int>? termsVersion,
+    Value<DateTime?>? termsAcceptedAt,
   }) {
     return UserRowsCompanion(
       id: id ?? this.id,
@@ -2052,6 +2206,8 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
       role: role ?? this.role,
       company: company ?? this.company,
       createdAt: createdAt ?? this.createdAt,
+      termsVersion: termsVersion ?? this.termsVersion,
+      termsAcceptedAt: termsAcceptedAt ?? this.termsAcceptedAt,
     );
   }
 
@@ -2088,6 +2244,12 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (termsVersion.present) {
+      map['terms_version'] = Variable<int>(termsVersion.value);
+    }
+    if (termsAcceptedAt.present) {
+      map['terms_accepted_at'] = Variable<DateTime>(termsAcceptedAt.value);
+    }
     return map;
   }
 
@@ -2103,7 +2265,9 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
           ..write('isVerified: $isVerified, ')
           ..write('role: $role, ')
           ..write('company: $company, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('termsVersion: $termsVersion, ')
+          ..write('termsAcceptedAt: $termsAcceptedAt')
           ..write(')'))
         .toString();
   }
@@ -5561,6 +5725,1366 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
   }
 }
 
+class $MrpRateRowsTable extends MrpRateRows
+    with TableInfo<$MrpRateRowsTable, MrpRateRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MrpRateRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _validFromMeta = const VerificationMeta(
+    'validFrom',
+  );
+  @override
+  late final GeneratedColumn<DateTime> validFrom = GeneratedColumn<DateTime>(
+    'valid_from',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _amountMeta = const VerificationMeta('amount');
+  @override
+  late final GeneratedColumn<int> amount = GeneratedColumn<int>(
+    'amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, validFrom, amount, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'mrp_rate_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MrpRateRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('valid_from')) {
+      context.handle(
+        _validFromMeta,
+        validFrom.isAcceptableOrUnknown(data['valid_from']!, _validFromMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_validFromMeta);
+    }
+    if (data.containsKey('amount')) {
+      context.handle(
+        _amountMeta,
+        amount.isAcceptableOrUnknown(data['amount']!, _amountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_amountMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  MrpRateRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MrpRateRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      validFrom: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}valid_from'],
+      )!,
+      amount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}amount'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $MrpRateRowsTable createAlias(String alias) {
+    return $MrpRateRowsTable(attachedDatabase, alias);
+  }
+}
+
+class MrpRateRow extends DataClass implements Insertable<MrpRateRow> {
+  final int id;
+
+  /// С какого дня действует.
+  final DateTime validFrom;
+
+  /// Один МРП в тиынах.
+  final int amount;
+  final DateTime createdAt;
+  const MrpRateRow({
+    required this.id,
+    required this.validFrom,
+    required this.amount,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['valid_from'] = Variable<DateTime>(validFrom);
+    map['amount'] = Variable<int>(amount);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  MrpRateRowsCompanion toCompanion(bool nullToAbsent) {
+    return MrpRateRowsCompanion(
+      id: Value(id),
+      validFrom: Value(validFrom),
+      amount: Value(amount),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory MrpRateRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MrpRateRow(
+      id: serializer.fromJson<int>(json['id']),
+      validFrom: serializer.fromJson<DateTime>(json['validFrom']),
+      amount: serializer.fromJson<int>(json['amount']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'validFrom': serializer.toJson<DateTime>(validFrom),
+      'amount': serializer.toJson<int>(amount),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  MrpRateRow copyWith({
+    int? id,
+    DateTime? validFrom,
+    int? amount,
+    DateTime? createdAt,
+  }) => MrpRateRow(
+    id: id ?? this.id,
+    validFrom: validFrom ?? this.validFrom,
+    amount: amount ?? this.amount,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  MrpRateRow copyWithCompanion(MrpRateRowsCompanion data) {
+    return MrpRateRow(
+      id: data.id.present ? data.id.value : this.id,
+      validFrom: data.validFrom.present ? data.validFrom.value : this.validFrom,
+      amount: data.amount.present ? data.amount.value : this.amount,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MrpRateRow(')
+          ..write('id: $id, ')
+          ..write('validFrom: $validFrom, ')
+          ..write('amount: $amount, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, validFrom, amount, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MrpRateRow &&
+          other.id == this.id &&
+          other.validFrom == this.validFrom &&
+          other.amount == this.amount &&
+          other.createdAt == this.createdAt);
+}
+
+class MrpRateRowsCompanion extends UpdateCompanion<MrpRateRow> {
+  final Value<int> id;
+  final Value<DateTime> validFrom;
+  final Value<int> amount;
+  final Value<DateTime> createdAt;
+  const MrpRateRowsCompanion({
+    this.id = const Value.absent(),
+    this.validFrom = const Value.absent(),
+    this.amount = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  MrpRateRowsCompanion.insert({
+    this.id = const Value.absent(),
+    required DateTime validFrom,
+    required int amount,
+    required DateTime createdAt,
+  }) : validFrom = Value(validFrom),
+       amount = Value(amount),
+       createdAt = Value(createdAt);
+  static Insertable<MrpRateRow> custom({
+    Expression<int>? id,
+    Expression<DateTime>? validFrom,
+    Expression<int>? amount,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (validFrom != null) 'valid_from': validFrom,
+      if (amount != null) 'amount': amount,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  MrpRateRowsCompanion copyWith({
+    Value<int>? id,
+    Value<DateTime>? validFrom,
+    Value<int>? amount,
+    Value<DateTime>? createdAt,
+  }) {
+    return MrpRateRowsCompanion(
+      id: id ?? this.id,
+      validFrom: validFrom ?? this.validFrom,
+      amount: amount ?? this.amount,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (validFrom.present) {
+      map['valid_from'] = Variable<DateTime>(validFrom.value);
+    }
+    if (amount.present) {
+      map['amount'] = Variable<int>(amount.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MrpRateRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('validFrom: $validFrom, ')
+          ..write('amount: $amount, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PaymentRowsTable extends PaymentRows
+    with TableInfo<$PaymentRowsTable, PaymentRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PaymentRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _shiftIdMeta = const VerificationMeta(
+    'shiftId',
+  );
+  @override
+  late final GeneratedColumn<int> shiftId = GeneratedColumn<int>(
+    'shift_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'UNIQUE REFERENCES shift_rows (id)',
+    ),
+  );
+  static const VerificationMeta _payerIdMeta = const VerificationMeta(
+    'payerId',
+  );
+  @override
+  late final GeneratedColumn<int> payerId = GeneratedColumn<int>(
+    'payer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountMeta = const VerificationMeta('amount');
+  @override
+  late final GeneratedColumn<int> amount = GeneratedColumn<int>(
+    'amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _feeMeta = const VerificationMeta('fee');
+  @override
+  late final GeneratedColumn<int> fee = GeneratedColumn<int>(
+    'fee',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _cardLast4Meta = const VerificationMeta(
+    'cardLast4',
+  );
+  @override
+  late final GeneratedColumn<String> cardLast4 = GeneratedColumn<String>(
+    'card_last4',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _cardBrandMeta = const VerificationMeta(
+    'cardBrand',
+  );
+  @override
+  late final GeneratedColumn<String> cardBrand = GeneratedColumn<String>(
+    'card_brand',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _operationMeta = const VerificationMeta(
+    'operation',
+  );
+  @override
+  late final GeneratedColumn<String> operation = GeneratedColumn<String>(
+    'operation',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    shiftId,
+    payerId,
+    amount,
+    fee,
+    status,
+    cardLast4,
+    cardBrand,
+    operation,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'payment_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PaymentRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('shift_id')) {
+      context.handle(
+        _shiftIdMeta,
+        shiftId.isAcceptableOrUnknown(data['shift_id']!, _shiftIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_shiftIdMeta);
+    }
+    if (data.containsKey('payer_id')) {
+      context.handle(
+        _payerIdMeta,
+        payerId.isAcceptableOrUnknown(data['payer_id']!, _payerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_payerIdMeta);
+    }
+    if (data.containsKey('amount')) {
+      context.handle(
+        _amountMeta,
+        amount.isAcceptableOrUnknown(data['amount']!, _amountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_amountMeta);
+    }
+    if (data.containsKey('fee')) {
+      context.handle(
+        _feeMeta,
+        fee.isAcceptableOrUnknown(data['fee']!, _feeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_feeMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('card_last4')) {
+      context.handle(
+        _cardLast4Meta,
+        cardLast4.isAcceptableOrUnknown(data['card_last4']!, _cardLast4Meta),
+      );
+    } else if (isInserting) {
+      context.missing(_cardLast4Meta);
+    }
+    if (data.containsKey('card_brand')) {
+      context.handle(
+        _cardBrandMeta,
+        cardBrand.isAcceptableOrUnknown(data['card_brand']!, _cardBrandMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_cardBrandMeta);
+    }
+    if (data.containsKey('operation')) {
+      context.handle(
+        _operationMeta,
+        operation.isAcceptableOrUnknown(data['operation']!, _operationMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_operationMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PaymentRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PaymentRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      shiftId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shift_id'],
+      )!,
+      payerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}payer_id'],
+      )!,
+      amount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}amount'],
+      )!,
+      fee: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}fee'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      cardLast4: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}card_last4'],
+      )!,
+      cardBrand: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}card_brand'],
+      )!,
+      operation: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}operation'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PaymentRowsTable createAlias(String alias) {
+    return $PaymentRowsTable(attachedDatabase, alias);
+  }
+}
+
+class PaymentRow extends DataClass implements Insertable<PaymentRow> {
+  final int id;
+
+  /// Смена. Одна оплата на смену — доплаты и возвраты при правке
+  /// пишутся движениями, а эта строка лишь обновляет итоговые суммы.
+  final int shiftId;
+
+  /// Кто платил. 0 — учебные смены, их «оплатил» сам сервис.
+  final int payerId;
+
+  /// Удержано на вознаграждение всем местам, в тиынах.
+  final int amount;
+
+  /// Комиссия сервиса, в тиынах.
+  final int fee;
+
+  /// `held` — деньги у сервиса, `refunded` — остаток вернули заказчику.
+  final String status;
+  final String cardLast4;
+  final String cardBrand;
+
+  /// Номер операции у провайдера. По нему делают возврат.
+  final String operation;
+  final DateTime createdAt;
+  const PaymentRow({
+    required this.id,
+    required this.shiftId,
+    required this.payerId,
+    required this.amount,
+    required this.fee,
+    required this.status,
+    required this.cardLast4,
+    required this.cardBrand,
+    required this.operation,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['shift_id'] = Variable<int>(shiftId);
+    map['payer_id'] = Variable<int>(payerId);
+    map['amount'] = Variable<int>(amount);
+    map['fee'] = Variable<int>(fee);
+    map['status'] = Variable<String>(status);
+    map['card_last4'] = Variable<String>(cardLast4);
+    map['card_brand'] = Variable<String>(cardBrand);
+    map['operation'] = Variable<String>(operation);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PaymentRowsCompanion toCompanion(bool nullToAbsent) {
+    return PaymentRowsCompanion(
+      id: Value(id),
+      shiftId: Value(shiftId),
+      payerId: Value(payerId),
+      amount: Value(amount),
+      fee: Value(fee),
+      status: Value(status),
+      cardLast4: Value(cardLast4),
+      cardBrand: Value(cardBrand),
+      operation: Value(operation),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory PaymentRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PaymentRow(
+      id: serializer.fromJson<int>(json['id']),
+      shiftId: serializer.fromJson<int>(json['shiftId']),
+      payerId: serializer.fromJson<int>(json['payerId']),
+      amount: serializer.fromJson<int>(json['amount']),
+      fee: serializer.fromJson<int>(json['fee']),
+      status: serializer.fromJson<String>(json['status']),
+      cardLast4: serializer.fromJson<String>(json['cardLast4']),
+      cardBrand: serializer.fromJson<String>(json['cardBrand']),
+      operation: serializer.fromJson<String>(json['operation']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'shiftId': serializer.toJson<int>(shiftId),
+      'payerId': serializer.toJson<int>(payerId),
+      'amount': serializer.toJson<int>(amount),
+      'fee': serializer.toJson<int>(fee),
+      'status': serializer.toJson<String>(status),
+      'cardLast4': serializer.toJson<String>(cardLast4),
+      'cardBrand': serializer.toJson<String>(cardBrand),
+      'operation': serializer.toJson<String>(operation),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  PaymentRow copyWith({
+    int? id,
+    int? shiftId,
+    int? payerId,
+    int? amount,
+    int? fee,
+    String? status,
+    String? cardLast4,
+    String? cardBrand,
+    String? operation,
+    DateTime? createdAt,
+  }) => PaymentRow(
+    id: id ?? this.id,
+    shiftId: shiftId ?? this.shiftId,
+    payerId: payerId ?? this.payerId,
+    amount: amount ?? this.amount,
+    fee: fee ?? this.fee,
+    status: status ?? this.status,
+    cardLast4: cardLast4 ?? this.cardLast4,
+    cardBrand: cardBrand ?? this.cardBrand,
+    operation: operation ?? this.operation,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  PaymentRow copyWithCompanion(PaymentRowsCompanion data) {
+    return PaymentRow(
+      id: data.id.present ? data.id.value : this.id,
+      shiftId: data.shiftId.present ? data.shiftId.value : this.shiftId,
+      payerId: data.payerId.present ? data.payerId.value : this.payerId,
+      amount: data.amount.present ? data.amount.value : this.amount,
+      fee: data.fee.present ? data.fee.value : this.fee,
+      status: data.status.present ? data.status.value : this.status,
+      cardLast4: data.cardLast4.present ? data.cardLast4.value : this.cardLast4,
+      cardBrand: data.cardBrand.present ? data.cardBrand.value : this.cardBrand,
+      operation: data.operation.present ? data.operation.value : this.operation,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PaymentRow(')
+          ..write('id: $id, ')
+          ..write('shiftId: $shiftId, ')
+          ..write('payerId: $payerId, ')
+          ..write('amount: $amount, ')
+          ..write('fee: $fee, ')
+          ..write('status: $status, ')
+          ..write('cardLast4: $cardLast4, ')
+          ..write('cardBrand: $cardBrand, ')
+          ..write('operation: $operation, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    shiftId,
+    payerId,
+    amount,
+    fee,
+    status,
+    cardLast4,
+    cardBrand,
+    operation,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PaymentRow &&
+          other.id == this.id &&
+          other.shiftId == this.shiftId &&
+          other.payerId == this.payerId &&
+          other.amount == this.amount &&
+          other.fee == this.fee &&
+          other.status == this.status &&
+          other.cardLast4 == this.cardLast4 &&
+          other.cardBrand == this.cardBrand &&
+          other.operation == this.operation &&
+          other.createdAt == this.createdAt);
+}
+
+class PaymentRowsCompanion extends UpdateCompanion<PaymentRow> {
+  final Value<int> id;
+  final Value<int> shiftId;
+  final Value<int> payerId;
+  final Value<int> amount;
+  final Value<int> fee;
+  final Value<String> status;
+  final Value<String> cardLast4;
+  final Value<String> cardBrand;
+  final Value<String> operation;
+  final Value<DateTime> createdAt;
+  const PaymentRowsCompanion({
+    this.id = const Value.absent(),
+    this.shiftId = const Value.absent(),
+    this.payerId = const Value.absent(),
+    this.amount = const Value.absent(),
+    this.fee = const Value.absent(),
+    this.status = const Value.absent(),
+    this.cardLast4 = const Value.absent(),
+    this.cardBrand = const Value.absent(),
+    this.operation = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  PaymentRowsCompanion.insert({
+    this.id = const Value.absent(),
+    required int shiftId,
+    required int payerId,
+    required int amount,
+    required int fee,
+    required String status,
+    required String cardLast4,
+    required String cardBrand,
+    required String operation,
+    required DateTime createdAt,
+  }) : shiftId = Value(shiftId),
+       payerId = Value(payerId),
+       amount = Value(amount),
+       fee = Value(fee),
+       status = Value(status),
+       cardLast4 = Value(cardLast4),
+       cardBrand = Value(cardBrand),
+       operation = Value(operation),
+       createdAt = Value(createdAt);
+  static Insertable<PaymentRow> custom({
+    Expression<int>? id,
+    Expression<int>? shiftId,
+    Expression<int>? payerId,
+    Expression<int>? amount,
+    Expression<int>? fee,
+    Expression<String>? status,
+    Expression<String>? cardLast4,
+    Expression<String>? cardBrand,
+    Expression<String>? operation,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (shiftId != null) 'shift_id': shiftId,
+      if (payerId != null) 'payer_id': payerId,
+      if (amount != null) 'amount': amount,
+      if (fee != null) 'fee': fee,
+      if (status != null) 'status': status,
+      if (cardLast4 != null) 'card_last4': cardLast4,
+      if (cardBrand != null) 'card_brand': cardBrand,
+      if (operation != null) 'operation': operation,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  PaymentRowsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? shiftId,
+    Value<int>? payerId,
+    Value<int>? amount,
+    Value<int>? fee,
+    Value<String>? status,
+    Value<String>? cardLast4,
+    Value<String>? cardBrand,
+    Value<String>? operation,
+    Value<DateTime>? createdAt,
+  }) {
+    return PaymentRowsCompanion(
+      id: id ?? this.id,
+      shiftId: shiftId ?? this.shiftId,
+      payerId: payerId ?? this.payerId,
+      amount: amount ?? this.amount,
+      fee: fee ?? this.fee,
+      status: status ?? this.status,
+      cardLast4: cardLast4 ?? this.cardLast4,
+      cardBrand: cardBrand ?? this.cardBrand,
+      operation: operation ?? this.operation,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (shiftId.present) {
+      map['shift_id'] = Variable<int>(shiftId.value);
+    }
+    if (payerId.present) {
+      map['payer_id'] = Variable<int>(payerId.value);
+    }
+    if (amount.present) {
+      map['amount'] = Variable<int>(amount.value);
+    }
+    if (fee.present) {
+      map['fee'] = Variable<int>(fee.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (cardLast4.present) {
+      map['card_last4'] = Variable<String>(cardLast4.value);
+    }
+    if (cardBrand.present) {
+      map['card_brand'] = Variable<String>(cardBrand.value);
+    }
+    if (operation.present) {
+      map['operation'] = Variable<String>(operation.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PaymentRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('shiftId: $shiftId, ')
+          ..write('payerId: $payerId, ')
+          ..write('amount: $amount, ')
+          ..write('fee: $fee, ')
+          ..write('status: $status, ')
+          ..write('cardLast4: $cardLast4, ')
+          ..write('cardBrand: $cardBrand, ')
+          ..write('operation: $operation, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $WalletEntryRowsTable extends WalletEntryRows
+    with TableInfo<$WalletEntryRowsTable, WalletEntryRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WalletEntryRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<int> userId = GeneratedColumn<int>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _shiftIdMeta = const VerificationMeta(
+    'shiftId',
+  );
+  @override
+  late final GeneratedColumn<int> shiftId = GeneratedColumn<int>(
+    'shift_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountMeta = const VerificationMeta('amount');
+  @override
+  late final GeneratedColumn<int> amount = GeneratedColumn<int>(
+    'amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    userId,
+    shiftId,
+    kind,
+    amount,
+    title,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'wallet_entry_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WalletEntryRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('shift_id')) {
+      context.handle(
+        _shiftIdMeta,
+        shiftId.isAcceptableOrUnknown(data['shift_id']!, _shiftIdMeta),
+      );
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('amount')) {
+      context.handle(
+        _amountMeta,
+        amount.isAcceptableOrUnknown(data['amount']!, _amountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_amountMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  WalletEntryRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WalletEntryRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}user_id'],
+      )!,
+      shiftId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shift_id'],
+      ),
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      amount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}amount'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $WalletEntryRowsTable createAlias(String alias) {
+    return $WalletEntryRowsTable(attachedDatabase, alias);
+  }
+}
+
+class WalletEntryRow extends DataClass implements Insertable<WalletEntryRow> {
+  final int id;
+  final int userId;
+
+  /// Смена, к которой относится движение. У вывода на карту её нет.
+  final int? shiftId;
+
+  /// Вид: earning, withdrawal, charge, refund — см. `WalletEntryKind`.
+  final String kind;
+
+  /// Сумма со знаком, в тиынах.
+  final int amount;
+
+  /// Готовая подпись для истории — как у уведомлений: верна на момент
+  /// события, даже если смену потом переименуют.
+  final String title;
+  final DateTime createdAt;
+  const WalletEntryRow({
+    required this.id,
+    required this.userId,
+    this.shiftId,
+    required this.kind,
+    required this.amount,
+    required this.title,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['user_id'] = Variable<int>(userId);
+    if (!nullToAbsent || shiftId != null) {
+      map['shift_id'] = Variable<int>(shiftId);
+    }
+    map['kind'] = Variable<String>(kind);
+    map['amount'] = Variable<int>(amount);
+    map['title'] = Variable<String>(title);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  WalletEntryRowsCompanion toCompanion(bool nullToAbsent) {
+    return WalletEntryRowsCompanion(
+      id: Value(id),
+      userId: Value(userId),
+      shiftId: shiftId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(shiftId),
+      kind: Value(kind),
+      amount: Value(amount),
+      title: Value(title),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory WalletEntryRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WalletEntryRow(
+      id: serializer.fromJson<int>(json['id']),
+      userId: serializer.fromJson<int>(json['userId']),
+      shiftId: serializer.fromJson<int?>(json['shiftId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      amount: serializer.fromJson<int>(json['amount']),
+      title: serializer.fromJson<String>(json['title']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'userId': serializer.toJson<int>(userId),
+      'shiftId': serializer.toJson<int?>(shiftId),
+      'kind': serializer.toJson<String>(kind),
+      'amount': serializer.toJson<int>(amount),
+      'title': serializer.toJson<String>(title),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  WalletEntryRow copyWith({
+    int? id,
+    int? userId,
+    Value<int?> shiftId = const Value.absent(),
+    String? kind,
+    int? amount,
+    String? title,
+    DateTime? createdAt,
+  }) => WalletEntryRow(
+    id: id ?? this.id,
+    userId: userId ?? this.userId,
+    shiftId: shiftId.present ? shiftId.value : this.shiftId,
+    kind: kind ?? this.kind,
+    amount: amount ?? this.amount,
+    title: title ?? this.title,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  WalletEntryRow copyWithCompanion(WalletEntryRowsCompanion data) {
+    return WalletEntryRow(
+      id: data.id.present ? data.id.value : this.id,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      shiftId: data.shiftId.present ? data.shiftId.value : this.shiftId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      amount: data.amount.present ? data.amount.value : this.amount,
+      title: data.title.present ? data.title.value : this.title,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WalletEntryRow(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('shiftId: $shiftId, ')
+          ..write('kind: $kind, ')
+          ..write('amount: $amount, ')
+          ..write('title: $title, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, userId, shiftId, kind, amount, title, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WalletEntryRow &&
+          other.id == this.id &&
+          other.userId == this.userId &&
+          other.shiftId == this.shiftId &&
+          other.kind == this.kind &&
+          other.amount == this.amount &&
+          other.title == this.title &&
+          other.createdAt == this.createdAt);
+}
+
+class WalletEntryRowsCompanion extends UpdateCompanion<WalletEntryRow> {
+  final Value<int> id;
+  final Value<int> userId;
+  final Value<int?> shiftId;
+  final Value<String> kind;
+  final Value<int> amount;
+  final Value<String> title;
+  final Value<DateTime> createdAt;
+  const WalletEntryRowsCompanion({
+    this.id = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.shiftId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.amount = const Value.absent(),
+    this.title = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  WalletEntryRowsCompanion.insert({
+    this.id = const Value.absent(),
+    required int userId,
+    this.shiftId = const Value.absent(),
+    required String kind,
+    required int amount,
+    required String title,
+    required DateTime createdAt,
+  }) : userId = Value(userId),
+       kind = Value(kind),
+       amount = Value(amount),
+       title = Value(title),
+       createdAt = Value(createdAt);
+  static Insertable<WalletEntryRow> custom({
+    Expression<int>? id,
+    Expression<int>? userId,
+    Expression<int>? shiftId,
+    Expression<String>? kind,
+    Expression<int>? amount,
+    Expression<String>? title,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (userId != null) 'user_id': userId,
+      if (shiftId != null) 'shift_id': shiftId,
+      if (kind != null) 'kind': kind,
+      if (amount != null) 'amount': amount,
+      if (title != null) 'title': title,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  WalletEntryRowsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? userId,
+    Value<int?>? shiftId,
+    Value<String>? kind,
+    Value<int>? amount,
+    Value<String>? title,
+    Value<DateTime>? createdAt,
+  }) {
+    return WalletEntryRowsCompanion(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      shiftId: shiftId ?? this.shiftId,
+      kind: kind ?? this.kind,
+      amount: amount ?? this.amount,
+      title: title ?? this.title,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<int>(userId.value);
+    }
+    if (shiftId.present) {
+      map['shift_id'] = Variable<int>(shiftId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (amount.present) {
+      map['amount'] = Variable<int>(amount.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WalletEntryRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('shiftId: $shiftId, ')
+          ..write('kind: $kind, ')
+          ..write('amount: $amount, ')
+          ..write('title: $title, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -5584,6 +7108,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $NotificationRowsTable notificationRows = $NotificationRowsTable(
     this,
   );
+  late final $MrpRateRowsTable mrpRateRows = $MrpRateRowsTable(this);
+  late final $PaymentRowsTable paymentRows = $PaymentRowsTable(this);
+  late final $WalletEntryRowsTable walletEntryRows = $WalletEntryRowsTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -5601,6 +7130,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     authCodeRows,
     authTokenRows,
     notificationRows,
+    mrpRateRows,
+    paymentRows,
+    walletEntryRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -5639,6 +7171,7 @@ typedef $$ShiftRowsTableCreateCompanionBuilder = ShiftRowsCompanion Function({
   Value<int> id,
   required DateTime workDate,
   required String title,
+  Value<String> category,
   required String company,
   required String address,
   Value<String> city,
@@ -5660,6 +7193,7 @@ typedef $$ShiftRowsTableUpdateCompanionBuilder = ShiftRowsCompanion Function({
   Value<int> id,
   Value<DateTime> workDate,
   Value<String> title,
+  Value<String> category,
   Value<String> company,
   Value<String> address,
   Value<String> city,
@@ -5739,6 +7273,24 @@ final class $$ShiftRowsTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$PaymentRowsTable, List<PaymentRow>>
+  _paymentRowsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.paymentRows,
+    aliasName: 'shift_rows__id__payment_rows__shift_id',
+  );
+
+  $$PaymentRowsTableProcessedTableManager get paymentRowsRefs {
+    final manager = $$PaymentRowsTableTableManager(
+      $_db,
+      $_db.paymentRows,
+    ).filter((f) => f.shiftId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_paymentRowsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$ShiftRowsTableFilterComposer
@@ -5762,6 +7314,11 @@ class $$ShiftRowsTableFilterComposer
 
   ColumnFilters<String> get title => $composableBuilder(
     column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get category => $composableBuilder(
+    column: $table.category,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5919,6 +7476,31 @@ class $$ShiftRowsTableFilterComposer
     );
     return f(composer);
   }
+
+  Expression<bool> paymentRowsRefs(
+    Expression<bool> Function($$PaymentRowsTableFilterComposer f) f,
+  ) {
+    final $$PaymentRowsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.paymentRows,
+      getReferencedColumn: (t) => t.shiftId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PaymentRowsTableFilterComposer(
+            $db: $db,
+            $table: $db.paymentRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$ShiftRowsTableOrderingComposer
@@ -5942,6 +7524,11 @@ class $$ShiftRowsTableOrderingComposer
 
   ColumnOrderings<String> get title => $composableBuilder(
     column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get category => $composableBuilder(
+    column: $table.category,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -6043,6 +7630,9 @@ class $$ShiftRowsTableAnnotationComposer
 
   GeneratedColumn<String> get title =>
       $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
 
   GeneratedColumn<String> get company =>
       $composableBuilder(column: $table.company, builder: (column) => column);
@@ -6184,6 +7774,31 @@ class $$ShiftRowsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> paymentRowsRefs<T extends Object>(
+    Expression<T> Function($$PaymentRowsTableAnnotationComposer a) f,
+  ) {
+    final $$PaymentRowsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.paymentRows,
+      getReferencedColumn: (t) => t.shiftId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PaymentRowsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.paymentRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$ShiftRowsTableTableManager
@@ -6203,6 +7818,7 @@ class $$ShiftRowsTableTableManager
             bool applicationRowsRefs,
             bool reviewRowsRefs,
             bool workerReviewRowsRefs,
+            bool paymentRowsRefs,
           })
         > {
   $$ShiftRowsTableTableManager(_$AppDatabase db, $ShiftRowsTable table)
@@ -6221,6 +7837,7 @@ class $$ShiftRowsTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<DateTime> workDate = const Value.absent(),
                 Value<String> title = const Value.absent(),
+                Value<String> category = const Value.absent(),
                 Value<String> company = const Value.absent(),
                 Value<String> address = const Value.absent(),
                 Value<String> city = const Value.absent(),
@@ -6241,6 +7858,7 @@ class $$ShiftRowsTableTableManager
                 id: id,
                 workDate: workDate,
                 title: title,
+                category: category,
                 company: company,
                 address: address,
                 city: city,
@@ -6263,6 +7881,7 @@ class $$ShiftRowsTableTableManager
                 Value<int> id = const Value.absent(),
                 required DateTime workDate,
                 required String title,
+                Value<String> category = const Value.absent(),
                 required String company,
                 required String address,
                 Value<String> city = const Value.absent(),
@@ -6283,6 +7902,7 @@ class $$ShiftRowsTableTableManager
                 id: id,
                 workDate: workDate,
                 title: title,
+                category: category,
                 company: company,
                 address: address,
                 city: city,
@@ -6313,6 +7933,7 @@ class $$ShiftRowsTableTableManager
                 applicationRowsRefs = false,
                 reviewRowsRefs = false,
                 workerReviewRowsRefs = false,
+                paymentRowsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -6320,6 +7941,7 @@ class $$ShiftRowsTableTableManager
                     if (applicationRowsRefs) db.applicationRows,
                     if (reviewRowsRefs) db.reviewRows,
                     if (workerReviewRowsRefs) db.workerReviewRows,
+                    if (paymentRowsRefs) db.paymentRows,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -6387,6 +8009,27 @@ class $$ShiftRowsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (paymentRowsRefs)
+                        await $_getPrefetchedData<
+                          ShiftRow,
+                          $ShiftRowsTable,
+                          PaymentRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ShiftRowsTableReferences
+                              ._paymentRowsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ShiftRowsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).paymentRowsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.shiftId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -6411,6 +8054,7 @@ typedef $$ShiftRowsTableProcessedTableManager =
         bool applicationRowsRefs,
         bool reviewRowsRefs,
         bool workerReviewRowsRefs,
+        bool paymentRowsRefs,
       })
     >;
 typedef $$ApplicationRowsTableCreateCompanionBuilder =
@@ -6761,6 +8405,8 @@ typedef $$UserRowsTableCreateCompanionBuilder = UserRowsCompanion Function({
   Value<String> role,
   Value<String?> company,
   required DateTime createdAt,
+  Value<int> termsVersion,
+  Value<DateTime?> termsAcceptedAt,
 });
 typedef $$UserRowsTableUpdateCompanionBuilder = UserRowsCompanion Function({
   Value<int> id,
@@ -6773,6 +8419,8 @@ typedef $$UserRowsTableUpdateCompanionBuilder = UserRowsCompanion Function({
   Value<String> role,
   Value<String?> company,
   Value<DateTime> createdAt,
+  Value<int> termsVersion,
+  Value<DateTime?> termsAcceptedAt,
 });
 
 class $$UserRowsTableFilterComposer
@@ -6831,6 +8479,16 @@ class $$UserRowsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get termsVersion => $composableBuilder(
+    column: $table.termsVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get termsAcceptedAt => $composableBuilder(
+    column: $table.termsAcceptedAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -6893,6 +8551,16 @@ class $$UserRowsTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get termsVersion => $composableBuilder(
+    column: $table.termsVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get termsAcceptedAt => $composableBuilder(
+    column: $table.termsAcceptedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$UserRowsTableAnnotationComposer
@@ -6935,6 +8603,16 @@ class $$UserRowsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get termsVersion => $composableBuilder(
+    column: $table.termsVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get termsAcceptedAt => $composableBuilder(
+    column: $table.termsAcceptedAt,
+    builder: (column) => column,
+  );
 }
 
 class $$UserRowsTableTableManager
@@ -6975,6 +8653,8 @@ class $$UserRowsTableTableManager
                 Value<String> role = const Value.absent(),
                 Value<String?> company = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int> termsVersion = const Value.absent(),
+                Value<DateTime?> termsAcceptedAt = const Value.absent(),
               }) => UserRowsCompanion(
                 id: id,
                 phone: phone,
@@ -6986,6 +8666,8 @@ class $$UserRowsTableTableManager
                 role: role,
                 company: company,
                 createdAt: createdAt,
+                termsVersion: termsVersion,
+                termsAcceptedAt: termsAcceptedAt,
               ),
           createCompanionCallback:
               ({
@@ -6999,6 +8681,8 @@ class $$UserRowsTableTableManager
                 Value<String> role = const Value.absent(),
                 Value<String?> company = const Value.absent(),
                 required DateTime createdAt,
+                Value<int> termsVersion = const Value.absent(),
+                Value<DateTime?> termsAcceptedAt = const Value.absent(),
               }) => UserRowsCompanion.insert(
                 id: id,
                 phone: phone,
@@ -7010,6 +8694,8 @@ class $$UserRowsTableTableManager
                 role: role,
                 company: company,
                 createdAt: createdAt,
+                termsVersion: termsVersion,
+                termsAcceptedAt: termsAcceptedAt,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -9432,6 +11118,841 @@ typedef $$NotificationRowsTableProcessedTableManager =
       NotificationRow,
       PrefetchHooks Function()
     >;
+typedef $$MrpRateRowsTableCreateCompanionBuilder =
+    MrpRateRowsCompanion Function({
+      Value<int> id,
+      required DateTime validFrom,
+      required int amount,
+      required DateTime createdAt,
+    });
+typedef $$MrpRateRowsTableUpdateCompanionBuilder =
+    MrpRateRowsCompanion Function({
+      Value<int> id,
+      Value<DateTime> validFrom,
+      Value<int> amount,
+      Value<DateTime> createdAt,
+    });
+
+class $$MrpRateRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $MrpRateRowsTable> {
+  $$MrpRateRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get validFrom => $composableBuilder(
+    column: $table.validFrom,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MrpRateRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $MrpRateRowsTable> {
+  $$MrpRateRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get validFrom => $composableBuilder(
+    column: $table.validFrom,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MrpRateRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MrpRateRowsTable> {
+  $$MrpRateRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get validFrom =>
+      $composableBuilder(column: $table.validFrom, builder: (column) => column);
+
+  GeneratedColumn<int> get amount =>
+      $composableBuilder(column: $table.amount, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$MrpRateRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $MrpRateRowsTable,
+          MrpRateRow,
+          $$MrpRateRowsTableFilterComposer,
+          $$MrpRateRowsTableOrderingComposer,
+          $$MrpRateRowsTableAnnotationComposer,
+          $$MrpRateRowsTableCreateCompanionBuilder,
+          $$MrpRateRowsTableUpdateCompanionBuilder,
+          (
+            MrpRateRow,
+            BaseReferences<_$AppDatabase, $MrpRateRowsTable, MrpRateRow>,
+          ),
+          MrpRateRow,
+          PrefetchHooks Function()
+        > {
+  $$MrpRateRowsTableTableManager(_$AppDatabase db, $MrpRateRowsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MrpRateRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MrpRateRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MrpRateRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<DateTime> validFrom = const Value.absent(),
+                Value<int> amount = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => MrpRateRowsCompanion(
+                id: id,
+                validFrom: validFrom,
+                amount: amount,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required DateTime validFrom,
+                required int amount,
+                required DateTime createdAt,
+              }) => MrpRateRowsCompanion.insert(
+                id: id,
+                validFrom: validFrom,
+                amount: amount,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$MrpRateRowsTable, MrpRateRow>(table),
+                  BaseReferences<_$AppDatabase, $MrpRateRowsTable, MrpRateRow>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MrpRateRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $MrpRateRowsTable,
+      MrpRateRow,
+      $$MrpRateRowsTableFilterComposer,
+      $$MrpRateRowsTableOrderingComposer,
+      $$MrpRateRowsTableAnnotationComposer,
+      $$MrpRateRowsTableCreateCompanionBuilder,
+      $$MrpRateRowsTableUpdateCompanionBuilder,
+      (
+        MrpRateRow,
+        BaseReferences<_$AppDatabase, $MrpRateRowsTable, MrpRateRow>,
+      ),
+      MrpRateRow,
+      PrefetchHooks Function()
+    >;
+typedef $$PaymentRowsTableCreateCompanionBuilder =
+    PaymentRowsCompanion Function({
+      Value<int> id,
+      required int shiftId,
+      required int payerId,
+      required int amount,
+      required int fee,
+      required String status,
+      required String cardLast4,
+      required String cardBrand,
+      required String operation,
+      required DateTime createdAt,
+    });
+typedef $$PaymentRowsTableUpdateCompanionBuilder =
+    PaymentRowsCompanion Function({
+      Value<int> id,
+      Value<int> shiftId,
+      Value<int> payerId,
+      Value<int> amount,
+      Value<int> fee,
+      Value<String> status,
+      Value<String> cardLast4,
+      Value<String> cardBrand,
+      Value<String> operation,
+      Value<DateTime> createdAt,
+    });
+
+final class $$PaymentRowsTableReferences
+    extends BaseReferences<_$AppDatabase, $PaymentRowsTable, PaymentRow> {
+  $$PaymentRowsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $ShiftRowsTable _shiftIdTable(_$AppDatabase db) =>
+      db.shiftRows.createAlias('payment_rows__shift_id__shift_rows__id');
+
+  $$ShiftRowsTableProcessedTableManager get shiftId {
+    final $_column = $_itemColumn<int>('shift_id')!;
+
+    final manager = $$ShiftRowsTableTableManager(
+      $_db,
+      $_db.shiftRows,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_shiftIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$PaymentRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $PaymentRowsTable> {
+  $$PaymentRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get payerId => $composableBuilder(
+    column: $table.payerId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get fee => $composableBuilder(
+    column: $table.fee,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cardLast4 => $composableBuilder(
+    column: $table.cardLast4,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cardBrand => $composableBuilder(
+    column: $table.cardBrand,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get operation => $composableBuilder(
+    column: $table.operation,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ShiftRowsTableFilterComposer get shiftId {
+    final $$ShiftRowsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftId,
+      referencedTable: $db.shiftRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ShiftRowsTableFilterComposer(
+            $db: $db,
+            $table: $db.shiftRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PaymentRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PaymentRowsTable> {
+  $$PaymentRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get payerId => $composableBuilder(
+    column: $table.payerId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get fee => $composableBuilder(
+    column: $table.fee,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get cardLast4 => $composableBuilder(
+    column: $table.cardLast4,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get cardBrand => $composableBuilder(
+    column: $table.cardBrand,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get operation => $composableBuilder(
+    column: $table.operation,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ShiftRowsTableOrderingComposer get shiftId {
+    final $$ShiftRowsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftId,
+      referencedTable: $db.shiftRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ShiftRowsTableOrderingComposer(
+            $db: $db,
+            $table: $db.shiftRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PaymentRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PaymentRowsTable> {
+  $$PaymentRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get payerId =>
+      $composableBuilder(column: $table.payerId, builder: (column) => column);
+
+  GeneratedColumn<int> get amount =>
+      $composableBuilder(column: $table.amount, builder: (column) => column);
+
+  GeneratedColumn<int> get fee =>
+      $composableBuilder(column: $table.fee, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get cardLast4 =>
+      $composableBuilder(column: $table.cardLast4, builder: (column) => column);
+
+  GeneratedColumn<String> get cardBrand =>
+      $composableBuilder(column: $table.cardBrand, builder: (column) => column);
+
+  GeneratedColumn<String> get operation =>
+      $composableBuilder(column: $table.operation, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$ShiftRowsTableAnnotationComposer get shiftId {
+    final $$ShiftRowsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftId,
+      referencedTable: $db.shiftRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ShiftRowsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.shiftRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PaymentRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PaymentRowsTable,
+          PaymentRow,
+          $$PaymentRowsTableFilterComposer,
+          $$PaymentRowsTableOrderingComposer,
+          $$PaymentRowsTableAnnotationComposer,
+          $$PaymentRowsTableCreateCompanionBuilder,
+          $$PaymentRowsTableUpdateCompanionBuilder,
+          (PaymentRow, $$PaymentRowsTableReferences),
+          PaymentRow,
+          PrefetchHooks Function({bool shiftId})
+        > {
+  $$PaymentRowsTableTableManager(_$AppDatabase db, $PaymentRowsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PaymentRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PaymentRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PaymentRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> shiftId = const Value.absent(),
+                Value<int> payerId = const Value.absent(),
+                Value<int> amount = const Value.absent(),
+                Value<int> fee = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String> cardLast4 = const Value.absent(),
+                Value<String> cardBrand = const Value.absent(),
+                Value<String> operation = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => PaymentRowsCompanion(
+                id: id,
+                shiftId: shiftId,
+                payerId: payerId,
+                amount: amount,
+                fee: fee,
+                status: status,
+                cardLast4: cardLast4,
+                cardBrand: cardBrand,
+                operation: operation,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int shiftId,
+                required int payerId,
+                required int amount,
+                required int fee,
+                required String status,
+                required String cardLast4,
+                required String cardBrand,
+                required String operation,
+                required DateTime createdAt,
+              }) => PaymentRowsCompanion.insert(
+                id: id,
+                shiftId: shiftId,
+                payerId: payerId,
+                amount: amount,
+                fee: fee,
+                status: status,
+                cardLast4: cardLast4,
+                cardBrand: cardBrand,
+                operation: operation,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$PaymentRowsTable, PaymentRow>(table),
+                  $$PaymentRowsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({shiftId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (shiftId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.shiftId,
+                        referencedTable: $$PaymentRowsTableReferences
+                            ._shiftIdTable(db),
+                        referencedColumn: $$PaymentRowsTableReferences
+                            ._shiftIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$PaymentRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PaymentRowsTable,
+      PaymentRow,
+      $$PaymentRowsTableFilterComposer,
+      $$PaymentRowsTableOrderingComposer,
+      $$PaymentRowsTableAnnotationComposer,
+      $$PaymentRowsTableCreateCompanionBuilder,
+      $$PaymentRowsTableUpdateCompanionBuilder,
+      (PaymentRow, $$PaymentRowsTableReferences),
+      PaymentRow,
+      PrefetchHooks Function({bool shiftId})
+    >;
+typedef $$WalletEntryRowsTableCreateCompanionBuilder =
+    WalletEntryRowsCompanion Function({
+      Value<int> id,
+      required int userId,
+      Value<int?> shiftId,
+      required String kind,
+      required int amount,
+      required String title,
+      required DateTime createdAt,
+    });
+typedef $$WalletEntryRowsTableUpdateCompanionBuilder =
+    WalletEntryRowsCompanion Function({
+      Value<int> id,
+      Value<int> userId,
+      Value<int?> shiftId,
+      Value<String> kind,
+      Value<int> amount,
+      Value<String> title,
+      Value<DateTime> createdAt,
+    });
+
+class $$WalletEntryRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $WalletEntryRowsTable> {
+  $$WalletEntryRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get shiftId => $composableBuilder(
+    column: $table.shiftId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$WalletEntryRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $WalletEntryRowsTable> {
+  $$WalletEntryRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get shiftId => $composableBuilder(
+    column: $table.shiftId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$WalletEntryRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $WalletEntryRowsTable> {
+  $$WalletEntryRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<int> get shiftId =>
+      $composableBuilder(column: $table.shiftId, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<int> get amount =>
+      $composableBuilder(column: $table.amount, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$WalletEntryRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $WalletEntryRowsTable,
+          WalletEntryRow,
+          $$WalletEntryRowsTableFilterComposer,
+          $$WalletEntryRowsTableOrderingComposer,
+          $$WalletEntryRowsTableAnnotationComposer,
+          $$WalletEntryRowsTableCreateCompanionBuilder,
+          $$WalletEntryRowsTableUpdateCompanionBuilder,
+          (
+            WalletEntryRow,
+            BaseReferences<
+              _$AppDatabase,
+              $WalletEntryRowsTable,
+              WalletEntryRow
+            >,
+          ),
+          WalletEntryRow,
+          PrefetchHooks Function()
+        > {
+  $$WalletEntryRowsTableTableManager(
+    _$AppDatabase db,
+    $WalletEntryRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WalletEntryRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WalletEntryRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$WalletEntryRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> userId = const Value.absent(),
+                Value<int?> shiftId = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<int> amount = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => WalletEntryRowsCompanion(
+                id: id,
+                userId: userId,
+                shiftId: shiftId,
+                kind: kind,
+                amount: amount,
+                title: title,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int userId,
+                Value<int?> shiftId = const Value.absent(),
+                required String kind,
+                required int amount,
+                required String title,
+                required DateTime createdAt,
+              }) => WalletEntryRowsCompanion.insert(
+                id: id,
+                userId: userId,
+                shiftId: shiftId,
+                kind: kind,
+                amount: amount,
+                title: title,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$WalletEntryRowsTable, WalletEntryRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $WalletEntryRowsTable,
+                    WalletEntryRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$WalletEntryRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $WalletEntryRowsTable,
+      WalletEntryRow,
+      $$WalletEntryRowsTableFilterComposer,
+      $$WalletEntryRowsTableOrderingComposer,
+      $$WalletEntryRowsTableAnnotationComposer,
+      $$WalletEntryRowsTableCreateCompanionBuilder,
+      $$WalletEntryRowsTableUpdateCompanionBuilder,
+      (
+        WalletEntryRow,
+        BaseReferences<_$AppDatabase, $WalletEntryRowsTable, WalletEntryRow>,
+      ),
+      WalletEntryRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -9460,4 +11981,10 @@ class $AppDatabaseManager {
       $$AuthTokenRowsTableTableManager(_db, _db.authTokenRows);
   $$NotificationRowsTableTableManager get notificationRows =>
       $$NotificationRowsTableTableManager(_db, _db.notificationRows);
+  $$MrpRateRowsTableTableManager get mrpRateRows =>
+      $$MrpRateRowsTableTableManager(_db, _db.mrpRateRows);
+  $$PaymentRowsTableTableManager get paymentRows =>
+      $$PaymentRowsTableTableManager(_db, _db.paymentRows);
+  $$WalletEntryRowsTableTableManager get walletEntryRows =>
+      $$WalletEntryRowsTableTableManager(_db, _db.walletEntryRows);
 }

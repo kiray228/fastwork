@@ -8,6 +8,12 @@ import 'package:fastwork_core/data/database.dart';
 import 'package:fastwork_core/data/current_user.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/data/support_repository.dart';
+import 'package:fastwork_core/category.dart';
+import 'package:fastwork_core/errors.dart';
+import 'package:fastwork_core/data/mrp_store.dart';
+import 'package:fastwork_core/mrp.dart';
+import 'package:fastwork_core/payment.dart';
+import 'package:fastwork_core/data/wallet_repository.dart';
 import 'package:fastwork_core/support.dart';
 import 'package:fastwork_core/notification.dart';
 import 'package:fastwork_core/review.dart';
@@ -31,7 +37,20 @@ class Api {
   final AppDatabase db;
   final AuthService auth;
 
-  Api(this.db, CodeSender sender) : auth = AuthService(db, sender);
+  /// Ключ для служебных адресов — например, чтобы записать новый МРП.
+  /// Пустой — служебные адреса выключены совсем.
+  final String adminKey;
+
+  /// Через кого идут деньги — один шлюз на весь сервер.
+  final PaymentGateway payments;
+
+  Api(
+    this.db,
+    CodeSender sender, {
+    this.adminKey = '',
+    PaymentGateway? payments,
+  })  : auth = AuthService(db, sender),
+        payments = payments ?? SandboxPaymentGateway();
 
   /// Найти пользователя по почте — нужно после ввода кода.
   Future<AppUser?> _userByEmail(String email) async {
@@ -85,7 +104,17 @@ class Api {
   /// обслуживает много людей одновременно, и одна общая сессия перепутала
   /// бы их между собой.
   DbShiftRepository _shiftsFor(AppUser user) =>
-      DbShiftRepository(db, StaticUser(user));
+      DbShiftRepository(db, StaticUser(user), payments: payments);
+
+  /// Карта из тела запроса. null — не прислали.
+  static PaymentCard? _card(Map<String, dynamic> body) {
+    final raw = body['card'];
+    return raw is Map<String, dynamic> ? PaymentCard.fromJson(raw) : null;
+  }
+
+  /// Отказ по деньгам — 402 «нужна оплата». Код редкий, но ровно про это:
+  /// запрос правильный, не хватило платежа.
+  Response _declined(PaymentDeclined e) => _error(e.message, status: 402);
 
   /// Обёртка для адресов, куда пускают только по токену.
   Future<Response> _authorized(
@@ -223,14 +252,22 @@ class Api {
         return _error('Этот номер уже зарегистрирован');
       }
 
-      final user = await repository.register(
-        phone: phone,
-        email: info.email,
-        fullName: fullName,
-        city: body['city'] as String? ?? 'Алматы',
-        role: body['role'] as String? ?? UserRole.worker,
-        company: body['company'] as String?,
-      );
+      final AppUser user;
+      try {
+        user = await repository.register(
+          phone: phone,
+          email: info.email,
+          fullName: fullName,
+          city: body['city'] as String? ?? 'Алматы',
+          role: body['role'] as String? ?? UserRole.worker,
+          company: body['company'] as String?,
+          // Старое приложение этого поля не шлёт — значит, правил человек
+          // не видел, и аккаунт без них не создаём.
+          acceptedTermsVersion: body['acceptedTermsVersion'] as int? ?? 0,
+        );
+      } on UserError catch (e) {
+        return _error(e.message);
+      }
 
       // Теперь токен принадлежит созданному аккаунту.
       await auth.bind(token, user.id);
@@ -247,6 +284,58 @@ class Api {
 
     router.get('/api/me', (Request request) async {
       return _authorized(request, (user) async => _json(user.toJson()));
+    });
+
+    router.post('/api/me/accept-terms', (Request request) async {
+      return _authorized(request, (user) async {
+        final updated = await DbAuthRepository(db).acceptTerms(user.id);
+        return _json(updated!.toJson());
+      });
+    });
+
+    router.get('/api/me/limit', (Request request) async {
+      return _authorized(request, (user) async {
+        final raw = request.url.queryParameters['month'];
+        final month = raw == null ? DateTime.now() : DateTime.parse(raw);
+        final limit = await _shiftsFor(user).earningsLimit(month);
+        return _json(limit.toJson());
+      });
+    });
+
+    // --- МРП ---------------------------------------------------------------
+    //
+    // Посмотреть может кто угодно: это не секрет, а цифра из закона.
+    router.get('/api/mrp', (Request request) async {
+      final rates = await MrpStore(db).rates();
+      return _json({
+        'current': mrpOn(DateTime.now(), rates),
+        'limitMrp': kEarningsLimitMrp,
+        'monthlyLimit': monthlyEarningsLimit(DateTime.now(), rates),
+        'rates': rates.map((r) => r.toJson()).toList(),
+      });
+    });
+
+    // А записать новое значение — только по служебному ключу.
+    //
+    // Отдельной роли «администратор» в приложении нет, и заводить её ради
+    // одной цифры в год незачем. Ключ задаётся переменной окружения
+    // ADMIN_KEY на хостинге и в код не попадает.
+    //
+    //   curl -X POST https://…/api/admin/mrp \
+    //     -H 'X-Admin-Key: …' \
+    //     -d '{"validFrom": "2027-01-01", "tenge": 4700}'
+    router.post('/api/admin/mrp', (Request request) async {
+      if (adminKey.isEmpty || request.headers['x-admin-key'] != adminKey) {
+        return _error('Нет доступа', status: 403);
+      }
+      final body = await _body(request);
+      final validFrom = DateTime.tryParse(body['validFrom'] as String? ?? '');
+      final tenge = body['tenge'] as int? ?? 0;
+      if (validFrom == null) return _error('Укажите дату validFrom');
+      if (tenge <= 0) return _error('Укажите МРП в тенге');
+
+      await MrpStore(db).setRate(validFrom, tenge * 100);
+      return _json({'ok': true});
     });
 
     router.post('/api/me/city', (Request request) async {
@@ -283,6 +372,13 @@ class Api {
       return _authorized(
         request,
         (user) async => _json(await _shiftsFor(user).companies()),
+      );
+    });
+
+    router.get('/api/categories', (Request request) async {
+      return _authorized(
+        request,
+        (user) async => _json(await _shiftsFor(user).categories()),
       );
     });
 
@@ -425,21 +521,40 @@ class Api {
         }
 
         final body = await _body(request);
-        final id = await _shiftsFor(user).createShift(
-          workDate: DateTime.parse(body['workDate'] as String),
-          title: body['title'] as String,
-          company: body['company'] as String,
-          address: body['address'] as String,
-          startMinutes: body['startMinutes'] as int,
-          endMinutes: body['endMinutes'] as int,
-          hourlyRate: body['hourlyRate'] as int,
-          workersNeeded: body['workersNeeded'] as int,
-          createdBy: user.id,
-          city: body['city'] as String? ?? user.city,
-          duties: (body['duties'] as List<dynamic>? ?? []).cast<String>(),
-          dressCode: body['dressCode'] as String?,
-          minRating: (body['minRating'] as num?)?.toDouble(),
-        );
+        final category = body['category'] as String? ?? kOtherCategory;
+        // Ключ категории приходит снаружи — проверяем, что такой есть.
+        // Иначе в базе завелись бы категории, которых нет ни в одном
+        // фильтре, и смены с ними никто бы не нашёл.
+        if (!isKnownCategory(category)) {
+          return _error('Неизвестная категория работ');
+        }
+        // Смена без оплаты не публикуется — в этом вся гарантия.
+        final card = _card(body);
+        if (card == null) {
+          return _error('Оплатите смену картой', status: 402);
+        }
+        final int id;
+        try {
+          id = await _shiftsFor(user).createShift(
+            card: card,
+            workDate: DateTime.parse(body['workDate'] as String),
+            title: body['title'] as String,
+            company: body['company'] as String,
+            address: body['address'] as String,
+            startMinutes: body['startMinutes'] as int,
+            endMinutes: body['endMinutes'] as int,
+            hourlyRate: body['hourlyRate'] as int,
+            workersNeeded: body['workersNeeded'] as int,
+            createdBy: user.id,
+            city: body['city'] as String? ?? user.city,
+            category: category,
+            duties: (body['duties'] as List<dynamic>? ?? []).cast<String>(),
+            dressCode: body['dressCode'] as String?,
+            minRating: (body['minRating'] as num?)?.toDouble(),
+          );
+        } on PaymentDeclined catch (e) {
+          return _declined(e);
+        }
         return _json({'id': id});
       });
     });
@@ -454,18 +569,30 @@ class Api {
         }
 
         final body = await _body(request);
-        final result = await _shiftsFor(user).updateShift(
-          shiftId: int.parse(id),
-          workDate: DateTime.parse(body['workDate'] as String),
-          title: body['title'] as String,
-          address: body['address'] as String,
-          startMinutes: body['startMinutes'] as int,
-          endMinutes: body['endMinutes'] as int,
-          hourlyRate: body['hourlyRate'] as int,
-          workersNeeded: body['workersNeeded'] as int,
-          duties: (body['duties'] as List<dynamic>? ?? []).cast<String>(),
-          dressCode: body['dressCode'] as String?,
-        );
+        // Старое приложение категорию не присылает — тогда её не трогаем.
+        final category = body['category'] as String?;
+        if (category != null && !isKnownCategory(category)) {
+          return _error('Неизвестная категория работ');
+        }
+        final BookingResult result;
+        try {
+          result = await _shiftsFor(user).updateShift(
+            card: _card(body),
+            shiftId: int.parse(id),
+            workDate: DateTime.parse(body['workDate'] as String),
+            title: body['title'] as String,
+            address: body['address'] as String,
+            startMinutes: body['startMinutes'] as int,
+            endMinutes: body['endMinutes'] as int,
+            hourlyRate: body['hourlyRate'] as int,
+            workersNeeded: body['workersNeeded'] as int,
+            category: category,
+            duties: (body['duties'] as List<dynamic>? ?? []).cast<String>(),
+            dressCode: body['dressCode'] as String?,
+          );
+        } on PaymentDeclined catch (e) {
+          return _declined(e);
+        }
         return _json({'result': result.name});
       });
     });
@@ -540,6 +667,34 @@ class Api {
           rating: rating,
           comment: body['comment'] as String?,
         );
+        return _json({'ok': true});
+      });
+    });
+
+    // --- кошелёк -----------------------------------------------------------
+
+    router.get('/api/wallet', (Request request) async {
+      return _authorized(request, (user) async {
+        final summary = await DbWalletRepository(
+          db,
+          StaticUser(user),
+          payments: payments,
+        ).summary();
+        return _json(summary.toJson());
+      });
+    });
+
+    router.post('/api/wallet/withdraw', (Request request) async {
+      return _authorized(request, (user) async {
+        final body = await _body(request);
+        final card = _card(body);
+        if (card == null) return _error('Укажите карту');
+        try {
+          await DbWalletRepository(db, StaticUser(user), payments: payments)
+              .withdraw(amount: body['amount'] as int? ?? 0, card: card);
+        } on PaymentDeclined catch (e) {
+          return _declined(e);
+        }
         return _json({'ok': true});
       });
     });

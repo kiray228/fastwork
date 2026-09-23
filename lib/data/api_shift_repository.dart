@@ -1,4 +1,7 @@
+import 'package:fastwork_core/category.dart';
+import 'package:fastwork_core/mrp.dart';
 import 'package:fastwork_core/notification.dart';
+import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_core/review.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
@@ -65,6 +68,10 @@ class ApiShiftRepository implements ShiftRepository {
       (await client.get('/api/companies') as List<dynamic>).cast<String>();
 
   @override
+  Future<List<String>> categories() async =>
+      (await client.get('/api/categories') as List<dynamic>).cast<String>();
+
+  @override
   Future<Shift?> shiftById(int id) async {
     try {
       final data = await client.get('/api/shifts/$id');
@@ -110,12 +117,16 @@ class ApiShiftRepository implements ShiftRepository {
     required int endMinutes,
     required int hourlyRate,
     required int workersNeeded,
+    String? category,
     List<String> duties = const [],
     String? dressCode,
+    PaymentCard? card,
   }) async =>
       _result(await client.post('/api/shifts/$shiftId', {
+        'card': card?.toJson(),
         'workDate': workDate.toIso8601String(),
         'title': title,
+        'category': category,
         'address': address,
         'startMinutes': startMinutes,
         'endMinutes': endMinutes,
@@ -141,6 +152,12 @@ class ApiShiftRepository implements ShiftRepository {
   @override
   Future<List<Shift>> completedShifts() async =>
       _shifts(await client.get('/api/my-shifts/completed'));
+
+  @override
+  Future<EarningsLimit> earningsLimit(DateTime month) async =>
+      EarningsLimit.fromJson(await client.get('/api/me/limit', {
+        'month': _day(monthOf(month)),
+      }) as Map<String, dynamic>);
 
   @override
   Future<CompanyInfo> companyInfo(String company) async {
@@ -181,13 +198,18 @@ class ApiShiftRepository implements ShiftRepository {
     required int workersNeeded,
     required int createdBy,
     required String city,
+    required PaymentCard card,
+    String category = kOtherCategory,
     List<String> duties = const [],
     String? dressCode,
     double? minRating,
   }) async {
     final data = await client.post('/api/shifts', {
+      // Токен карты, а не её номер: номер остался у провайдера.
+      'card': card.toJson(),
       'workDate': workDate.toIso8601String(),
       'title': title,
+      'category': category,
       'company': company,
       'address': address,
       'city': city,

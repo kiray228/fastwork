@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth/register_page.dart';
+import 'auth/terms_page.dart';
 import 'data/api_auth_repository.dart';
 import 'data/api_client.dart';
 import 'data/api_shift_repository.dart';
+import 'data/api_wallet_repository.dart';
 import 'package:fastwork_core/data/auth_repository.dart';
 import 'package:fastwork_core/data/database.dart';
 import 'data/database_flutter.dart';
@@ -13,8 +15,11 @@ import 'data/repositories.dart';
 import 'data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/data/support_repository.dart';
+import 'package:fastwork_core/data/wallet_repository.dart';
+import 'package:fastwork_core/payment.dart';
 import 'home_shell.dart';
 import 'theme/app_theme.dart';
+import 'theme/glass.dart';
 
 /// Адрес сервера. Пусто — работаем на своей базе, без сети.
 ///
@@ -31,7 +36,7 @@ Future<void> main() async {
 
   final session = AppSession();
   final repos = apiUrl.isEmpty
-      ? await _localRepositories()
+      ? await _localRepositories(session)
       : await _serverRepositories(apiUrl);
 
   // Кто входил в прошлый раз — если кто-то входил, сразу пускаем внутрь.
@@ -41,17 +46,24 @@ Future<void> main() async {
 }
 
 /// Всё хранится на самом устройстве.
-Future<AppRepositories> _localRepositories() async {
-  final session = AppSession();
+///
+/// Сессию берём ту же, что получит приложение. Раньше здесь заводилась
+/// своя, отдельная, — и хранилище так и не узнавало, кто вошёл: город
+/// у него был пустой, и лента без сервера всегда оставалась пустой.
+Future<AppRepositories> _localRepositories(AppSession session) async {
   try {
     final database = AppDatabase(openAppDatabase());
-    final dbShifts = DbShiftRepository(database, session);
+    // Один шлюз на оба хранилища — как один провайдер у настоящего
+    // сервиса. Без сервера он может быть только тестовым.
+    final payments = SandboxPaymentGateway();
+    final dbShifts = DbShiftRepository(database, session, payments: payments);
     await dbShifts.seedIfEmpty();
     return AppRepositories(
       shifts: dbShifts,
       auth: DbAuthRepository(database),
       documents: DbDocumentRepository(database, session),
       support: DbSupportRepository(database, session),
+      wallet: DbWalletRepository(database, session, payments: payments),
     );
   } catch (error, stack) {
     // Если база не открылась (например, браузер запретил хранилище) —
@@ -59,11 +71,13 @@ Future<AppRepositories> _localRepositories() async {
     // в памяти: пользователь всё увидит, просто ничего не сохранится.
     debugPrint('Не удалось открыть базу данных: $error');
     debugPrint('$stack');
+    final shifts = FakeShiftRepository();
     return AppRepositories(
-      shifts: FakeShiftRepository(),
+      shifts: shifts,
       auth: FakeAuthRepository(),
       documents: FakeDocumentRepository(),
       support: FakeSupportRepository(),
+      wallet: FakeWalletRepository(shifts),
     );
   }
 }
@@ -91,6 +105,7 @@ Future<AppRepositories> _serverRepositories(String url) async {
     ),
     documents: ApiDocumentRepository(client),
     support: ApiSupportRepository(client),
+    wallet: ApiWalletRepository(client),
   );
 }
 
@@ -114,8 +129,9 @@ class FastworkApp extends StatelessWidget {
       themeMode: ThemeMode.system,
       // Ограничиваем ширину, чтобы на компьютере приложение выглядело как
       // телефон, а не растягивалось на весь монитор.
-      builder: (context, child) => ColoredBox(
-        color: Theme.of(context).scaffoldBackgroundColor,
+      // Фон на всю ширину окна — на компьютере по бокам от «телефона»
+      // тоже живой фон, а не серые поля.
+      builder: (context, child) => LiquidBackground(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 440),
@@ -123,7 +139,9 @@ class FastworkApp extends StatelessWidget {
           ),
         ),
       ),
-      home: _AuthGate(session: session, repos: repos),
+      home: LiquidBackground(
+        child: _AuthGate(session: session, repos: repos),
+      ),
     );
   }
 }
@@ -143,9 +161,17 @@ class _AuthGate extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: session,
-      builder: (context, _) => session.isSignedIn
-          ? HomeShell(session: session, repos: repos)
-          : RegisterPage(session: session, auth: repos.auth),
+      builder: (context, _) {
+        final user = session.user;
+        if (user == null) {
+          return RegisterPage(session: session, auth: repos.auth);
+        }
+        // Вошёл, но действующие правила не принимал — сначала они.
+        if (!user.hasAcceptedTerms) {
+          return TermsGatePage(session: session, auth: repos.auth);
+        }
+        return HomeShell(session: session, repos: repos);
+      },
     );
   }
 }

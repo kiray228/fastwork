@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'auth/terms_page.dart';
 import 'data/repositories.dart';
 import 'data/session.dart';
 import 'documents_page.dart';
 import 'my_reviews_page.dart';
 import 'support_ui/support_page.dart';
 import 'theme/app_colors.dart';
+import 'theme/glass.dart';
 import 'package:fastwork_core/user.dart';
 import 'wallet_page.dart';
 import 'widgets/common.dart';
@@ -29,10 +31,7 @@ class ProfilePage extends StatelessWidget {
     final picked = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => Material(
-        color: Theme.of(sheetContext).colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
-        clipBehavior: Clip.antiAlias,
+      builder: (sheetContext) => GlassSheet(
         child: SafeArea(
           top: false,
           child: Column(
@@ -129,15 +128,18 @@ class ProfilePage extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Column(
               children: [
-                if (!user.isManager)
-                  _MenuRow(
-                    icon: Icons.payments_outlined,
-                    title: 'Выплаты',
-                    trailing: 'Вознаграждение',
-                    onTap: () => Navigator.of(context).push(
-                      appRoute(WalletPage(repository: repos.shifts)),
-                    ),
+                _MenuRow(
+                  icon: Icons.payments_outlined,
+                  title: user.isManager ? 'Платежи' : 'Выплаты',
+                  trailing: user.isManager ? 'Оплата смен' : 'Вознаграждение',
+                  onTap: () => Navigator.of(context).push(
+                    appRoute(WalletPage(
+                      repository: repos.shifts,
+                      wallet: repos.wallet,
+                      isManager: user.isManager,
+                    )),
                   ),
+                ),
                 if (!user.isManager)
                   _MenuRow(
                     icon: Icons.badge_outlined,
@@ -173,6 +175,13 @@ class ProfilePage extends StatelessWidget {
                   title: 'Город',
                   trailing: user.city,
                   onTap: () => _changeCity(context),
+                ),
+                _MenuRow(
+                  icon: Icons.gavel_rounded,
+                  title: 'Правила сервиса',
+                  onTap: () => Navigator.of(context).push(
+                    appRoute(const TermsPage()),
+                  ),
                 ),
                 _MenuRow(
                   icon: Icons.chat_bubble_outline_rounded,

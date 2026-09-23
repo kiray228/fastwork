@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
+import '../theme/glass.dart';
 
 /// Результат окна оценки.
 class ReviewInput {
@@ -87,12 +88,8 @@ class _ReviewSheetState extends State<_ReviewSheet> {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
-      clipBehavior: Clip.antiAlias,
+    return GlassSheet(
       child: Padding(
         // Поднимаем окно над клавиатурой, когда она открыта.
         padding: EdgeInsets.only(
@@ -168,19 +165,17 @@ class _ReviewSheetState extends State<_ReviewSheet> {
                     decoration: InputDecoration(
                       hintText: widget.hint,
                       filled: true,
-                      fillColor: isDark ? AppColors.darkBg : AppColors.bg,
+                      fillColor: glassFieldFill(context),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
                         borderSide: BorderSide(
-                          color:
-                              isDark ? AppColors.darkBorder : AppColors.border,
+                          color: glassFieldEdge(context),
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
                         borderSide: BorderSide(
-                          color:
-                              isDark ? AppColors.darkBorder : AppColors.border,
+                          color: glassFieldEdge(context),
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(

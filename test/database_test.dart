@@ -6,8 +6,13 @@ import 'package:fastwork/data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/notification.dart';
 import 'package:fastwork_core/shift.dart';
+import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_core/user.dart';
+import 'package:fastwork_core/payment.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// Тестовая карта: проходит всегда.
+final testCard = tokenizeSandboxCard(kSandboxCardNumber);
 
 /// Тесты против **настоящей** SQLite, только в памяти.
 ///
@@ -47,6 +52,7 @@ void main() {
       phone: '7700000000${daysBack}1',
       fullName: 'Айгуль Досова',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
       role: UserRole.manager,
       company: 'Magnum',
     );
@@ -54,6 +60,7 @@ void main() {
       phone: '7700000000${daysBack}2',
       fullName: 'Ернар Калдыбеков',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
     );
 
     final shiftId = await shifts.createShift(
@@ -67,6 +74,7 @@ void main() {
       workersNeeded: 2,
       createdBy: manager.id,
       city: 'Алматы',
+      card: testCard,
     );
 
     // Записывается исполнитель — значит, в сессии должен быть он.
@@ -91,6 +99,7 @@ void main() {
       phone: '7701000000$seq',
       fullName: 'Айгуль Досова',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
       role: UserRole.manager,
       company: 'Magnum',
     );
@@ -98,6 +107,7 @@ void main() {
       phone: '7702000000$seq',
       fullName: 'Азамат Серик',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
     );
 
     session.setUser(manager);
@@ -112,6 +122,7 @@ void main() {
       workersNeeded: 2,
       createdBy: manager.id,
       city: 'Алматы',
+      card: testCard,
     );
 
     session.setUser(worker);
@@ -196,6 +207,7 @@ void main() {
       workersNeeded: 1,
       createdBy: managerId,
       city: 'Алматы',
+      card: testCard,
     );
 
     session.setUser(await auth.refresh(workerId));
@@ -267,6 +279,7 @@ void main() {
       phone: '77000000501',
       fullName: 'Айгуль Досова',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
       role: UserRole.manager,
       company: 'Magnum',
     );
@@ -274,6 +287,7 @@ void main() {
       phone: '77000000502',
       fullName: 'Ернар Калдыбеков',
       city: 'Астана',
+      acceptedTermsVersion: kTermsVersion,
     );
 
     final today = daysAgo(0);
@@ -292,6 +306,7 @@ void main() {
         workersNeeded: 1,
         createdBy: manager.id,
         city: city,
+        card: testCard,
       );
     }
 
@@ -314,6 +329,7 @@ void main() {
       phone: '77000000601',
       fullName: 'Айгуль Досова',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
       role: UserRole.manager,
       company: 'Magnum',
     );
@@ -321,6 +337,7 @@ void main() {
       phone: '77000000602',
       fullName: 'Ернар Калдыбеков',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
     );
 
     // Смена идёт прямо сейчас — иначе отметка была бы закрыта по времени.
@@ -336,6 +353,7 @@ void main() {
       workersNeeded: 1,
       createdBy: manager.id,
       city: 'Алматы',
+      card: testCard,
     );
 
     session.setUser(worker);
@@ -449,6 +467,7 @@ void main() {
       phone: '77039990001',
       fullName: 'Данияр Ким',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
     );
     session.setUser(other);
     expect(await shifts.apply(shiftId), BookingResult.alreadyCancelled);
@@ -501,6 +520,7 @@ void main() {
       workersNeeded: 1,
       createdBy: manager.id,
       city: 'Алматы',
+      card: testCard,
     );
     session.setUser(worker);
     await shifts.apply(secondShift);
@@ -538,6 +558,7 @@ void main() {
       phone: '77045550001',
       fullName: 'Чужой Заказчик',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
       role: UserRole.manager,
       company: 'Small',
     );
@@ -557,6 +578,7 @@ void main() {
       phone: '77045550002',
       fullName: 'Чужой Заказчик',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
       role: UserRole.manager,
       company: 'Small',
     );
@@ -609,6 +631,8 @@ void main() {
         endMinutes: base.endMinutes,
         hourlyRate: hourlyRate ?? base.hourlyRate,
         workersNeeded: workersNeeded ?? base.workersNeeded,
+        // Правка может удорожить смену — тогда доплата с этой карты.
+        card: testCard,
       );
 
   test('заказчик правит свою смену', () async {

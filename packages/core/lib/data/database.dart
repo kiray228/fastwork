@@ -1,5 +1,7 @@
 import 'package:drift/drift.dart';
 
+import '../category.dart';
+
 part 'database.g.dart';
 
 // ---------------------------------------------------------------------------
@@ -15,6 +17,11 @@ class ShiftRows extends Table {
   IntColumn get id => integer().autoIncrement()(); // первичный ключ
   DateTimeColumn get workDate => dateTime()();
   TextColumn get title => text()();
+
+  /// Категория работ — ключ из `kShiftCategories`. Добавлена в
+  /// одиннадцатой версии; у смен, созданных раньше, будет «Другое».
+  TextColumn get category =>
+      text().withDefault(const Constant(kOtherCategory))();
   TextColumn get company => text()();
   TextColumn get address => text()();
 
@@ -82,6 +89,35 @@ class UserRows extends Table {
 
   /// Название компании для менеджера. У исполнителя пусто.
   TextColumn get company => text().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  /// Какую версию правил человек принял. 0 — никакую: так у аккаунтов,
+  /// заведённых до появления правил. Добавлена в двенадцатой версии.
+  IntColumn get termsVersion => integer().withDefault(const Constant(0))();
+
+  /// Когда принял. Хранить момент, а не галочку, — то же правило, что и
+  /// с отметкой о выходе: из времени галочку получить можно, наоборот нет.
+  /// А при споре «я ни с чем не соглашался» время — единственный довод.
+  DateTimeColumn get termsAcceptedAt => dateTime().nullable()();
+}
+
+/// Значения МРП.
+///
+/// Отдельная таблица, а не константа в коде, потому что МРП меняется
+/// каждый год, а выпускать ради этого новую версию приложения — глупо.
+/// Приняли бюджет — добавили строку, и лимит на сервере пересчитался сам.
+///
+/// В коде тоже есть список (`kMrpHistory`) — запасной, на случай работы
+/// без сервера. Строка из таблицы важнее строки из кода с той же датой.
+class MrpRateRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+
+  /// С какого дня действует.
+  DateTimeColumn get validFrom => dateTime().unique()();
+
+  /// Один МРП в тиынах.
+  IntColumn get amount => integer()();
 
   DateTimeColumn get createdAt => dateTime()();
 }
@@ -249,6 +285,80 @@ class AuthTokenRows extends Table {
   Set<Column> get primaryKey => {token};
 }
 
+/// Оплата смены заказчиком — деньги, которые сервис держит.
+///
+/// Одна строка на смену. В ней то, о чём договорились: сколько удержано
+/// на вознаграждение, сколько — комиссия, какой картой и под каким
+/// номером операции у провайдера (без номера не сделать возврат).
+///
+/// Как деньги потом двигались — начислены исполнителю, возвращены
+/// заказчику — здесь не хранится. Это история, и она живёт в таблице
+/// движений ниже.
+class PaymentRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+
+  /// Смена. Одна оплата на смену — доплаты и возвраты при правке
+  /// пишутся движениями, а эта строка лишь обновляет итоговые суммы.
+  IntColumn get shiftId => integer().references(ShiftRows, #id).unique()();
+
+  /// Кто платил. 0 — учебные смены, их «оплатил» сам сервис.
+  IntColumn get payerId => integer()();
+
+  /// Удержано на вознаграждение всем местам, в тиынах.
+  IntColumn get amount => integer()();
+
+  /// Комиссия сервиса, в тиынах.
+  IntColumn get fee => integer()();
+
+  /// `held` — деньги у сервиса, `refunded` — остаток вернули заказчику.
+  TextColumn get status => text()();
+
+  TextColumn get cardLast4 => text()();
+  TextColumn get cardBrand => text()();
+
+  /// Номер операции у провайдера. По нему делают возврат.
+  TextColumn get operation => text()();
+
+  DateTimeColumn get createdAt => dateTime()();
+}
+
+/// Состояния оплаты.
+class PaymentStatus {
+  PaymentStatus._();
+
+  static const held = 'held';
+  static const refunded = 'refunded';
+}
+
+/// Движения денег — история кошелька.
+///
+/// Каждая строка — один факт: «начислено 12 100 ₸ за смену», «выведено
+/// 20 000 ₸ на карту», «возвращено заказчику 6 292 ₸». Строки только
+/// добавляются, никогда не правятся и не удаляются — так устроен любой
+/// бухгалтерский журнал. Ошибку исправляют не стиранием, а новой строкой
+/// с обратным знаком, и история всегда объясняет итог.
+///
+/// Баланс нигде не записан — он считается суммой по этой таблице.
+class WalletEntryRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer()();
+
+  /// Смена, к которой относится движение. У вывода на карту её нет.
+  IntColumn get shiftId => integer().nullable()();
+
+  /// Вид: earning, withdrawal, charge, refund — см. `WalletEntryKind`.
+  TextColumn get kind => text()();
+
+  /// Сумма со знаком, в тиынах.
+  IntColumn get amount => integer()();
+
+  /// Готовая подпись для истории — как у уведомлений: верна на момент
+  /// события, даже если смену потом переименуют.
+  TextColumn get title => text()();
+
+  DateTimeColumn get createdAt => dateTime()();
+}
+
 /// Мелкие настройки приложения: ключ — значение.
 /// Здесь храним, кто сейчас вошёл, чтобы не спрашивать при каждом запуске.
 class AppSettings extends Table {
@@ -371,6 +481,9 @@ class NotificationRows extends Table {
     AuthCodeRows,
     AuthTokenRows,
     NotificationRows,
+    MrpRateRows,
+    PaymentRows,
+    WalletEntryRows,
   ],
 )
 /// Описание базы: какие таблицы и какой версии схема.
@@ -479,7 +592,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -528,6 +641,18 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 10) {
             await addColumnIfMissing(m, shiftRows, shiftRows.cancelledAt);
+          }
+          if (from < 11) {
+            await addColumnIfMissing(m, shiftRows, shiftRows.category);
+          }
+          if (from < 12) {
+            await addColumnIfMissing(m, userRows, userRows.termsVersion);
+            await addColumnIfMissing(m, userRows, userRows.termsAcceptedAt);
+            await m.createTable(mrpRateRows);
+          }
+          if (from < 13) {
+            await m.createTable(paymentRows);
+            await m.createTable(walletEntryRows);
           }
         },
         beforeOpen: (details) async {

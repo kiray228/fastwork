@@ -9,6 +9,7 @@ import 'my_shifts_page.dart';
 import 'profile_page.dart';
 import 'shifts_page.dart';
 import 'theme/app_colors.dart';
+import 'theme/glass.dart';
 
 /// Каркас приложения: нижнее меню и разделы.
 ///
@@ -57,7 +58,6 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isManager = widget.session.user?.isManager ?? false;
 
     // Создаём экран заново при каждом переключении вкладки —
@@ -102,84 +102,83 @@ class _HomeShellState extends State<HomeShell> {
         duration: const Duration(milliseconds: 220),
         child: KeyedSubtree(key: ValueKey(index), child: page),
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          border: Border(
-            top: BorderSide(
-              color: isDark ? AppColors.darkBorder : AppColors.border,
-            ),
+      // Меню не прибито к краю, а парит над фоном стеклянной капсулой.
+      // Под ним видно фон — и ясно, что это слой поверх, а не часть экрана.
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+        child: Glass(
+          elevated: true,
+          borderRadius: BorderRadius.circular(34),
+          child: NavigationBar(
+            selectedIndex: index,
+            height: 66,
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            indicatorColor: AppColors.brand.withValues(alpha: 0.12),
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            onDestinationSelected: _openTab,
+            destinations: isManager
+                ? const [
+                    NavigationDestination(
+                      icon: Icon(Icons.event_note_outlined),
+                      selectedIcon: Icon(
+                        Icons.event_note_rounded,
+                        color: AppColors.brand,
+                      ),
+                      label: 'Мои смены',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.add_circle_outline_rounded),
+                      selectedIcon: Icon(
+                        Icons.add_circle_rounded,
+                        color: AppColors.brand,
+                      ),
+                      label: 'Создать',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.star_outline_rounded),
+                      selectedIcon: Icon(
+                        Icons.star_rounded,
+                        color: AppColors.brand,
+                      ),
+                      label: 'Оценки',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.person_outline_rounded),
+                      selectedIcon: Icon(
+                        Icons.person_rounded,
+                        color: AppColors.brand,
+                      ),
+                      label: 'Профиль',
+                    ),
+                  ]
+                : const [
+                    NavigationDestination(
+                      icon: Icon(Icons.local_fire_department_outlined),
+                      selectedIcon: Icon(
+                        Icons.local_fire_department_rounded,
+                        color: AppColors.brand,
+                      ),
+                      label: 'Смены',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.work_history_outlined),
+                      selectedIcon: Icon(
+                        Icons.work_history_rounded,
+                        color: AppColors.brand,
+                      ),
+                      label: 'Мои',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.person_outline_rounded),
+                      selectedIcon: Icon(
+                        Icons.person_rounded,
+                        color: AppColors.brand,
+                      ),
+                      label: 'Профиль',
+                    ),
+                  ],
           ),
-        ),
-        child: NavigationBar(
-          selectedIndex: index,
-          height: 64,
-          backgroundColor: Colors.transparent,
-          surfaceTintColor: Colors.transparent,
-          indicatorColor: AppColors.brand.withValues(alpha: 0.12),
-          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          onDestinationSelected: _openTab,
-          destinations: isManager
-              ? const [
-                  NavigationDestination(
-                    icon: Icon(Icons.event_note_outlined),
-                    selectedIcon: Icon(
-                      Icons.event_note_rounded,
-                      color: AppColors.brand,
-                    ),
-                    label: 'Мои смены',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.add_circle_outline_rounded),
-                    selectedIcon: Icon(
-                      Icons.add_circle_rounded,
-                      color: AppColors.brand,
-                    ),
-                    label: 'Создать',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.star_outline_rounded),
-                    selectedIcon: Icon(
-                      Icons.star_rounded,
-                      color: AppColors.brand,
-                    ),
-                    label: 'Оценки',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.person_outline_rounded),
-                    selectedIcon: Icon(
-                      Icons.person_rounded,
-                      color: AppColors.brand,
-                    ),
-                    label: 'Профиль',
-                  ),
-                ]
-              : const [
-                  NavigationDestination(
-                    icon: Icon(Icons.local_fire_department_outlined),
-                    selectedIcon: Icon(
-                      Icons.local_fire_department_rounded,
-                      color: AppColors.brand,
-                    ),
-                    label: 'Смены',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.work_history_outlined),
-                    selectedIcon: Icon(
-                      Icons.work_history_rounded,
-                      color: AppColors.brand,
-                    ),
-                    label: 'Мои',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.person_outline_rounded),
-                    selectedIcon: Icon(
-                      Icons.person_rounded,
-                      color: AppColors.brand,
-                    ),
-                    label: 'Профиль',
-                  ),
-                ],
         ),
       ),
     );

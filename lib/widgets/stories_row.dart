@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/glass.dart';
 
 /// Одна подсказка в ленте вверху главного экрана.
 class StoryItem {
@@ -64,7 +65,7 @@ class StoriesRow extends StatelessWidget {
                   child: Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Theme.of(context).colorScheme.surface,
+                      color: GlassTokens.of(context).strongFill,
                     ),
                     child: Icon(story.icon, size: 24, color: story.color),
                   ),

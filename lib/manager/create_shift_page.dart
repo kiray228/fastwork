@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:fastwork_core/category.dart';
+import 'package:fastwork_core/payment.dart';
+
 import '../data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
+import '../theme/glass.dart';
 import '../widgets/async_state.dart';
+import '../widgets/category_icon.dart';
 import '../widgets/common.dart';
+import '../widgets/payment_sheet.dart';
 
 /// Создание смены заказчиком — и правка уже созданной.
 ///
@@ -47,6 +53,11 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
   late DateTime date;
   late TimeOfDay start;
   late TimeOfDay end;
+
+  /// Категория работ. У новой смены её нет, пока заказчик не выберет:
+  /// подставить «что-нибудь» по умолчанию значило бы, что половина смен
+  /// окажется «грузчиками» просто потому, что до списка не долистали.
+  String? category;
   bool busy = false;
   String? error;
 
@@ -73,6 +84,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
     date = shift?.workDate ?? DateTime.now().add(const Duration(days: 1));
     start = _asTime(shift?.startMinutes ?? 600);
     end = _asTime(shift?.endMinutes ?? 1320);
+    category = shift?.category;
   }
 
   static TimeOfDay _asTime(int minutes) =>
@@ -101,6 +113,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
         address: addressController.text,
         startMinutes: _startMinutes,
         endMinutes: _endMinutes,
+        category: category ?? kOtherCategory,
         hourlyRate: (int.tryParse(rateController.text) ?? 0) * 100,
         workersNeeded: int.tryParse(workersController.text) ?? 1,
         workersHired: widget.editing?.workersHired ?? 0,
@@ -126,6 +139,15 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
     );
     if (picked == null) return;
     setState(() => isStart ? start = picked : end = picked);
+  }
+
+  Future<void> _pickCategory() async {
+    final picked = await showCategorySheet(context, selected: category);
+    if (picked == null || !mounted) return;
+    setState(() {
+      category = picked;
+      error = null;
+    });
   }
 
   Future<void> _submit() async {
@@ -154,11 +176,13 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
       setState(() => error = 'Смена должна длиться хотя бы час');
       return;
     }
+    final chosen = category;
+    if (chosen == null) {
+      setState(() => error = 'Выберите категорию работ');
+      return;
+    }
 
-    setState(() {
-      busy = true;
-      error = null;
-    });
+    setState(() => error = null);
 
     final duties = dutiesController.text
         .split('\n')
@@ -168,21 +192,46 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
 
     final existing = widget.editing;
     if (existing != null) {
-      final result = await guarded(
-        context,
-        () => widget.repository.updateShift(
-          shiftId: existing.id,
-          workDate: DateTime(date.year, date.month, date.day),
-          title: title,
-          address: address,
-          startMinutes: _startMinutes,
-          endMinutes: _endMinutes,
-          hourlyRate: rate * 100,
-          workersNeeded: workers,
-          duties: duties,
-          dressCode: existing.dressCode,
-        ),
-      );
+      Future<BookingResult> save([PaymentCard? card]) =>
+          widget.repository.updateShift(
+            shiftId: existing.id,
+            workDate: DateTime(date.year, date.month, date.day),
+            title: title,
+            category: chosen,
+            address: address,
+            startMinutes: _startMinutes,
+            endMinutes: _endMinutes,
+            hourlyRate: rate * 100,
+            workersNeeded: workers,
+            duties: duties,
+            dressCode: existing.dressCode,
+            card: card,
+          );
+
+      setState(() => busy = true);
+      var result = await guarded(context, save);
+
+      // Смена подорожала — сначала доплата. Спрашиваем карту только
+      // тогда, когда хранилище сказало, что без неё нельзя: подешевевшую
+      // смену сохраняем сразу, разницу сервис вернёт сам.
+      if (result == BookingResult.paymentRequired && mounted) {
+        // Своя крутилка у окна оплаты — форма под ним ждать не должна.
+        setState(() => busy = false);
+        final extra =
+            ShiftCost.of(_preview).total - ShiftCost.of(existing).total;
+        BookingResult? afterPay;
+        final paid = await showPaymentSheet(
+          context,
+          title: 'Доплата за смену',
+          note: 'Смена подорожала. Разницу нужно внести сейчас — '
+              'сервис держит оплату за все места заранее.',
+          lines: [PaymentLine('Разница в стоимости', extra)],
+          total: extra,
+          actionLabel: 'Доплатить ${formatMoney(extra)}',
+          onCard: (card) async => afterPay = await save(card),
+        );
+        result = paid ? afterPay : null;
+      }
 
       if (!mounted) return;
       setState(() => busy = false);
@@ -207,9 +256,26 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
       return;
     }
 
-    final created = await guardedDone(
+    // Смена публикуется только оплаченной: сервис — гарант, и деньги
+    // должны быть у него раньше, чем на смену кто-то запишется.
+    final cost = ShiftCost.of(_preview);
+    final created = await showPaymentSheet(
       context,
-      () => widget.repository.createShift(
+      title: 'Оплата смены',
+      note: 'Деньги останутся у сервиса и уйдут исполнителям только после '
+          'того, как вы подтвердите их выход. За невышедших и при отмене '
+          'смены деньги вернутся на карту.',
+      lines: [
+        PaymentLine(
+          'Вознаграждение: ${cost.slots} × ${formatMoney(cost.slotPay)}',
+          cost.pay,
+        ),
+        PaymentLine('Комиссия сервиса $kPlatformFeePercent%', cost.fee),
+      ],
+      total: cost.total,
+      actionLabel: 'Оплатить ${formatMoney(cost.total)}',
+      onCard: (card) => widget.repository.createShift(
+        card: card,
         workDate: DateTime(date.year, date.month, date.day),
         title: title,
         company: widget.session.user?.company ?? 'Компания',
@@ -222,13 +288,12 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
         // Город берём из профиля заказчика: смену увидят исполнители
         // того же города.
         city: widget.session.city,
+        category: chosen,
         duties: duties,
       ),
     );
 
-    if (!mounted) return;
-    setState(() => busy = false);
-    if (!created) return;
+    if (!mounted || !created) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Смена опубликована')),
@@ -251,6 +316,12 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _Label('Категория работ'),
+                _CategoryPicker(
+                  category: category,
+                  onTap: _pickCategory,
+                ),
+                const SizedBox(height: 14),
                 _Label('Какие услуги нужны'),
                 _Input(
                   controller: titleController,
@@ -410,7 +481,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
                       color: Colors.white,
                     ),
                   )
-                : Text(isEditing ? 'Сохранить' : 'Опубликовать смену'),
+                : Text(isEditing ? 'Сохранить' : 'Оплатить и опубликовать'),
           ),
         ],
       ),
@@ -452,8 +523,16 @@ class _Summary extends StatelessWidget {
             value: formatMoney(shift.totalPay),
           ),
           _SummaryRow(
-            label: 'За всю смену',
-            value: formatMoney(shift.totalPay * shift.workersNeeded),
+            label: 'Всем исполнителям',
+            value: formatMoney(ShiftCost.of(shift).pay),
+          ),
+          _SummaryRow(
+            label: 'Комиссия сервиса $kPlatformFeePercent%',
+            value: formatMoney(ShiftCost.of(shift).fee),
+          ),
+          _SummaryRow(
+            label: 'К оплате',
+            value: formatMoney(ShiftCost.of(shift).total),
             bold: true,
           ),
         ],
@@ -539,8 +618,6 @@ class _Input extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
@@ -551,19 +628,19 @@ class _Input extends StatelessWidget {
         hintText: hint,
         isDense: true,
         filled: true,
-        fillColor: isDark ? AppColors.darkBg : AppColors.bg,
+        fillColor: glassFieldFill(context),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
-            color: isDark ? AppColors.darkBorder : AppColors.border,
+            color: glassFieldEdge(context),
           ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
-            color: isDark ? AppColors.darkBorder : AppColors.border,
+            color: glassFieldEdge(context),
           ),
         ),
         focusedBorder: OutlineInputBorder(
@@ -608,6 +685,180 @@ class _PickerRow extends StatelessWidget {
             const SizedBox(width: 4),
             const Icon(Icons.chevron_right_rounded,
                 size: 18, color: AppColors.muted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Поле выбора категории: выглядит как строка формы, открывает список.
+class _CategoryPicker extends StatelessWidget {
+  final String? category;
+  final VoidCallback onTap;
+
+  const _CategoryPicker({required this.category, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final chosen = category;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: glassFieldFill(context),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: glassFieldEdge(context),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              chosen == null
+                  ? Icons.category_outlined
+                  : categoryIcon(chosen),
+              size: 20,
+              color: chosen == null ? AppColors.muted : AppColors.brand,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                chosen == null
+                    ? 'Выберите категорию'
+                    : categoryById(chosen).name,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: chosen == null ? AppColors.muted : null,
+                ),
+              ),
+            ),
+            const Icon(Icons.expand_more_rounded,
+                size: 20, color: AppColors.muted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Список категорий с поиском.
+///
+/// Сорок пунктов — это уже не список, который читают, а список, в котором
+/// ищут. Поэтому сверху поле: набрал «сант» — остался «Сантехник».
+Future<String?> showCategorySheet(BuildContext context, {String? selected}) =>
+    showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _CategorySheet(selected: selected),
+    );
+
+class _CategorySheet extends StatefulWidget {
+  final String? selected;
+
+  const _CategorySheet({required this.selected});
+
+  @override
+  State<_CategorySheet> createState() => _CategorySheetState();
+}
+
+class _CategorySheetState extends State<_CategorySheet> {
+  String query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final q = query.trim().toLowerCase();
+    final found = kShiftCategories
+        .where((c) => q.isEmpty || c.name.toLowerCase().contains(q))
+        .toList();
+
+    return GlassSheet(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.muted.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: TextField(
+                autofocus: false,
+                onChanged: (value) => setState(() => query = value),
+                decoration: const InputDecoration(
+                  hintText: 'Найти категорию',
+                  prefixIcon: Icon(Icons.search_rounded, size: 20),
+                  isDense: true,
+                ),
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+                children: [
+                  for (final group in kCategoryGroups)
+                    if (found.any((c) => c.group == group)) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 14, 12, 4),
+                        child: Text(
+                          group.toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.6,
+                            color: AppColors.muted,
+                          ),
+                        ),
+                      ),
+                      for (final c in found.where((c) => c.group == group))
+                        ListTile(
+                          dense: true,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          leading: Icon(categoryIcon(c.id),
+                              color: AppColors.brand),
+                          title: Text(
+                            c.name,
+                            style: const TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          trailing: c.id == widget.selected
+                              ? const Icon(Icons.check_rounded,
+                                  color: AppColors.brand)
+                              : null,
+                          onTap: () => Navigator.of(context).pop(c.id),
+                        ),
+                    ],
+                  if (found.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text(
+                        'Такой категории нет — выберите «Другое»',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: AppColors.muted),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ],
         ),
       ),

@@ -11,8 +11,13 @@ import 'package:fastwork/data/repositories.dart';
 import 'package:fastwork/data/session.dart';
 import 'package:fastwork_core/data/shift_filter.dart';
 import 'package:fastwork_core/data/support_repository.dart';
+import 'package:fastwork_core/data/wallet_repository.dart';
+import 'package:fastwork_core/mrp.dart';
+import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/notification.dart';
+import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_core/shift.dart';
+import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_core/user.dart';
 import 'package:fastwork/widgets/skeleton.dart';
 
@@ -32,18 +37,22 @@ void main() {
         isVerified: false,
         role: role,
         company: role == UserRole.manager ? 'Magnum' : null,
+        termsVersion: kTermsVersion,
       );
 
   AppRepositories buildRepos({
     FakeShiftRepository? shifts,
     AppUser? signedIn,
-  }) =>
-      AppRepositories(
-        shifts: shifts ?? FakeShiftRepository(),
-        auth: FakeAuthRepository(signedIn: signedIn),
-        documents: FakeDocumentRepository(),
-        support: FakeSupportRepository(),
-      );
+  }) {
+    final store = shifts ?? FakeShiftRepository();
+    return AppRepositories(
+      shifts: store,
+      auth: FakeAuthRepository(signedIn: signedIn),
+      documents: FakeDocumentRepository(),
+      support: FakeSupportRepository(),
+      wallet: FakeWalletRepository(store),
+    );
+  }
 
   /// По умолчанию тестовый «экран» маленький — 800×600, и часть карточек
   /// в него не влезает. А списки во Flutter создают только те элементы,
@@ -106,11 +115,67 @@ void main() {
       expect(find.text('Введите номер телефона полностью'), findsOneWidget);
     });
 
+    testWidgets('без согласия с правилами аккаунт не создаётся',
+        (tester) async {
+      await openAppSignedOut(tester);
+
+      await tester.enterText(find.byType(TextField).at(0), '77001234567');
+      await tester.enterText(find.byType(TextField).at(1), 'Ернар Калдыбеков');
+      await tester.tap(find.text('Начать работать'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Чтобы продолжить, примите правила сервиса'),
+          findsOneWidget);
+      expect(find.text('Подробнее'), findsNothing);
+    });
+
+    testWidgets('правила открываются по ссылке у галочки', (tester) async {
+      await openAppSignedOut(tester);
+
+      await tester.tap(find.text('правила сервиса'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Правила сервиса fastwork'), findsOneWidget);
+      expect(find.text('4. Лимит дохода — 300 МРП в месяц'), findsOneWidget);
+    });
+
+    testWidgets('кто не принимал правила, сначала видит их', (tester) async {
+      useTallPhone(tester);
+      // Аккаунт из времён до правил: версия согласия — ноль.
+      final old = testUser().copyWith(termsVersion: 0);
+      final session = AppSession()..setUser(old);
+      final auth = FakeAuthRepository(signedIn: old);
+      await tester.pumpWidget(FastworkApp(
+        session: session,
+        repos: buildRepos(signedIn: old)
+            .withAuth(auth),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Принимаю'), findsOneWidget);
+      expect(find.text('Подробнее'), findsNothing);
+
+      // Кнопка не работает, пока нет галочки.
+      final accept = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Принимаю'),
+      );
+      expect(accept.onPressed, isNull);
+
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Принимаю'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Подробнее'), findsWidgets);
+      expect(session.user!.hasAcceptedTerms, isTrue);
+    });
+
     testWidgets('регистрация открывает ленту смен', (tester) async {
       await openAppSignedOut(tester);
 
       await tester.enterText(find.byType(TextField).at(0), '77001234567');
       await tester.enterText(find.byType(TextField).at(1), 'Ернар Калдыбеков');
+      await tester.tap(find.byType(Checkbox));
       await tester.tap(find.text('Начать работать'));
       await tester.pumpAndSettle();
 
@@ -120,15 +185,11 @@ void main() {
 
   group('вход по коду с почты', () {
     /// Хранилище, которое ведёт себя как серверное: требует код.
-    AppRepositories codeRepos({AppUser? signedIn}) => AppRepositories(
-          shifts: FakeShiftRepository(),
-          auth: FakeAuthRepository(
-            signedIn: signedIn,
-            requiresEmailCode: true,
-          ),
-          documents: FakeDocumentRepository(),
-          support: FakeSupportRepository(),
-        );
+    AppRepositories codeRepos({AppUser? signedIn}) =>
+        buildRepos(signedIn: signedIn).withAuth(FakeAuthRepository(
+          signedIn: signedIn,
+          requiresEmailCode: true,
+        ));
 
     Future<void> openWithCodes(WidgetTester tester) async {
       useTallPhone(tester);
@@ -226,6 +287,7 @@ void main() {
 
       await tester.enterText(find.byType(TextField).at(0), '77001234567');
       await tester.enterText(find.byType(TextField).at(1), 'Ернар Калдыбеков');
+      await tester.tap(find.byType(Checkbox));
       await tester.tap(find.text('Начать работать'));
       await tester.pumpAndSettle();
 
@@ -382,6 +444,47 @@ void main() {
     });
   });
 
+  group('лимит 300 МРП', () {
+    testWidgets('смена сверх лимита не записывает и объясняет почему',
+        (tester) async {
+      // Обе смены сегодня: так они наверняка в одном месяце, в какой бы
+      // день ни запустили тест. Каждая — 12 100 ₸.
+      final now = DateTime.now();
+      Shift today(int id, String title) => Shift(
+            id: id,
+            workDate: DateTime(now.year, now.month, now.day),
+            title: title,
+            company: 'Magnum',
+            address: 'ул. Абая, 1',
+            startMinutes: 600,
+            endMinutes: 1320,
+            hourlyRate: 110000,
+            workersNeeded: 5,
+            workersHired: 0,
+          );
+
+      // МРП в 50 ₸ — лимит 15 000 ₸: одна смена помещается, вторая нет.
+      final repo = FakeShiftRepository(
+        userRating: 5.0,
+        shifts: [today(1, 'Первая смена'), today(2, 'Вторая смена')],
+      )..mrpRates = [MrpRate(validFrom: DateTime(2020), amount: 5000)];
+      expect(await repo.apply(1), BookingResult.ok);
+
+      await openApp(tester, rating: 5.0, shifts: repo);
+      await tester.tap(find.text('Вторая смена'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Записаться на смену'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подтверждаю'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('превысит 300 МРП'), findsOneWidget);
+      expect((await repo.shiftById(2))!.isApplied, isFalse);
+    });
+  });
+
   group('рейтинг как допуск', () {
     testWidgets('смена с порогом 4.5 закрыта при рейтинге 4.0',
         (tester) async {
@@ -416,7 +519,7 @@ void main() {
         (tester) async {
       final repo = FakeShiftRepository(userRating: 5.0);
       // Смена три дня назад: записался, и заказчик подтвердил выход.
-      // Без подтверждения она в заработок не попадёт.
+      // Без подтверждения деньги не начисляются.
       await repo.apply(6);
       await repo.confirmAttendance(shiftId: 6, workerId: 1);
       await openApp(tester, rating: 5.0, shifts: repo);
@@ -426,18 +529,32 @@ void main() {
       await tester.tap(find.text('Выплаты'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Заработано всего'), findsOneWidget);
-      expect(find.text('12 100 ₸'), findsOneWidget);
-      expect(
-        find.textContaining('операций с деньгами приложение не проводит'),
-        findsOneWidget,
-      );
+      expect(find.text('Доступно к выводу'), findsOneWidget);
+      expect(find.text('Заработано всего: 12 100 ₸'), findsOneWidget);
+      expect(find.textContaining('Лимит за'), findsOneWidget);
+      expect(find.textContaining('Тестовый режим оплаты'), findsOneWidget);
     });
 
-    testWidgets('кнопка вывода честно говорит, что не подключена',
-        (tester) async {
+    testWidgets('без подтверждения смены выводить нечего', (tester) async {
       final repo = FakeShiftRepository(userRating: 5.0);
       await repo.apply(6);
+      await openApp(tester, rating: 5.0, shifts: repo);
+
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Выплаты'));
+      await tester.pumpAndSettle();
+
+      final button = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Вывести на карту'),
+      );
+      expect(button.onPressed, isNull);
+    });
+
+    testWidgets('заработанное выводится на карту', (tester) async {
+      final repo = FakeShiftRepository(userRating: 5.0);
+      await repo.apply(6);
+      await repo.confirmAttendance(shiftId: 6, workerId: 1);
       await openApp(tester, rating: 5.0, shifts: repo);
 
       await tester.tap(find.text('Профиль'));
@@ -447,7 +564,42 @@ void main() {
       await tester.tap(find.text('Вывести на карту'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Вывод средств пока не подключён'), findsOneWidget);
+      await tester.tap(find.text('Подставить тестовую карту'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Вывести 12 100 ₸'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Деньги отправлены на карту'), findsOneWidget);
+      expect(repo.payments.operations, contains('payout:1210000'));
+      expect(find.text('Вывод на карту Visa •• 4242'), findsOneWidget);
+    });
+
+    testWidgets('отказ банка оставляет окно открытым', (tester) async {
+      final repo = FakeShiftRepository(userRating: 5.0);
+      await repo.apply(6);
+      await repo.confirmAttendance(shiftId: 6, workerId: 1);
+      await openApp(tester, rating: 5.0, shifts: repo);
+
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Выплаты'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Вывести на карту'));
+      await tester.pumpAndSettle();
+
+      final fields = find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(fields.at(0), kSandboxDeclinedCardNumber);
+      await tester.enterText(fields.at(1), '1230');
+      await tester.enterText(fields.at(2), '123');
+      await tester.tap(find.text('Вывести 12 100 ₸'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Банк отклонил'), findsOneWidget);
+      expect(find.text('Вывод на карту'), findsOneWidget); // окно на месте
+      expect(repo.payments.operations, isEmpty);
     });
 
     testWidgets('отзыв о прошедшей смене сохраняется', (tester) async {
@@ -549,12 +701,54 @@ void main() {
         find.byType(TextField).at(1),
         'г. Алматы, ул. Абая, 10',
       );
-      await tester.tap(find.text('Опубликовать смену'));
+      await tester.tap(find.text('Выберите категорию'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Грузчик'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Оплатить и опубликовать'));
       await tester.pumpAndSettle();
 
-      // Вернулись на список — смена там.
+      // Без оплаты смена не публикуется: сначала окно карты.
+      expect(find.text('Оплата смены'), findsOneWidget);
+      expect(find.text('Комиссия сервиса 4%'), findsWidgets);
+      await tester.tap(find.text('Подставить тестовую карту'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Оплатить ').last);
+      await tester.pumpAndSettle();
+
+      // Вернулись на список — смена там, и с категорией.
       expect(find.text('Услуги грузчика'), findsOneWidget);
       expect(find.text('0 / 3'), findsOneWidget);
+      expect((await shifts.shiftsCreatedBy(1)).single.category, 'loader');
+    });
+
+    testWidgets('без категории смену не опубликовать', (tester) async {
+      await openApp(tester, role: UserRole.manager);
+
+      await tester.tap(find.text('Создать'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).at(0), 'Услуги грузчика');
+      await tester.enterText(find.byType(TextField).at(1), 'ул. Абая, 10');
+      await tester.tap(find.text('Оплатить и опубликовать'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Выберите категорию работ'), findsOneWidget);
+    });
+
+    testWidgets('категорию можно найти поиском', (tester) async {
+      await openApp(tester, role: UserRole.manager);
+
+      await tester.tap(find.text('Создать'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Выберите категорию'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).last, 'сант');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Сантехник'), findsOneWidget);
+      expect(find.text('Грузчик'), findsNothing);
     });
 
     testWidgets('пустой адрес не даёт опубликовать смену', (tester) async {
@@ -567,7 +761,7 @@ void main() {
         find.byType(TextField).at(0),
         'Услуги грузчика',
       );
-      await tester.tap(find.text('Опубликовать смену'));
+      await tester.tap(find.text('Оплатить и опубликовать'));
       await tester.pumpAndSettle();
 
       expect(find.text('Укажите адрес'), findsOneWidget);
@@ -1379,4 +1573,15 @@ class SlowShiftRepository extends FakeShiftRepository {
     await _gate.future;
     return super.shiftsOn(date, filter: filter);
   }
+}
+
+/// Те же хранилища, но с другим входом — для тестов про вход.
+extension on AppRepositories {
+  AppRepositories withAuth(AuthRepository auth) => AppRepositories(
+        shifts: shifts,
+        auth: auth,
+        documents: documents,
+        support: support,
+        wallet: wallet,
+      );
 }

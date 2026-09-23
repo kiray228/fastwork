@@ -149,7 +149,14 @@ PostgreSQL — см. раздел 7. С ней данные не пропада�
 | `POST /api/shifts/<id>/checkin` | отметиться на месте |
 | `POST /api/shifts/<id>/confirm` | заказчик подтверждает выход |
 | `GET /api/my-shifts?archived=...` | мои смены |
-| `POST /api/shifts` | создать смену |
+| `POST /api/shifts` | создать смену — только с картой: без оплаты смена не публикуется |
+| `GET /api/categories` | категории, по которым в городе есть смены |
+| `POST /api/me/accept-terms` | принять действующие правила сервиса |
+| `GET /api/me/limit?month=...` | сколько набрано за месяц и лимит в 300 МРП |
+| `GET /api/wallet` | баланс и история денег |
+| `POST /api/wallet/withdraw` | вывести на карту |
+| `GET /api/mrp` | значения МРП и лимит |
+| `POST /api/admin/mrp` | записать новый МРП — по ключу `ADMIN_KEY` |
 | `GET /api/health` | жив ли сервер |
 
 `GET` — «дай посмотреть», `POST` — «сделай что-нибудь». Это соглашение, и

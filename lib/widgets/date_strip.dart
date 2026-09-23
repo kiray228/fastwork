@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
+import '../theme/glass.dart';
 
 /// Горизонтальная полоса дат.
 class DateStrip extends StatelessWidget {
@@ -40,13 +41,13 @@ class DateStrip extends StatelessWidget {
             background = AppColors.brand;
             textColor = Colors.white;
           } else if (hasShifts) {
-            background = isDark ? AppColors.darkSurface : Colors.white;
+            background = glassFieldFill(context);
             textColor = isDark ? AppColors.darkInk : AppColors.ink;
           } else {
             // День без смен — приглушаем, но оставляем нажимаемым.
-            background = isDark
-                ? AppColors.darkSurface.withValues(alpha: 0.5)
-                : Colors.white.withValues(alpha: 0.5);
+            background = glassFieldFill(context).withValues(
+              alpha: isDark ? 0.03 : 0.3,
+            );
             textColor = AppColors.muted;
           }
 
@@ -62,7 +63,7 @@ class DateStrip extends StatelessWidget {
                 border: Border.all(
                   color: isSelected
                       ? AppColors.brand
-                      : (isDark ? AppColors.darkBorder : AppColors.border),
+                      : glassFieldEdge(context),
                 ),
                 boxShadow: isSelected
                     ? [

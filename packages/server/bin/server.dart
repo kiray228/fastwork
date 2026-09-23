@@ -6,6 +6,7 @@ import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_server/api.dart';
 import 'package:fastwork_server/code_sender.dart';
 import 'package:fastwork_server/open_database.dart';
+import 'package:fastwork_server/payment_gateway.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as io;
 
@@ -33,13 +34,21 @@ Future<void> main(List<String> args) async {
   // в это же окно. Приложение разницы не замечает.
   final sender = resolveCodeSender();
 
+  // Тестовый шлюз, пока не подключён настоящий провайдер.
+  final payments = resolvePaymentGateway();
+
   // Первый запуск: кладём демонстрационные смены, иначе лента пустая.
   await DbShiftRepository(db, const StaticUser(null)).seedIfEmpty();
 
   final handler = const Pipeline()
       .addMiddleware(logRequests())
       .addMiddleware(_cors)
-      .addHandler(Api(db, sender).router.call);
+      .addHandler(Api(
+        db,
+        sender,
+        adminKey: Platform.environment['ADMIN_KEY'] ?? '',
+        payments: payments,
+      ).router.call);
 
   // InternetAddress.anyIPv4 — «слушать все сетевые интерфейсы».
   // На localhost хватило бы и loopback, но в облаке запрос приходит
@@ -48,6 +57,9 @@ Future<void> main(List<String> args) async {
 
   stdout.writeln('fastwork сервер слушает http://localhost:${server.port}');
   stdout.writeln('база: ${describeDatabase()}');
+  stdout.writeln(payments.isSandbox
+      ? 'оплата: тестовый режим — карты тестовые, деньги ненастоящие'
+      : 'оплата: боевой режим');
   stdout.writeln(switch (sender) {
     ConsoleCodeSender() =>
       'письма НЕ отправляются — код входа будет напечатан здесь',
@@ -81,5 +93,5 @@ Middleware get _cors => (innerHandler) {
 const _corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Key',
 };
