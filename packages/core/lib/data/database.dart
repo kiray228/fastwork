@@ -1,5 +1,7 @@
 import 'package:drift/drift.dart';
 
+import '../category.dart';
+
 part 'database.g.dart';
 
 // ---------------------------------------------------------------------------
@@ -15,6 +17,11 @@ class ShiftRows extends Table {
   IntColumn get id => integer().autoIncrement()(); // первичный ключ
   DateTimeColumn get workDate => dateTime()();
   TextColumn get title => text()();
+
+  /// Категория работ — ключ из `kShiftCategories`. Добавлена в
+  /// одиннадцатой версии; у смен, созданных раньше, будет «Другое».
+  TextColumn get category =>
+      text().withDefault(const Constant(kOtherCategory))();
   TextColumn get company => text()();
   TextColumn get address => text()();
 
@@ -479,7 +486,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -528,6 +535,9 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 10) {
             await addColumnIfMissing(m, shiftRows, shiftRows.cancelledAt);
+          }
+          if (from < 11) {
+            await addColumnIfMissing(m, shiftRows, shiftRows.category);
           }
         },
         beforeOpen: (details) async {

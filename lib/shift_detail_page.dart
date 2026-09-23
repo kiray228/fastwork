@@ -505,20 +505,19 @@ class _HeroCard extends StatelessWidget {
                 ' · ${formatDuration(shift.durationMinutes)}',
           ),
           InfoRow(icon: Icons.place_outlined, text: shift.address),
-          if (shift.tags.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final tag in shift.tags)
-                  TagChip(
-                    text: tag,
-                    color: tag == 'Мало мест' ? AppColors.accent : null,
-                  ),
-              ],
-            ),
-          ],
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              CategoryChip(category: shift.category),
+              for (final tag in shift.tags)
+                TagChip(
+                  text: tag,
+                  color: tag == 'Мало мест' ? AppColors.accent : null,
+                ),
+            ],
+          ),
         ],
       ),
     );

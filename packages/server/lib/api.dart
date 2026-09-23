@@ -8,6 +8,7 @@ import 'package:fastwork_core/data/database.dart';
 import 'package:fastwork_core/data/current_user.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/data/support_repository.dart';
+import 'package:fastwork_core/category.dart';
 import 'package:fastwork_core/support.dart';
 import 'package:fastwork_core/notification.dart';
 import 'package:fastwork_core/review.dart';
@@ -286,6 +287,13 @@ class Api {
       );
     });
 
+    router.get('/api/categories', (Request request) async {
+      return _authorized(
+        request,
+        (user) async => _json(await _shiftsFor(user).categories()),
+      );
+    });
+
     router.get('/api/companies/<name>', (Request request, String name) async {
       return _authorized(request, (user) async {
         final info = await _shiftsFor(user).companyInfo(
@@ -425,6 +433,13 @@ class Api {
         }
 
         final body = await _body(request);
+        final category = body['category'] as String? ?? kOtherCategory;
+        // Ключ категории приходит снаружи — проверяем, что такой есть.
+        // Иначе в базе завелись бы категории, которых нет ни в одном
+        // фильтре, и смены с ними никто бы не нашёл.
+        if (!isKnownCategory(category)) {
+          return _error('Неизвестная категория работ');
+        }
         final id = await _shiftsFor(user).createShift(
           workDate: DateTime.parse(body['workDate'] as String),
           title: body['title'] as String,
@@ -436,6 +451,7 @@ class Api {
           workersNeeded: body['workersNeeded'] as int,
           createdBy: user.id,
           city: body['city'] as String? ?? user.city,
+          category: category,
           duties: (body['duties'] as List<dynamic>? ?? []).cast<String>(),
           dressCode: body['dressCode'] as String?,
           minRating: (body['minRating'] as num?)?.toDouble(),
@@ -454,6 +470,11 @@ class Api {
         }
 
         final body = await _body(request);
+        // Старое приложение категорию не присылает — тогда её не трогаем.
+        final category = body['category'] as String?;
+        if (category != null && !isKnownCategory(category)) {
+          return _error('Неизвестная категория работ');
+        }
         final result = await _shiftsFor(user).updateShift(
           shiftId: int.parse(id),
           workDate: DateTime.parse(body['workDate'] as String),
@@ -463,6 +484,7 @@ class Api {
           endMinutes: body['endMinutes'] as int,
           hourlyRate: body['hourlyRate'] as int,
           workersNeeded: body['workersNeeded'] as int,
+          category: category,
           duties: (body['duties'] as List<dynamic>? ?? []).cast<String>(),
           dressCode: body['dressCode'] as String?,
         );

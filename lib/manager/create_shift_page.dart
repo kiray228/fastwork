@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:fastwork_core/category.dart';
+
 import '../data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
 import '../widgets/async_state.dart';
+import '../widgets/category_icon.dart';
 import '../widgets/common.dart';
 
 /// Создание смены заказчиком — и правка уже созданной.
@@ -47,6 +50,11 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
   late DateTime date;
   late TimeOfDay start;
   late TimeOfDay end;
+
+  /// Категория работ. У новой смены её нет, пока заказчик не выберет:
+  /// подставить «что-нибудь» по умолчанию значило бы, что половина смен
+  /// окажется «грузчиками» просто потому, что до списка не долистали.
+  String? category;
   bool busy = false;
   String? error;
 
@@ -73,6 +81,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
     date = shift?.workDate ?? DateTime.now().add(const Duration(days: 1));
     start = _asTime(shift?.startMinutes ?? 600);
     end = _asTime(shift?.endMinutes ?? 1320);
+    category = shift?.category;
   }
 
   static TimeOfDay _asTime(int minutes) =>
@@ -101,6 +110,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
         address: addressController.text,
         startMinutes: _startMinutes,
         endMinutes: _endMinutes,
+        category: category ?? kOtherCategory,
         hourlyRate: (int.tryParse(rateController.text) ?? 0) * 100,
         workersNeeded: int.tryParse(workersController.text) ?? 1,
         workersHired: widget.editing?.workersHired ?? 0,
@@ -126,6 +136,15 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
     );
     if (picked == null) return;
     setState(() => isStart ? start = picked : end = picked);
+  }
+
+  Future<void> _pickCategory() async {
+    final picked = await showCategorySheet(context, selected: category);
+    if (picked == null || !mounted) return;
+    setState(() {
+      category = picked;
+      error = null;
+    });
   }
 
   Future<void> _submit() async {
@@ -154,6 +173,11 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
       setState(() => error = 'Смена должна длиться хотя бы час');
       return;
     }
+    final chosen = category;
+    if (chosen == null) {
+      setState(() => error = 'Выберите категорию работ');
+      return;
+    }
 
     setState(() {
       busy = true;
@@ -174,6 +198,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
           shiftId: existing.id,
           workDate: DateTime(date.year, date.month, date.day),
           title: title,
+          category: chosen,
           address: address,
           startMinutes: _startMinutes,
           endMinutes: _endMinutes,
@@ -222,6 +247,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
         // Город берём из профиля заказчика: смену увидят исполнители
         // того же города.
         city: widget.session.city,
+        category: chosen,
         duties: duties,
       ),
     );
@@ -251,6 +277,12 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _Label('Категория работ'),
+                _CategoryPicker(
+                  category: category,
+                  onTap: _pickCategory,
+                ),
+                const SizedBox(height: 14),
                 _Label('Какие услуги нужны'),
                 _Input(
                   controller: titleController,
@@ -608,6 +640,184 @@ class _PickerRow extends StatelessWidget {
             const SizedBox(width: 4),
             const Icon(Icons.chevron_right_rounded,
                 size: 18, color: AppColors.muted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Поле выбора категории: выглядит как строка формы, открывает список.
+class _CategoryPicker extends StatelessWidget {
+  final String? category;
+  final VoidCallback onTap;
+
+  const _CategoryPicker({required this.category, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final chosen = category;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkBg : AppColors.bg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark ? AppColors.darkBorder : AppColors.border,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              chosen == null
+                  ? Icons.category_outlined
+                  : categoryIcon(chosen),
+              size: 20,
+              color: chosen == null ? AppColors.muted : AppColors.brand,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                chosen == null
+                    ? 'Выберите категорию'
+                    : categoryById(chosen).name,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: chosen == null ? AppColors.muted : null,
+                ),
+              ),
+            ),
+            const Icon(Icons.expand_more_rounded,
+                size: 20, color: AppColors.muted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Список категорий с поиском.
+///
+/// Сорок пунктов — это уже не список, который читают, а список, в котором
+/// ищут. Поэтому сверху поле: набрал «сант» — остался «Сантехник».
+Future<String?> showCategorySheet(BuildContext context, {String? selected}) =>
+    showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _CategorySheet(selected: selected),
+    );
+
+class _CategorySheet extends StatefulWidget {
+  final String? selected;
+
+  const _CategorySheet({required this.selected});
+
+  @override
+  State<_CategorySheet> createState() => _CategorySheetState();
+}
+
+class _CategorySheetState extends State<_CategorySheet> {
+  String query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final q = query.trim().toLowerCase();
+    final found = kShiftCategories
+        .where((c) => q.isEmpty || c.name.toLowerCase().contains(q))
+        .toList();
+
+    return Material(
+      color: Theme.of(context).colorScheme.surface,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.muted.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: TextField(
+                autofocus: false,
+                onChanged: (value) => setState(() => query = value),
+                decoration: const InputDecoration(
+                  hintText: 'Найти категорию',
+                  prefixIcon: Icon(Icons.search_rounded, size: 20),
+                  isDense: true,
+                ),
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+                children: [
+                  for (final group in kCategoryGroups)
+                    if (found.any((c) => c.group == group)) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 14, 12, 4),
+                        child: Text(
+                          group.toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.6,
+                            color: AppColors.muted,
+                          ),
+                        ),
+                      ),
+                      for (final c in found.where((c) => c.group == group))
+                        ListTile(
+                          dense: true,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          leading: Icon(categoryIcon(c.id),
+                              color: AppColors.brand),
+                          title: Text(
+                            c.name,
+                            style: const TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          trailing: c.id == widget.selected
+                              ? const Icon(Icons.check_rounded,
+                                  color: AppColors.brand)
+                              : null,
+                          onTap: () => Navigator.of(context).pop(c.id),
+                        ),
+                    ],
+                  if (found.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text(
+                        'Такой категории нет — выберите «Другое»',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: AppColors.muted),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ],
         ),
       ),

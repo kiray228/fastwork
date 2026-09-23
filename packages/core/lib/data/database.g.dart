@@ -42,6 +42,18 @@ class $ShiftRowsTable extends ShiftRows
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+    'category',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(kOtherCategory),
+  );
   static const VerificationMeta _companyMeta = const VerificationMeta(
     'company',
   );
@@ -223,6 +235,7 @@ class $ShiftRowsTable extends ShiftRows
     id,
     workDate,
     title,
+    category,
     company,
     address,
     city,
@@ -270,6 +283,12 @@ class $ShiftRowsTable extends ShiftRows
       );
     } else if (isInserting) {
       context.missing(_titleMeta);
+    }
+    if (data.containsKey('category')) {
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
+      );
     }
     if (data.containsKey('company')) {
       context.handle(
@@ -421,6 +440,10 @@ class $ShiftRowsTable extends ShiftRows
         DriftSqlType.string,
         data['${effectivePrefix}title'],
       )!,
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      )!,
       company: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}company'],
@@ -498,6 +521,10 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
   final int id;
   final DateTime workDate;
   final String title;
+
+  /// Категория работ — ключ из `kShiftCategories`. Добавлена в
+  /// одиннадцатой версии; у смен, созданных раньше, будет «Другое».
+  final String category;
   final String company;
   final String address;
 
@@ -536,6 +563,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     required this.id,
     required this.workDate,
     required this.title,
+    required this.category,
     required this.company,
     required this.address,
     required this.city,
@@ -559,6 +587,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     map['id'] = Variable<int>(id);
     map['work_date'] = Variable<DateTime>(workDate);
     map['title'] = Variable<String>(title);
+    map['category'] = Variable<String>(category);
     map['company'] = Variable<String>(company);
     map['address'] = Variable<String>(address);
     map['city'] = Variable<String>(city);
@@ -593,6 +622,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       id: Value(id),
       workDate: Value(workDate),
       title: Value(title),
+      category: Value(category),
       company: Value(company),
       address: Value(address),
       city: Value(city),
@@ -631,6 +661,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       id: serializer.fromJson<int>(json['id']),
       workDate: serializer.fromJson<DateTime>(json['workDate']),
       title: serializer.fromJson<String>(json['title']),
+      category: serializer.fromJson<String>(json['category']),
       company: serializer.fromJson<String>(json['company']),
       address: serializer.fromJson<String>(json['address']),
       city: serializer.fromJson<String>(json['city']),
@@ -658,6 +689,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       'id': serializer.toJson<int>(id),
       'workDate': serializer.toJson<DateTime>(workDate),
       'title': serializer.toJson<String>(title),
+      'category': serializer.toJson<String>(category),
       'company': serializer.toJson<String>(company),
       'address': serializer.toJson<String>(address),
       'city': serializer.toJson<String>(city),
@@ -681,6 +713,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     int? id,
     DateTime? workDate,
     String? title,
+    String? category,
     String? company,
     String? address,
     String? city,
@@ -701,6 +734,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     id: id ?? this.id,
     workDate: workDate ?? this.workDate,
     title: title ?? this.title,
+    category: category ?? this.category,
     company: company ?? this.company,
     address: address ?? this.address,
     city: city ?? this.city,
@@ -725,6 +759,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       id: data.id.present ? data.id.value : this.id,
       workDate: data.workDate.present ? data.workDate.value : this.workDate,
       title: data.title.present ? data.title.value : this.title,
+      category: data.category.present ? data.category.value : this.category,
       company: data.company.present ? data.company.value : this.company,
       address: data.address.present ? data.address.value : this.address,
       city: data.city.present ? data.city.value : this.city,
@@ -768,6 +803,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
           ..write('id: $id, ')
           ..write('workDate: $workDate, ')
           ..write('title: $title, ')
+          ..write('category: $category, ')
           ..write('company: $company, ')
           ..write('address: $address, ')
           ..write('city: $city, ')
@@ -793,6 +829,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     id,
     workDate,
     title,
+    category,
     company,
     address,
     city,
@@ -817,6 +854,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
           other.id == this.id &&
           other.workDate == this.workDate &&
           other.title == this.title &&
+          other.category == this.category &&
           other.company == this.company &&
           other.address == this.address &&
           other.city == this.city &&
@@ -839,6 +877,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
   final Value<int> id;
   final Value<DateTime> workDate;
   final Value<String> title;
+  final Value<String> category;
   final Value<String> company;
   final Value<String> address;
   final Value<String> city;
@@ -859,6 +898,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     this.id = const Value.absent(),
     this.workDate = const Value.absent(),
     this.title = const Value.absent(),
+    this.category = const Value.absent(),
     this.company = const Value.absent(),
     this.address = const Value.absent(),
     this.city = const Value.absent(),
@@ -880,6 +920,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     this.id = const Value.absent(),
     required DateTime workDate,
     required String title,
+    this.category = const Value.absent(),
     required String company,
     required String address,
     this.city = const Value.absent(),
@@ -908,6 +949,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     Expression<int>? id,
     Expression<DateTime>? workDate,
     Expression<String>? title,
+    Expression<String>? category,
     Expression<String>? company,
     Expression<String>? address,
     Expression<String>? city,
@@ -929,6 +971,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
       if (id != null) 'id': id,
       if (workDate != null) 'work_date': workDate,
       if (title != null) 'title': title,
+      if (category != null) 'category': category,
       if (company != null) 'company': company,
       if (address != null) 'address': address,
       if (city != null) 'city': city,
@@ -953,6 +996,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     Value<int>? id,
     Value<DateTime>? workDate,
     Value<String>? title,
+    Value<String>? category,
     Value<String>? company,
     Value<String>? address,
     Value<String>? city,
@@ -974,6 +1018,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
       id: id ?? this.id,
       workDate: workDate ?? this.workDate,
       title: title ?? this.title,
+      category: category ?? this.category,
       company: company ?? this.company,
       address: address ?? this.address,
       city: city ?? this.city,
@@ -1004,6 +1049,9 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     }
     if (title.present) {
       map['title'] = Variable<String>(title.value);
+    }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
     }
     if (company.present) {
       map['company'] = Variable<String>(company.value);
@@ -1062,6 +1110,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
           ..write('id: $id, ')
           ..write('workDate: $workDate, ')
           ..write('title: $title, ')
+          ..write('category: $category, ')
           ..write('company: $company, ')
           ..write('address: $address, ')
           ..write('city: $city, ')
@@ -5639,6 +5688,7 @@ typedef $$ShiftRowsTableCreateCompanionBuilder = ShiftRowsCompanion Function({
   Value<int> id,
   required DateTime workDate,
   required String title,
+  Value<String> category,
   required String company,
   required String address,
   Value<String> city,
@@ -5660,6 +5710,7 @@ typedef $$ShiftRowsTableUpdateCompanionBuilder = ShiftRowsCompanion Function({
   Value<int> id,
   Value<DateTime> workDate,
   Value<String> title,
+  Value<String> category,
   Value<String> company,
   Value<String> address,
   Value<String> city,
@@ -5762,6 +5813,11 @@ class $$ShiftRowsTableFilterComposer
 
   ColumnFilters<String> get title => $composableBuilder(
     column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get category => $composableBuilder(
+    column: $table.category,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5945,6 +6001,11 @@ class $$ShiftRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get company => $composableBuilder(
     column: $table.company,
     builder: (column) => ColumnOrderings(column),
@@ -6043,6 +6104,9 @@ class $$ShiftRowsTableAnnotationComposer
 
   GeneratedColumn<String> get title =>
       $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
 
   GeneratedColumn<String> get company =>
       $composableBuilder(column: $table.company, builder: (column) => column);
@@ -6221,6 +6285,7 @@ class $$ShiftRowsTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<DateTime> workDate = const Value.absent(),
                 Value<String> title = const Value.absent(),
+                Value<String> category = const Value.absent(),
                 Value<String> company = const Value.absent(),
                 Value<String> address = const Value.absent(),
                 Value<String> city = const Value.absent(),
@@ -6241,6 +6306,7 @@ class $$ShiftRowsTableTableManager
                 id: id,
                 workDate: workDate,
                 title: title,
+                category: category,
                 company: company,
                 address: address,
                 city: city,
@@ -6263,6 +6329,7 @@ class $$ShiftRowsTableTableManager
                 Value<int> id = const Value.absent(),
                 required DateTime workDate,
                 required String title,
+                Value<String> category = const Value.absent(),
                 required String company,
                 required String address,
                 Value<String> city = const Value.absent(),
@@ -6283,6 +6350,7 @@ class $$ShiftRowsTableTableManager
                 id: id,
                 workDate: workDate,
                 title: title,
+                category: category,
                 company: company,
                 address: address,
                 city: city,

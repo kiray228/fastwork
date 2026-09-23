@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'package:fastwork_core/category.dart';
 import 'package:fastwork_core/data/shift_filter.dart';
 import '../theme/app_colors.dart';
+import 'category_icon.dart';
 
 /// Окно фильтра и сортировки ленты.
 /// Возвращает новый фильтр или null, если пользователь ничего не менял.
@@ -9,12 +11,17 @@ Future<ShiftFilter?> showFilterSheet(
   BuildContext context, {
   required ShiftFilter current,
   required List<String> companies,
+  List<String> categories = const [],
 }) {
   return showModalBottomSheet<ShiftFilter>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => _FilterSheet(current: current, companies: companies),
+    builder: (_) => _FilterSheet(
+      current: current,
+      companies: companies,
+      categories: categories,
+    ),
   );
 }
 
@@ -22,7 +29,14 @@ class _FilterSheet extends StatefulWidget {
   final ShiftFilter current;
   final List<String> companies;
 
-  const _FilterSheet({required this.current, required this.companies});
+  /// Ключи категорий, по которым сейчас есть смены.
+  final List<String> categories;
+
+  const _FilterSheet({
+    required this.current,
+    required this.companies,
+    required this.categories,
+  });
 
   @override
   State<_FilterSheet> createState() => _FilterSheetState();
@@ -36,6 +50,12 @@ class _FilterSheetState extends State<_FilterSheet> {
     // Уже выбрана — убираем, нет — добавляем.
     next.contains(name) ? next.remove(name) : next.add(name);
     setState(() => draft = draft.copyWith(companies: next));
+  }
+
+  void _toggleCategory(String id) {
+    final next = {...draft.categories};
+    next.contains(id) ? next.remove(id) : next.add(id);
+    setState(() => draft = draft.copyWith(categories: next));
   }
 
   @override
@@ -88,6 +108,24 @@ class _FilterSheetState extends State<_FilterSheet> {
                 shrinkWrap: true,
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
                 children: [
+                  if (widget.categories.isNotEmpty) ...[
+                    Text('Категории', style: text.titleMedium),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final id in widget.categories)
+                          _Choice(
+                            label: categoryById(id).name,
+                            icon: categoryIcon(id),
+                            selected: draft.categories.contains(id),
+                            onTap: () => _toggleCategory(id),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+                  ],
                   if (widget.companies.isNotEmpty) ...[
                     Text('Компании', style: text.titleMedium),
                     const SizedBox(height: 10),
@@ -165,6 +203,7 @@ class _FilterSheetState extends State<_FilterSheet> {
 
 class _Choice extends StatelessWidget {
   final String label;
+  final IconData? icon;
   final bool selected;
   final VoidCallback onTap;
 
@@ -172,6 +211,7 @@ class _Choice extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.icon,
   });
 
   @override
@@ -199,6 +239,9 @@ class _Choice extends StatelessWidget {
           children: [
             if (selected) ...[
               const Icon(Icons.check_rounded, size: 15, color: Colors.white),
+              const SizedBox(width: 6),
+            ] else if (icon != null) ...[
+              Icon(icon, size: 15, color: AppColors.brand),
               const SizedBox(width: 6),
             ],
             Text(

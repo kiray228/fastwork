@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 
+import '../category.dart';
 import '../notification.dart';
 import '../review.dart';
 import '../user.dart';
@@ -43,6 +44,11 @@ abstract class ShiftRepository {
   /// Список компаний — чтобы построить фильтр.
   Future<List<String>> companies();
 
+  /// Ключи категорий, по которым в городе есть смены, — тоже для фильтра.
+  /// Показывать в фильтре все сорок незачем: выбрав пустую, человек
+  /// получил бы пустой список и решил бы, что приложение сломалось.
+  Future<List<String>> categories();
+
   /// Одна смена по её номеру.
   Future<Shift?> shiftById(int id);
 
@@ -83,6 +89,7 @@ abstract class ShiftRepository {
     required int workersNeeded,
     required int createdBy,
     required String city,
+    String category,
     List<String> duties,
     String? dressCode,
     double? minRating,
@@ -111,6 +118,7 @@ abstract class ShiftRepository {
     required int endMinutes,
     required int hourlyRate,
     required int workersNeeded,
+    String? category, // null — оставить как было
     List<String> duties,
     String? dressCode,
   });
@@ -185,8 +193,11 @@ List<Shift> applyFilter(List<Shift> shifts, ShiftFilter filter) {
   final query = filter.query.trim().toLowerCase();
   if (query.isNotEmpty) {
     result = result.where((s) {
-      final haystack =
-          '${s.title} ${s.company} ${s.address}'.toLowerCase();
+      // Категория тоже участвует: «сантехник» найдёт смену, даже если
+      // заказчик назвал её «Замена смесителя».
+      final haystack = '${s.title} ${s.categoryInfo.name} '
+              '${s.company} ${s.address}'
+          .toLowerCase();
       // Все слова запроса должны найтись — но в любом порядке.
       // «грузчик магнум» и «магнум грузчик» дадут одно и то же.
       return query.split(RegExp(r'\s+')).every(haystack.contains);
@@ -196,6 +207,10 @@ List<Shift> applyFilter(List<Shift> shifts, ShiftFilter filter) {
   if (filter.companies.isNotEmpty) {
     result =
         result.where((s) => filter.companies.contains(s.company)).toList();
+  }
+  if (filter.categories.isNotEmpty) {
+    result =
+        result.where((s) => filter.categories.contains(s.category)).toList();
   }
   if (filter.onlyOpen) {
     result = result.where((s) => s.hasFreeSlots).toList();
@@ -211,6 +226,19 @@ List<Shift> applyFilter(List<Shift> shifts, ShiftFilter filter) {
       result.sort((a, b) => a.totalPay.compareTo(b.totalPay));
   }
   return result;
+}
+
+/// Ключи категорий — в том порядке, в каком они стоят в справочнике.
+///
+/// Порядок справочника осмысленный: склад рядом со складом, общепит
+/// рядом с общепитом. По алфавиту «Бариста» оказалась бы между
+/// «Аниматором» и «Водителем», и фильтр читался бы как случайный набор.
+List<String> sortCategories(Iterable<String> ids) {
+  final present = ids.toSet();
+  return [
+    for (final c in kShiftCategories)
+      if (present.contains(c.id)) c.id,
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -246,6 +274,7 @@ class DbShiftRepository implements ShiftRepository {
         id: row.read<int>('id'),
         workDate: row.read<DateTime>('work_date'),
         title: row.read<String>('title'),
+        category: row.read<String>('category'),
         company: row.read<String>('company'),
         address: row.read<String>('address'),
         city: row.read<String>('city'),
@@ -323,6 +352,17 @@ class DbShiftRepository implements ShiftRepository {
       readsFrom: {db.shiftRows},
     ).get();
     return rows.map((r) => r.read<String>('company')).toList();
+  }
+
+  @override
+  Future<List<String>> categories() async {
+    final rows = await db.query(
+      'SELECT DISTINCT category FROM shift_rows '
+      'WHERE city = ? AND cancelled_at IS NULL',
+      variables: [Variable.withString(session.city)],
+      readsFrom: {db.shiftRows},
+    ).get();
+    return sortCategories(rows.map((r) => r.read<String>('category')));
   }
 
   @override
@@ -675,17 +715,19 @@ class DbShiftRepository implements ShiftRepository {
         DateTime(now.year, now.month, now.day - minus);
 
     final history = [
-      (day(3), 'Услуги сотрудника склада', 'Золотое яблоко',
+      (day(3), 'Услуги сотрудника склада', 'warehouse', 'Золотое яблоко',
           'г. Алматы, ул. Султана Бейбарыса, 1', 600, 1320, 110000),
-      (day(9), 'Услуги работника торгового зала', 'Zara',
+      (day(9), 'Услуги работника торгового зала', 'sales_floor', 'Zara',
           'г. Алматы, ул. Розыбакиева, 247А', 600, 1260, 70000),
     ];
 
-    for (final (date, title, company, address, start, end, rate) in history) {
+    for (final (date, title, category, company, address, start, end, rate)
+        in history) {
       final id = await db.into(db.shiftRows).insert(
             ShiftRowsCompanion.insert(
               workDate: date,
               title: title,
+              category: Value(category),
               company: company,
               address: address,
               startMinutes: start,
@@ -721,6 +763,7 @@ class DbShiftRepository implements ShiftRepository {
     required int workersNeeded,
     required int createdBy,
     required String city,
+    String category = kOtherCategory,
     List<String> duties = const [],
     String? dressCode,
     double? minRating,
@@ -729,6 +772,7 @@ class DbShiftRepository implements ShiftRepository {
           ShiftRowsCompanion.insert(
             workDate: workDate,
             title: title,
+            category: Value(category),
             company: company,
             address: address,
             city: Value(city),
@@ -1006,6 +1050,7 @@ class DbShiftRepository implements ShiftRepository {
     required int endMinutes,
     required int hourlyRate,
     required int workersNeeded,
+    String? category,
     List<String> duties = const [],
     String? dressCode,
   }) async {
@@ -1025,6 +1070,7 @@ class DbShiftRepository implements ShiftRepository {
           .write(ShiftRowsCompanion(
         workDate: Value(workDate),
         title: Value(title),
+        category: Value.absentIfNull(category),
         address: Value(address),
         startMinutes: Value(startMinutes),
         endMinutes: Value(endMinutes),
@@ -1192,6 +1238,7 @@ class DbShiftRepository implements ShiftRepository {
             ShiftRowsCompanion.insert(
               workDate: demo.workDate,
               title: demo.title,
+              category: Value(demo.category),
               company: demo.company,
               address: demo.address,
               city: Value(demo.city),

@@ -1,3 +1,4 @@
+import 'package:fastwork_core/category.dart';
 import 'package:fastwork_core/notification.dart';
 import 'package:fastwork_core/review.dart';
 import 'package:fastwork_core/shift.dart';
@@ -65,6 +66,10 @@ class ApiShiftRepository implements ShiftRepository {
       (await client.get('/api/companies') as List<dynamic>).cast<String>();
 
   @override
+  Future<List<String>> categories() async =>
+      (await client.get('/api/categories') as List<dynamic>).cast<String>();
+
+  @override
   Future<Shift?> shiftById(int id) async {
     try {
       final data = await client.get('/api/shifts/$id');
@@ -110,12 +115,14 @@ class ApiShiftRepository implements ShiftRepository {
     required int endMinutes,
     required int hourlyRate,
     required int workersNeeded,
+    String? category,
     List<String> duties = const [],
     String? dressCode,
   }) async =>
       _result(await client.post('/api/shifts/$shiftId', {
         'workDate': workDate.toIso8601String(),
         'title': title,
+        'category': category,
         'address': address,
         'startMinutes': startMinutes,
         'endMinutes': endMinutes,
@@ -181,6 +188,7 @@ class ApiShiftRepository implements ShiftRepository {
     required int workersNeeded,
     required int createdBy,
     required String city,
+    String category = kOtherCategory,
     List<String> duties = const [],
     String? dressCode,
     double? minRating,
@@ -188,6 +196,7 @@ class ApiShiftRepository implements ShiftRepository {
     final data = await client.post('/api/shifts', {
       'workDate': workDate.toIso8601String(),
       'title': title,
+      'category': category,
       'company': company,
       'address': address,
       'city': city,

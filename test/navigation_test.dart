@@ -549,12 +549,46 @@ void main() {
         find.byType(TextField).at(1),
         'г. Алматы, ул. Абая, 10',
       );
+      await tester.tap(find.text('Выберите категорию'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Грузчик'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Опубликовать смену'));
       await tester.pumpAndSettle();
 
-      // Вернулись на список — смена там.
+      // Вернулись на список — смена там, и с категорией.
       expect(find.text('Услуги грузчика'), findsOneWidget);
       expect(find.text('0 / 3'), findsOneWidget);
+      expect((await shifts.shiftsCreatedBy(1)).single.category, 'loader');
+    });
+
+    testWidgets('без категории смену не опубликовать', (tester) async {
+      await openApp(tester, role: UserRole.manager);
+
+      await tester.tap(find.text('Создать'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).at(0), 'Услуги грузчика');
+      await tester.enterText(find.byType(TextField).at(1), 'ул. Абая, 10');
+      await tester.tap(find.text('Опубликовать смену'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Выберите категорию работ'), findsOneWidget);
+    });
+
+    testWidgets('категорию можно найти поиском', (tester) async {
+      await openApp(tester, role: UserRole.manager);
+
+      await tester.tap(find.text('Создать'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Выберите категорию'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).last, 'сант');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Сантехник'), findsOneWidget);
+      expect(find.text('Грузчик'), findsNothing);
     });
 
     testWidgets('пустой адрес не даёт опубликовать смену', (tester) async {

@@ -1,3 +1,4 @@
+import '../category.dart';
 import '../notification.dart';
 import '../review.dart';
 import '../shift.dart';
@@ -76,6 +77,11 @@ class FakeShiftRepository implements ShiftRepository {
       ..sort();
     return names;
   }
+
+  @override
+  Future<List<String>> categories() async => sortCategories(_shifts
+      .where((s) => s.city == city && !_cancelled.contains(s.id))
+      .map((s) => s.category));
 
   @override
   Future<Shift?> shiftById(int id) async {
@@ -201,6 +207,7 @@ class FakeShiftRepository implements ShiftRepository {
     required int workersNeeded,
     required int createdBy,
     required String city,
+    String category = kOtherCategory,
     List<String> duties = const [],
     String? dressCode,
     double? minRating,
@@ -210,6 +217,7 @@ class FakeShiftRepository implements ShiftRepository {
       id: id,
       workDate: workDate,
       title: title,
+      category: category,
       company: company,
       address: address,
       city: city,
@@ -345,6 +353,7 @@ class FakeShiftRepository implements ShiftRepository {
     required int endMinutes,
     required int hourlyRate,
     required int workersNeeded,
+    String? category,
     List<String> duties = const [],
     String? dressCode,
   }) async {
@@ -362,6 +371,7 @@ class FakeShiftRepository implements ShiftRepository {
       id: old.id,
       workDate: workDate,
       title: title,
+      category: category ?? old.category,
       company: old.company,
       address: address,
       city: old.city,

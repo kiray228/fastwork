@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:fastwork_core/category.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
+import 'category_icon.dart';
 
 /// Логотип-надпись. Две части разного цвета — простой приём, который
 /// превращает обычный текст в узнаваемый знак.
@@ -106,6 +108,24 @@ class TagChip extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Ярлык категории работ: значок и название.
+///
+/// Отдельный виджет, а не `TagChip` с параметрами в каждом месте: категорию
+/// показывают карточка, экран смены и форма заказчика, и выглядеть она
+/// должна везде одинаково.
+class CategoryChip extends StatelessWidget {
+  final String category;
+
+  const CategoryChip({super.key, required this.category});
+
+  @override
+  Widget build(BuildContext context) => TagChip(
+        text: categoryById(category).name,
+        icon: categoryIcon(category),
+        color: AppColors.brand,
+      );
 }
 
 /// Белая карточка со скруглением и мягкой тенью — основа всей вёрстки.
