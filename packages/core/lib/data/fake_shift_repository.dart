@@ -1,4 +1,5 @@
 import '../category.dart';
+import '../mrp.dart';
 import '../notification.dart';
 import '../review.dart';
 import '../shift.dart';
@@ -99,6 +100,8 @@ class FakeShiftRepository implements ShiftRepository {
     if (shift.isApplied) return BookingResult.alreadyBooked;
     if (!shift.ratingAllows(userRating)) return BookingResult.ratingTooLow;
     if (!shift.hasFreeSlots) return BookingResult.noSlots;
+    final limit = await earningsLimit(shift.workDate);
+    if (!limit.allows(shift.totalPay)) return BookingResult.earningsLimit;
 
     _myStatuses[shiftId] = ApplicationStatus.active;
     return BookingResult.ok;
@@ -152,6 +155,32 @@ class FakeShiftRepository implements ShiftRepository {
         .where((s) => _myStatuses[s.id] == ApplicationStatus.completed)
         .map(_decorate)
         .toList();
+  }
+
+  /// Значения МРП. Тесты могут подставить свои — например, крошечный МРП,
+  /// чтобы упереться в лимит одной сменой.
+  List<MrpRate> mrpRates = kMrpHistory;
+
+  @override
+  Future<EarningsLimit> earningsLimit(DateTime month) async {
+    final from = monthOf(month);
+    final mine = _shifts
+        .where((s) =>
+            s.workDate.year == from.year &&
+            s.workDate.month == from.month &&
+            !_cancelled.contains(s.id))
+        .map(_decorate);
+    return EarningsLimit(
+      month: from,
+      earned: mine
+          .where((s) => s.isCompleted)
+          .fold(0, (sum, s) => sum + s.totalPay),
+      booked: mine
+          .where((s) => s.isApplied)
+          .fold(0, (sum, s) => sum + s.totalPay),
+      limit: monthlyEarningsLimit(from, mrpRates),
+      mrp: mrpOn(DateTime(from.year, 1, 1), mrpRates),
+    );
   }
 
   @override

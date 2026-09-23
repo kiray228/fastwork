@@ -1,4 +1,5 @@
 import 'package:fastwork_core/category.dart';
+import 'package:fastwork_core/mrp.dart';
 import 'package:fastwork_core/notification.dart';
 import 'package:fastwork_core/review.dart';
 import 'package:fastwork_core/shift.dart';
@@ -148,6 +149,12 @@ class ApiShiftRepository implements ShiftRepository {
   @override
   Future<List<Shift>> completedShifts() async =>
       _shifts(await client.get('/api/my-shifts/completed'));
+
+  @override
+  Future<EarningsLimit> earningsLimit(DateTime month) async =>
+      EarningsLimit.fromJson(await client.get('/api/me/limit', {
+        'month': _day(monthOf(month)),
+      }) as Map<String, dynamic>);
 
   @override
   Future<CompanyInfo> companyInfo(String company) async {

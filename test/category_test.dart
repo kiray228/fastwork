@@ -7,6 +7,7 @@ import 'package:fastwork_core/data/fake_shift_repository.dart';
 import 'package:fastwork_core/data/shift_filter.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/shift.dart';
+import 'package:fastwork_core/terms.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Категории работ: справочник, фильтр, поиск и хранение в базе.
@@ -108,6 +109,7 @@ void main() {
         phone: '77000000001',
         fullName: 'Айгуль Досова',
         city: 'Алматы',
+        acceptedTermsVersion: kTermsVersion,
         role: UserRole.manager,
         company: 'Magnum',
       );

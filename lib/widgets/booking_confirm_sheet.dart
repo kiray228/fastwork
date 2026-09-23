@@ -150,6 +150,11 @@ class _BookingConfirmSheetState extends State<_BookingConfirmSheet> {
                       : 'Вознаграждение поступит через '
                           '${shift.payoutDelayDays} дня после смены.',
                 ),
+                const _Term(
+                  icon: Icons.account_balance_rounded,
+                  text: 'Доход через сервис — не больше 300 МРП в месяц. '
+                      'Если эта смена превысит лимит, запись не пройдёт.',
+                ),
                 if (shift.dressCode != null)
                   _Term(
                     icon: Icons.checkroom_rounded,

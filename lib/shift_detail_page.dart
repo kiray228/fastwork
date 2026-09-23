@@ -72,6 +72,9 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
         BookingResult.alreadyBooked => 'Вы уже записаны на эту смену',
         BookingResult.ratingTooLow =>
           'Ваш рейтинг ниже требуемого для этой смены',
+        BookingResult.earningsLimit =>
+          'С этой сменой доход за месяц превысит 300 МРП — '
+              'это предел для платформенной занятости',
         _ => 'Не получилось записаться',
       },
     );

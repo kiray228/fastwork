@@ -1,12 +1,14 @@
 import 'package:drift/drift.dart';
 
 import '../category.dart';
+import '../mrp.dart';
 import '../notification.dart';
 import '../review.dart';
 import '../user.dart';
 import '../shift.dart';
 import 'database.dart';
 import 'current_user.dart';
+import 'mrp_store.dart';
 import 'shift_filter.dart';
 
 /// Чем закончилась попытка записаться или отменить запись.
@@ -23,6 +25,7 @@ enum BookingResult {
   notMine, // чужую смену отменить или изменить нельзя
   alreadyCancelled, // смена уже отменена
   fewerThanHired, // мест меньше, чем уже набрано людей
+  earningsLimit, // с этой сменой доход за месяц превысит 300 МРП
   notFound,
 }
 
@@ -63,6 +66,10 @@ abstract class ShiftRepository {
 
   /// Отработанные смены — из них складывается заработок.
   Future<List<Shift>> completedShifts();
+
+  /// Сколько текущий исполнитель заработал и набрал записей за месяц —
+  /// и сколько ему можно по лимиту в 300 МРП.
+  Future<EarningsLimit> earningsLimit(DateTime month);
 
   /// Сводка по компании: описание, средняя оценка, отзывы.
   Future<CompanyInfo> companyInfo(String company);
@@ -393,6 +400,11 @@ class DbShiftRepository implements ShiftRepository {
       }
       if (!shift.hasFreeSlots) return BookingResult.noSlots;
 
+      // Лимит дохода проверяем здесь же, внутри транзакции записи: иначе
+      // две записи подряд обе увидели бы «лимит ещё не достигнут».
+      final limit = await earningsLimit(shift.workDate);
+      if (!limit.allows(shift.totalPay)) return BookingResult.earningsLimit;
+
       final existing = await (db.select(db.applicationRows)
             ..where((a) =>
                 a.shiftId.equals(shiftId) & a.workerId.equals(_workerId)))
@@ -515,6 +527,43 @@ class DbShiftRepository implements ShiftRepository {
     ).get();
 
     return rows.map(_toShift).toList();
+  }
+
+  @override
+  Future<EarningsLimit> earningsLimit(DateTime month) async {
+    final from = monthOf(month);
+    final to = DateTime(from.year, from.month + 1);
+
+    // Суммы складываем в Dart, а не через SUM в SQL: сумма за смену
+    // вычисляется формулой из модели (ставка, длительность, обед), и
+    // повторять её в запросе значило бы держать правило в двух местах.
+    final rows = await db.query(
+      '''
+      SELECT s.*, $_hiredSql, $_mineSql
+      FROM application_rows a
+      JOIN shift_rows s ON s.id = a.shift_id
+      WHERE a.worker_id = $_workerId
+        AND a.status IN ('active', 'completed')
+        AND s.cancelled_at IS NULL
+        AND s.work_date >= ? AND s.work_date < ?
+      ''',
+      variables: [Variable.withDateTime(from), Variable.withDateTime(to)],
+      readsFrom: {db.shiftRows, db.applicationRows},
+    ).get();
+
+    final shifts = rows.map(_toShift);
+    final rates = await MrpStore(db).rates();
+    return EarningsLimit(
+      month: from,
+      earned: shifts
+          .where((s) => s.isCompleted)
+          .fold(0, (sum, s) => sum + s.totalPay),
+      booked: shifts
+          .where((s) => s.isApplied)
+          .fold(0, (sum, s) => sum + s.totalPay),
+      limit: monthlyEarningsLimit(from, rates),
+      mrp: mrpOn(DateTime(from.year, 1, 1), rates),
+    );
   }
 
   @override

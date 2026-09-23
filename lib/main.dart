@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth/register_page.dart';
+import 'auth/terms_page.dart';
 import 'data/api_auth_repository.dart';
 import 'data/api_client.dart';
 import 'data/api_shift_repository.dart';
@@ -143,9 +144,17 @@ class _AuthGate extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: session,
-      builder: (context, _) => session.isSignedIn
-          ? HomeShell(session: session, repos: repos)
-          : RegisterPage(session: session, auth: repos.auth),
+      builder: (context, _) {
+        final user = session.user;
+        if (user == null) {
+          return RegisterPage(session: session, auth: repos.auth);
+        }
+        // Вошёл, но действующие правила не принимал — сначала они.
+        if (!user.hasAcceptedTerms) {
+          return TermsGatePage(session: session, auth: repos.auth);
+        }
+        return HomeShell(session: session, repos: repos);
+      },
     );
   }
 }

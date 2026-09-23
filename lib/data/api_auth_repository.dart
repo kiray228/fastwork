@@ -81,6 +81,7 @@ class ApiAuthRepository implements AuthRepository {
     required String phone,
     required String fullName,
     required String city,
+    required int acceptedTermsVersion,
     String? email,
     String role = UserRole.worker,
     String? company,
@@ -93,6 +94,7 @@ class ApiAuthRepository implements AuthRepository {
       'city': city,
       'role': role,
       'company': company,
+      'acceptedTermsVersion': acceptedTermsVersion,
     }) as Map<String, dynamic>;
 
     client.token = data['token'] as String;
@@ -111,6 +113,11 @@ class ApiAuthRepository implements AuthRepository {
     client.token = null;
     await writeToken(null);
   }
+
+  @override
+  Future<AppUser?> acceptTerms(int userId) async => userFromJson(
+        await client.post('/api/me/accept-terms') as Map<String, dynamic>,
+      );
 
   @override
   Future<AppUser?> changeCity(int userId, String city) async => userFromJson(

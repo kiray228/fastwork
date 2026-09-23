@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'auth/terms_page.dart';
 import 'data/repositories.dart';
 import 'data/session.dart';
 import 'documents_page.dart';
@@ -173,6 +174,13 @@ class ProfilePage extends StatelessWidget {
                   title: 'Город',
                   trailing: user.city,
                   onTap: () => _changeCity(context),
+                ),
+                _MenuRow(
+                  icon: Icons.gavel_rounded,
+                  title: 'Правила сервиса',
+                  onTap: () => Navigator.of(context).push(
+                    appRoute(const TermsPage()),
+                  ),
                 ),
                 _MenuRow(
                   icon: Icons.chat_bubble_outline_rounded,

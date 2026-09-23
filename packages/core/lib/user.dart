@@ -1,3 +1,5 @@
+import 'terms.dart';
+
 /// Пользователь приложения.
 class AppUser {
   final int id;
@@ -27,6 +29,9 @@ class AppUser {
   /// в состоянии «не вышел».
   final int noShows;
 
+  /// Какую версию правил сервиса человек принял. 0 — никакую.
+  final int termsVersion;
+
   const AppUser({
     required this.id,
     required this.phone,
@@ -40,7 +45,12 @@ class AppUser {
     this.completedShifts = 0,
     this.ratingCount = 0,
     this.noShows = 0,
+    this.termsVersion = 0,
   });
+
+  /// Принял ли человек **действующие** правила. Согласие со старой версией
+  /// не считается: условия могли поменяться.
+  bool get hasAcceptedTerms => termsVersion >= kTermsVersion;
 
   bool get isManager => role == 'manager';
 
@@ -89,6 +99,7 @@ class AppUser {
     double? rating,
     bool? isVerified,
     int? ratingCount,
+    int? termsVersion,
   }) =>
       AppUser(
         id: id,
@@ -102,6 +113,8 @@ class AppUser {
         company: company,
         completedShifts: completedShifts ?? this.completedShifts,
         ratingCount: ratingCount ?? this.ratingCount,
+        noShows: noShows,
+        termsVersion: termsVersion ?? this.termsVersion,
       );
 }
 
@@ -153,6 +166,7 @@ extension AppUserJson on AppUser {
         'completedShifts': completedShifts,
         'ratingCount': ratingCount,
         'noShows': noShows,
+        'termsVersion': termsVersion,
       };
 }
 
@@ -169,6 +183,7 @@ AppUser userFromJson(Map<String, dynamic> json) => AppUser(
       completedShifts: json['completedShifts'] as int? ?? 0,
       ratingCount: json['ratingCount'] as int? ?? 0,
       noShows: json['noShows'] as int? ?? 0,
+      termsVersion: json['termsVersion'] as int? ?? 0,
     );
 
 extension ShiftApplicantJson on ShiftApplicant {

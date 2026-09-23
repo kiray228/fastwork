@@ -91,6 +91,35 @@ class UserRows extends Table {
   TextColumn get company => text().nullable()();
 
   DateTimeColumn get createdAt => dateTime()();
+
+  /// Какую версию правил человек принял. 0 — никакую: так у аккаунтов,
+  /// заведённых до появления правил. Добавлена в двенадцатой версии.
+  IntColumn get termsVersion => integer().withDefault(const Constant(0))();
+
+  /// Когда принял. Хранить момент, а не галочку, — то же правило, что и
+  /// с отметкой о выходе: из времени галочку получить можно, наоборот нет.
+  /// А при споре «я ни с чем не соглашался» время — единственный довод.
+  DateTimeColumn get termsAcceptedAt => dateTime().nullable()();
+}
+
+/// Значения МРП.
+///
+/// Отдельная таблица, а не константа в коде, потому что МРП меняется
+/// каждый год, а выпускать ради этого новую версию приложения — глупо.
+/// Приняли бюджет — добавили строку, и лимит на сервере пересчитался сам.
+///
+/// В коде тоже есть список (`kMrpHistory`) — запасной, на случай работы
+/// без сервера. Строка из таблицы важнее строки из кода с той же датой.
+class MrpRateRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+
+  /// С какого дня действует.
+  DateTimeColumn get validFrom => dateTime().unique()();
+
+  /// Один МРП в тиынах.
+  IntColumn get amount => integer()();
+
+  DateTimeColumn get createdAt => dateTime()();
 }
 
 /// Роли пользователей.
@@ -378,6 +407,7 @@ class NotificationRows extends Table {
     AuthCodeRows,
     AuthTokenRows,
     NotificationRows,
+    MrpRateRows,
   ],
 )
 /// Описание базы: какие таблицы и какой версии схема.
@@ -486,7 +516,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -538,6 +568,11 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 11) {
             await addColumnIfMissing(m, shiftRows, shiftRows.category);
+          }
+          if (from < 12) {
+            await addColumnIfMissing(m, userRows, userRows.termsVersion);
+            await addColumnIfMissing(m, userRows, userRows.termsAcceptedAt);
+            await m.createTable(mrpRateRows);
           }
         },
         beforeOpen: (details) async {

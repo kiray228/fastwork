@@ -9,6 +9,9 @@ import 'package:fastwork_core/data/current_user.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/data/support_repository.dart';
 import 'package:fastwork_core/category.dart';
+import 'package:fastwork_core/errors.dart';
+import 'package:fastwork_core/data/mrp_store.dart';
+import 'package:fastwork_core/mrp.dart';
 import 'package:fastwork_core/support.dart';
 import 'package:fastwork_core/notification.dart';
 import 'package:fastwork_core/review.dart';
@@ -32,7 +35,12 @@ class Api {
   final AppDatabase db;
   final AuthService auth;
 
-  Api(this.db, CodeSender sender) : auth = AuthService(db, sender);
+  /// Ключ для служебных адресов — например, чтобы записать новый МРП.
+  /// Пустой — служебные адреса выключены совсем.
+  final String adminKey;
+
+  Api(this.db, CodeSender sender, {this.adminKey = ''})
+      : auth = AuthService(db, sender);
 
   /// Найти пользователя по почте — нужно после ввода кода.
   Future<AppUser?> _userByEmail(String email) async {
@@ -224,14 +232,22 @@ class Api {
         return _error('Этот номер уже зарегистрирован');
       }
 
-      final user = await repository.register(
-        phone: phone,
-        email: info.email,
-        fullName: fullName,
-        city: body['city'] as String? ?? 'Алматы',
-        role: body['role'] as String? ?? UserRole.worker,
-        company: body['company'] as String?,
-      );
+      final AppUser user;
+      try {
+        user = await repository.register(
+          phone: phone,
+          email: info.email,
+          fullName: fullName,
+          city: body['city'] as String? ?? 'Алматы',
+          role: body['role'] as String? ?? UserRole.worker,
+          company: body['company'] as String?,
+          // Старое приложение этого поля не шлёт — значит, правил человек
+          // не видел, и аккаунт без них не создаём.
+          acceptedTermsVersion: body['acceptedTermsVersion'] as int? ?? 0,
+        );
+      } on UserError catch (e) {
+        return _error(e.message);
+      }
 
       // Теперь токен принадлежит созданному аккаунту.
       await auth.bind(token, user.id);
@@ -248,6 +264,58 @@ class Api {
 
     router.get('/api/me', (Request request) async {
       return _authorized(request, (user) async => _json(user.toJson()));
+    });
+
+    router.post('/api/me/accept-terms', (Request request) async {
+      return _authorized(request, (user) async {
+        final updated = await DbAuthRepository(db).acceptTerms(user.id);
+        return _json(updated!.toJson());
+      });
+    });
+
+    router.get('/api/me/limit', (Request request) async {
+      return _authorized(request, (user) async {
+        final raw = request.url.queryParameters['month'];
+        final month = raw == null ? DateTime.now() : DateTime.parse(raw);
+        final limit = await _shiftsFor(user).earningsLimit(month);
+        return _json(limit.toJson());
+      });
+    });
+
+    // --- МРП ---------------------------------------------------------------
+    //
+    // Посмотреть может кто угодно: это не секрет, а цифра из закона.
+    router.get('/api/mrp', (Request request) async {
+      final rates = await MrpStore(db).rates();
+      return _json({
+        'current': mrpOn(DateTime.now(), rates),
+        'limitMrp': kEarningsLimitMrp,
+        'monthlyLimit': monthlyEarningsLimit(DateTime.now(), rates),
+        'rates': rates.map((r) => r.toJson()).toList(),
+      });
+    });
+
+    // А записать новое значение — только по служебному ключу.
+    //
+    // Отдельной роли «администратор» в приложении нет, и заводить её ради
+    // одной цифры в год незачем. Ключ задаётся переменной окружения
+    // ADMIN_KEY на хостинге и в код не попадает.
+    //
+    //   curl -X POST https://…/api/admin/mrp \
+    //     -H 'X-Admin-Key: …' \
+    //     -d '{"validFrom": "2027-01-01", "tenge": 4700}'
+    router.post('/api/admin/mrp', (Request request) async {
+      if (adminKey.isEmpty || request.headers['x-admin-key'] != adminKey) {
+        return _error('Нет доступа', status: 403);
+      }
+      final body = await _body(request);
+      final validFrom = DateTime.tryParse(body['validFrom'] as String? ?? '');
+      final tenge = body['tenge'] as int? ?? 0;
+      if (validFrom == null) return _error('Укажите дату validFrom');
+      if (tenge <= 0) return _error('Укажите МРП в тенге');
+
+      await MrpStore(db).setRate(validFrom, tenge * 100);
+      return _json({'ok': true});
     });
 
     router.post('/api/me/city', (Request request) async {

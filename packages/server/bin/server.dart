@@ -39,7 +39,11 @@ Future<void> main(List<String> args) async {
   final handler = const Pipeline()
       .addMiddleware(logRequests())
       .addMiddleware(_cors)
-      .addHandler(Api(db, sender).router.call);
+      .addHandler(Api(
+        db,
+        sender,
+        adminKey: Platform.environment['ADMIN_KEY'] ?? '',
+      ).router.call);
 
   // InternetAddress.anyIPv4 — «слушать все сетевые интерфейсы».
   // На localhost хватило бы и loopback, но в облаке запрос приходит
@@ -81,5 +85,5 @@ Middleware get _cors => (innerHandler) {
 const _corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Key',
 };

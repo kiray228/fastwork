@@ -6,6 +6,7 @@ import 'package:fastwork/data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/notification.dart';
 import 'package:fastwork_core/shift.dart';
+import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_core/user.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -47,6 +48,7 @@ void main() {
       phone: '7700000000${daysBack}1',
       fullName: 'Айгуль Досова',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
       role: UserRole.manager,
       company: 'Magnum',
     );
@@ -54,6 +56,7 @@ void main() {
       phone: '7700000000${daysBack}2',
       fullName: 'Ернар Калдыбеков',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
     );
 
     final shiftId = await shifts.createShift(
@@ -91,6 +94,7 @@ void main() {
       phone: '7701000000$seq',
       fullName: 'Айгуль Досова',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
       role: UserRole.manager,
       company: 'Magnum',
     );
@@ -98,6 +102,7 @@ void main() {
       phone: '7702000000$seq',
       fullName: 'Азамат Серик',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
     );
 
     session.setUser(manager);
@@ -267,6 +272,7 @@ void main() {
       phone: '77000000501',
       fullName: 'Айгуль Досова',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
       role: UserRole.manager,
       company: 'Magnum',
     );
@@ -274,6 +280,7 @@ void main() {
       phone: '77000000502',
       fullName: 'Ернар Калдыбеков',
       city: 'Астана',
+      acceptedTermsVersion: kTermsVersion,
     );
 
     final today = daysAgo(0);
@@ -314,6 +321,7 @@ void main() {
       phone: '77000000601',
       fullName: 'Айгуль Досова',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
       role: UserRole.manager,
       company: 'Magnum',
     );
@@ -321,6 +329,7 @@ void main() {
       phone: '77000000602',
       fullName: 'Ернар Калдыбеков',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
     );
 
     // Смена идёт прямо сейчас — иначе отметка была бы закрыта по времени.
@@ -449,6 +458,7 @@ void main() {
       phone: '77039990001',
       fullName: 'Данияр Ким',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
     );
     session.setUser(other);
     expect(await shifts.apply(shiftId), BookingResult.alreadyCancelled);
@@ -538,6 +548,7 @@ void main() {
       phone: '77045550001',
       fullName: 'Чужой Заказчик',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
       role: UserRole.manager,
       company: 'Small',
     );
@@ -557,6 +568,7 @@ void main() {
       phone: '77045550002',
       fullName: 'Чужой Заказчик',
       city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
       role: UserRole.manager,
       company: 'Small',
     );

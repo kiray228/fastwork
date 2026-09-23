@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:fastwork_core/data/shift_repository.dart';
+import 'package:fastwork_core/mrp.dart';
 import 'package:fastwork_core/shift.dart';
 import 'theme/app_colors.dart';
 import 'widgets/async_state.dart';
@@ -27,6 +28,10 @@ class WalletPage extends StatefulWidget {
 class _WalletPageState extends State<WalletPage> {
   Async<List<Shift>> state = const Loading();
 
+  /// Лимит месяца. Грузится отдельно: не узнали его — кошелёк всё равно
+  /// покажет начисления, просто без полоски.
+  EarningsLimit? limit;
+
   @override
   void initState() {
     super.initState();
@@ -37,6 +42,13 @@ class _WalletPageState extends State<WalletPage> {
     final result = await load(widget.repository.completedShifts);
     if (!mounted) return;
     setState(() => state = result);
+
+    try {
+      final loaded = await widget.repository.earningsLimit(DateTime.now());
+      if (mounted) setState(() => limit = loaded);
+    } catch (_) {
+      // Без лимита кошелёк всё равно полезен.
+    }
   }
 
   void _notImplemented() {
@@ -78,6 +90,10 @@ class _WalletPageState extends State<WalletPage> {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
               children: [
                 _BalanceCard(total: total, onWithdraw: _notImplemented),
+                if (limit != null) ...[
+                  const SizedBox(height: 14),
+                  EarningsLimitCard(limit: limit!),
+                ],
                 const SizedBox(height: 14),
                 const _DemoNotice(),
                 const SizedBox(height: 14),
@@ -256,6 +272,79 @@ class _EarningRow extends StatelessWidget {
               fontSize: 14,
               fontWeight: FontWeight.w800,
               color: AppColors.brand,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Сколько осталось до лимита в 300 МРП за месяц.
+///
+/// Показываем заранее, а не только отказом при записи: человек, который
+/// видит «осталось 40 000 ₸», сам не станет записываться на смену за
+/// 60 000 — и не наткнётся на отказ в последний момент.
+class EarningsLimitCard extends StatelessWidget {
+  final EarningsLimit limit;
+
+  const EarningsLimitCard({super.key, required this.limit});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final nearlyFull = limit.fraction >= 0.85;
+    final color = nearlyFull ? AppColors.accent : AppColors.brand;
+
+    return SurfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(
+            icon: Icons.account_balance_rounded,
+            title: 'Лимит за ${formatMonth(limit.month)}',
+          ),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Flexible(
+                child: Text(
+                  formatMoney(limit.used),
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontSize: 20),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'из ${formatMoney(limit.limit)}',
+                style: const TextStyle(fontSize: 13, color: AppColors.muted),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: limit.fraction,
+              minHeight: 8,
+              backgroundColor: isDark ? AppColors.darkBorder : AppColors.border,
+              valueColor: AlwaysStoppedAnimation(color),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Осталось ${formatMoney(limit.remaining)}. '
+            'Лимит — $kEarningsLimitMrp МРП, один МРП в этом году '
+            '${formatMoney(limit.mrp)}. В счёт идут и отработанные смены, '
+            'и те, на которые вы записаны.',
+            style: const TextStyle(
+              fontSize: 12.5,
+              color: AppColors.muted,
+              height: 1.4,
             ),
           ),
         ],

@@ -1,5 +1,7 @@
 import 'package:drift/drift.dart';
 
+import '../errors.dart';
+import '../terms.dart';
 import '../user.dart';
 import 'database.dart';
 
@@ -34,14 +36,23 @@ abstract class AuthRepository {
   Future<AppUser?> findByPhone(String phone);
 
   /// Создать нового пользователя и сразу войти под ним.
+  ///
+  /// `acceptedTermsVersion` — какую версию правил человек принял на экране
+  /// регистрации. Без действующей версии аккаунт не создаётся: согласие
+  /// с правилами — условие работы, а не галочка для вида.
   Future<AppUser> register({
     required String phone,
     required String fullName,
     required String city,
+    required int acceptedTermsVersion,
     String? email,
     String role = UserRole.worker,
     String? company,
   });
+
+  /// Принять действующие правила — для тех, кто зарегистрировался раньше,
+  /// чем они появились или поменялись.
+  Future<AppUser?> acceptTerms(int userId);
 
   /// Запомнить, что вошёл этот пользователь.
   Future<void> signIn(AppUser user);
@@ -139,6 +150,7 @@ class DbAuthRepository implements AuthRepository {
       company: row.company,
       completedShifts: rows.first.read<int>('c'),
       noShows: rows.first.read<int>('missed'),
+      termsVersion: row.termsVersion,
     );
   }
 
@@ -175,10 +187,13 @@ class DbAuthRepository implements AuthRepository {
     required String phone,
     required String fullName,
     required String city,
+    required int acceptedTermsVersion,
     String? email,
     String role = UserRole.worker,
     String? company,
   }) async {
+    requireCurrentTerms(acceptedTermsVersion);
+    final now = DateTime.now();
     final id = await db.into(db.userRows).insert(
           UserRowsCompanion.insert(
             phone: phone,
@@ -187,13 +202,25 @@ class DbAuthRepository implements AuthRepository {
             city: city,
             role: Value(role),
             company: Value(company),
-            createdAt: DateTime.now(),
+            createdAt: now,
+            termsVersion: Value(acceptedTermsVersion),
+            termsAcceptedAt: Value(now),
           ),
         );
 
     final user = (await refresh(id))!;
     await signIn(user);
     return user;
+  }
+
+  @override
+  Future<AppUser?> acceptTerms(int userId) async {
+    await (db.update(db.userRows)..where((u) => u.id.equals(userId)))
+        .write(UserRowsCompanion(
+      termsVersion: const Value(kTermsVersion),
+      termsAcceptedAt: Value(DateTime.now()),
+    ));
+    return refresh(userId);
   }
 
   @override
@@ -293,10 +320,12 @@ class FakeAuthRepository implements AuthRepository {
     required String phone,
     required String fullName,
     required String city,
+    required int acceptedTermsVersion,
     String? email,
     String role = UserRole.worker,
     String? company,
   }) async {
+    requireCurrentTerms(acceptedTermsVersion);
     final user = AppUser(
       id: _nextId++,
       phone: phone,
@@ -307,6 +336,7 @@ class FakeAuthRepository implements AuthRepository {
       isVerified: false,
       role: role,
       company: company,
+      termsVersion: acceptedTermsVersion,
     );
     _users.add(user);
     _current = user;
@@ -321,6 +351,7 @@ class FakeAuthRepository implements AuthRepository {
       final updated = AppUser(
         id: old.id,
         phone: old.phone,
+        email: old.email,
         fullName: old.fullName,
         city: city,
         rating: old.rating,
@@ -329,6 +360,8 @@ class FakeAuthRepository implements AuthRepository {
         company: old.company,
         completedShifts: old.completedShifts,
         ratingCount: old.ratingCount,
+        noShows: old.noShows,
+        termsVersion: old.termsVersion,
       );
       _users[i] = updated;
       if (_current?.id == userId) _current = updated;
@@ -338,8 +371,33 @@ class FakeAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<AppUser?> acceptTerms(int userId) async {
+    for (var i = 0; i < _users.length; i++) {
+      if (_users[i].id != userId) continue;
+      _users[i] = _users[i].copyWith(termsVersion: kTermsVersion);
+      if (_current?.id == userId) _current = _users[i];
+      return _users[i];
+    }
+    return null;
+  }
+
+  @override
   Future<void> signIn(AppUser user) async => _current = user;
 
   @override
   Future<void> signOut() async => _current = null;
+}
+
+/// Отказ создать аккаунт без согласия с действующими правилами.
+///
+/// Проверка стоит в хранилище, а не только на экране: галочку на экране
+/// можно обойти, отправив запрос напрямую, а хранилище обойти нельзя.
+void requireCurrentTerms(int acceptedVersion) {
+  if (acceptedVersion < kTermsVersion) {
+    throw TermsNotAccepted();
+  }
+}
+
+class TermsNotAccepted extends UserError {
+  TermsNotAccepted() : super('Чтобы продолжить, примите правила сервиса');
 }

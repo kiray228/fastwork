@@ -11,8 +11,11 @@ import 'package:fastwork/data/repositories.dart';
 import 'package:fastwork/data/session.dart';
 import 'package:fastwork_core/data/shift_filter.dart';
 import 'package:fastwork_core/data/support_repository.dart';
+import 'package:fastwork_core/mrp.dart';
+import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/notification.dart';
 import 'package:fastwork_core/shift.dart';
+import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_core/user.dart';
 import 'package:fastwork/widgets/skeleton.dart';
 
@@ -32,6 +35,7 @@ void main() {
         isVerified: false,
         role: role,
         company: role == UserRole.manager ? 'Magnum' : null,
+        termsVersion: kTermsVersion,
       );
 
   AppRepositories buildRepos({
@@ -106,11 +110,71 @@ void main() {
       expect(find.text('Введите номер телефона полностью'), findsOneWidget);
     });
 
+    testWidgets('без согласия с правилами аккаунт не создаётся',
+        (tester) async {
+      await openAppSignedOut(tester);
+
+      await tester.enterText(find.byType(TextField).at(0), '77001234567');
+      await tester.enterText(find.byType(TextField).at(1), 'Ернар Калдыбеков');
+      await tester.tap(find.text('Начать работать'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Чтобы продолжить, примите правила сервиса'),
+          findsOneWidget);
+      expect(find.text('Подробнее'), findsNothing);
+    });
+
+    testWidgets('правила открываются по ссылке у галочки', (tester) async {
+      await openAppSignedOut(tester);
+
+      await tester.tap(find.text('правила сервиса'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Правила сервиса fastwork'), findsOneWidget);
+      expect(find.text('4. Лимит дохода — 300 МРП в месяц'), findsOneWidget);
+    });
+
+    testWidgets('кто не принимал правила, сначала видит их', (tester) async {
+      useTallPhone(tester);
+      // Аккаунт из времён до правил: версия согласия — ноль.
+      final old = testUser().copyWith(termsVersion: 0);
+      final session = AppSession()..setUser(old);
+      final auth = FakeAuthRepository(signedIn: old);
+      await tester.pumpWidget(FastworkApp(
+        session: session,
+        repos: AppRepositories(
+          shifts: FakeShiftRepository(),
+          auth: auth,
+          documents: FakeDocumentRepository(),
+          support: FakeSupportRepository(),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Принимаю'), findsOneWidget);
+      expect(find.text('Подробнее'), findsNothing);
+
+      // Кнопка не работает, пока нет галочки.
+      final accept = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Принимаю'),
+      );
+      expect(accept.onPressed, isNull);
+
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Принимаю'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Подробнее'), findsWidgets);
+      expect(session.user!.hasAcceptedTerms, isTrue);
+    });
+
     testWidgets('регистрация открывает ленту смен', (tester) async {
       await openAppSignedOut(tester);
 
       await tester.enterText(find.byType(TextField).at(0), '77001234567');
       await tester.enterText(find.byType(TextField).at(1), 'Ернар Калдыбеков');
+      await tester.tap(find.byType(Checkbox));
       await tester.tap(find.text('Начать работать'));
       await tester.pumpAndSettle();
 
@@ -226,6 +290,7 @@ void main() {
 
       await tester.enterText(find.byType(TextField).at(0), '77001234567');
       await tester.enterText(find.byType(TextField).at(1), 'Ернар Калдыбеков');
+      await tester.tap(find.byType(Checkbox));
       await tester.tap(find.text('Начать работать'));
       await tester.pumpAndSettle();
 
@@ -382,6 +447,47 @@ void main() {
     });
   });
 
+  group('лимит 300 МРП', () {
+    testWidgets('смена сверх лимита не записывает и объясняет почему',
+        (tester) async {
+      // Обе смены сегодня: так они наверняка в одном месяце, в какой бы
+      // день ни запустили тест. Каждая — 12 100 ₸.
+      final now = DateTime.now();
+      Shift today(int id, String title) => Shift(
+            id: id,
+            workDate: DateTime(now.year, now.month, now.day),
+            title: title,
+            company: 'Magnum',
+            address: 'ул. Абая, 1',
+            startMinutes: 600,
+            endMinutes: 1320,
+            hourlyRate: 110000,
+            workersNeeded: 5,
+            workersHired: 0,
+          );
+
+      // МРП в 50 ₸ — лимит 15 000 ₸: одна смена помещается, вторая нет.
+      final repo = FakeShiftRepository(
+        userRating: 5.0,
+        shifts: [today(1, 'Первая смена'), today(2, 'Вторая смена')],
+      )..mrpRates = [MrpRate(validFrom: DateTime(2020), amount: 5000)];
+      expect(await repo.apply(1), BookingResult.ok);
+
+      await openApp(tester, rating: 5.0, shifts: repo);
+      await tester.tap(find.text('Вторая смена'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Записаться на смену'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подтверждаю'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('превысит 300 МРП'), findsOneWidget);
+      expect((await repo.shiftById(2))!.isApplied, isFalse);
+    });
+  });
+
   group('рейтинг как допуск', () {
     testWidgets('смена с порогом 4.5 закрыта при рейтинге 4.0',
         (tester) async {
@@ -427,7 +533,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Заработано всего'), findsOneWidget);
-      expect(find.text('12 100 ₸'), findsOneWidget);
+      // Сумма видна и в балансе, и в лимите месяца — если смена
+      // пришлась на этот месяц.
+      expect(find.text('12 100 ₸'), findsWidgets);
+      expect(find.textContaining('Лимит за'), findsOneWidget);
       expect(
         find.textContaining('операций с деньгами приложение не проводит'),
         findsOneWidget,

@@ -1668,6 +1668,30 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _termsVersionMeta = const VerificationMeta(
+    'termsVersion',
+  );
+  @override
+  late final GeneratedColumn<int> termsVersion = GeneratedColumn<int>(
+    'terms_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _termsAcceptedAtMeta = const VerificationMeta(
+    'termsAcceptedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> termsAcceptedAt =
+      GeneratedColumn<DateTime>(
+        'terms_accepted_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1680,6 +1704,8 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
     role,
     company,
     createdAt,
+    termsVersion,
+    termsAcceptedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1758,6 +1784,24 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('terms_version')) {
+      context.handle(
+        _termsVersionMeta,
+        termsVersion.isAcceptableOrUnknown(
+          data['terms_version']!,
+          _termsVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('terms_accepted_at')) {
+      context.handle(
+        _termsAcceptedAtMeta,
+        termsAcceptedAt.isAcceptableOrUnknown(
+          data['terms_accepted_at']!,
+          _termsAcceptedAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1807,6 +1851,14 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      termsVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}terms_version'],
+      )!,
+      termsAcceptedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}terms_accepted_at'],
+      ),
     );
   }
 
@@ -1842,6 +1894,15 @@ class UserRow extends DataClass implements Insertable<UserRow> {
   /// Название компании для менеджера. У исполнителя пусто.
   final String? company;
   final DateTime createdAt;
+
+  /// Какую версию правил человек принял. 0 — никакую: так у аккаунтов,
+  /// заведённых до появления правил. Добавлена в двенадцатой версии.
+  final int termsVersion;
+
+  /// Когда принял. Хранить момент, а не галочку, — то же правило, что и
+  /// с отметкой о выходе: из времени галочку получить можно, наоборот нет.
+  /// А при споре «я ни с чем не соглашался» время — единственный довод.
+  final DateTime? termsAcceptedAt;
   const UserRow({
     required this.id,
     required this.phone,
@@ -1853,6 +1914,8 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     required this.role,
     this.company,
     required this.createdAt,
+    required this.termsVersion,
+    this.termsAcceptedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1871,6 +1934,10 @@ class UserRow extends DataClass implements Insertable<UserRow> {
       map['company'] = Variable<String>(company);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    map['terms_version'] = Variable<int>(termsVersion);
+    if (!nullToAbsent || termsAcceptedAt != null) {
+      map['terms_accepted_at'] = Variable<DateTime>(termsAcceptedAt);
+    }
     return map;
   }
 
@@ -1890,6 +1957,10 @@ class UserRow extends DataClass implements Insertable<UserRow> {
           ? const Value.absent()
           : Value(company),
       createdAt: Value(createdAt),
+      termsVersion: Value(termsVersion),
+      termsAcceptedAt: termsAcceptedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(termsAcceptedAt),
     );
   }
 
@@ -1909,6 +1980,8 @@ class UserRow extends DataClass implements Insertable<UserRow> {
       role: serializer.fromJson<String>(json['role']),
       company: serializer.fromJson<String?>(json['company']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      termsVersion: serializer.fromJson<int>(json['termsVersion']),
+      termsAcceptedAt: serializer.fromJson<DateTime?>(json['termsAcceptedAt']),
     );
   }
   @override
@@ -1925,6 +1998,8 @@ class UserRow extends DataClass implements Insertable<UserRow> {
       'role': serializer.toJson<String>(role),
       'company': serializer.toJson<String?>(company),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'termsVersion': serializer.toJson<int>(termsVersion),
+      'termsAcceptedAt': serializer.toJson<DateTime?>(termsAcceptedAt),
     };
   }
 
@@ -1939,6 +2014,8 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     String? role,
     Value<String?> company = const Value.absent(),
     DateTime? createdAt,
+    int? termsVersion,
+    Value<DateTime?> termsAcceptedAt = const Value.absent(),
   }) => UserRow(
     id: id ?? this.id,
     phone: phone ?? this.phone,
@@ -1950,6 +2027,10 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     role: role ?? this.role,
     company: company.present ? company.value : this.company,
     createdAt: createdAt ?? this.createdAt,
+    termsVersion: termsVersion ?? this.termsVersion,
+    termsAcceptedAt: termsAcceptedAt.present
+        ? termsAcceptedAt.value
+        : this.termsAcceptedAt,
   );
   UserRow copyWithCompanion(UserRowsCompanion data) {
     return UserRow(
@@ -1965,6 +2046,12 @@ class UserRow extends DataClass implements Insertable<UserRow> {
       role: data.role.present ? data.role.value : this.role,
       company: data.company.present ? data.company.value : this.company,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      termsVersion: data.termsVersion.present
+          ? data.termsVersion.value
+          : this.termsVersion,
+      termsAcceptedAt: data.termsAcceptedAt.present
+          ? data.termsAcceptedAt.value
+          : this.termsAcceptedAt,
     );
   }
 
@@ -1980,7 +2067,9 @@ class UserRow extends DataClass implements Insertable<UserRow> {
           ..write('isVerified: $isVerified, ')
           ..write('role: $role, ')
           ..write('company: $company, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('termsVersion: $termsVersion, ')
+          ..write('termsAcceptedAt: $termsAcceptedAt')
           ..write(')'))
         .toString();
   }
@@ -1997,6 +2086,8 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     role,
     company,
     createdAt,
+    termsVersion,
+    termsAcceptedAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -2011,7 +2102,9 @@ class UserRow extends DataClass implements Insertable<UserRow> {
           other.isVerified == this.isVerified &&
           other.role == this.role &&
           other.company == this.company &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.termsVersion == this.termsVersion &&
+          other.termsAcceptedAt == this.termsAcceptedAt);
 }
 
 class UserRowsCompanion extends UpdateCompanion<UserRow> {
@@ -2025,6 +2118,8 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
   final Value<String> role;
   final Value<String?> company;
   final Value<DateTime> createdAt;
+  final Value<int> termsVersion;
+  final Value<DateTime?> termsAcceptedAt;
   const UserRowsCompanion({
     this.id = const Value.absent(),
     this.phone = const Value.absent(),
@@ -2036,6 +2131,8 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     this.role = const Value.absent(),
     this.company = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.termsVersion = const Value.absent(),
+    this.termsAcceptedAt = const Value.absent(),
   });
   UserRowsCompanion.insert({
     this.id = const Value.absent(),
@@ -2048,6 +2145,8 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     this.role = const Value.absent(),
     this.company = const Value.absent(),
     required DateTime createdAt,
+    this.termsVersion = const Value.absent(),
+    this.termsAcceptedAt = const Value.absent(),
   }) : phone = Value(phone),
        fullName = Value(fullName),
        city = Value(city),
@@ -2063,6 +2162,8 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     Expression<String>? role,
     Expression<String>? company,
     Expression<DateTime>? createdAt,
+    Expression<int>? termsVersion,
+    Expression<DateTime>? termsAcceptedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2075,6 +2176,8 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
       if (role != null) 'role': role,
       if (company != null) 'company': company,
       if (createdAt != null) 'created_at': createdAt,
+      if (termsVersion != null) 'terms_version': termsVersion,
+      if (termsAcceptedAt != null) 'terms_accepted_at': termsAcceptedAt,
     });
   }
 
@@ -2089,6 +2192,8 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     Value<String>? role,
     Value<String?>? company,
     Value<DateTime>? createdAt,
+    Value<int>? termsVersion,
+    Value<DateTime?>? termsAcceptedAt,
   }) {
     return UserRowsCompanion(
       id: id ?? this.id,
@@ -2101,6 +2206,8 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
       role: role ?? this.role,
       company: company ?? this.company,
       createdAt: createdAt ?? this.createdAt,
+      termsVersion: termsVersion ?? this.termsVersion,
+      termsAcceptedAt: termsAcceptedAt ?? this.termsAcceptedAt,
     );
   }
 
@@ -2137,6 +2244,12 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (termsVersion.present) {
+      map['terms_version'] = Variable<int>(termsVersion.value);
+    }
+    if (termsAcceptedAt.present) {
+      map['terms_accepted_at'] = Variable<DateTime>(termsAcceptedAt.value);
+    }
     return map;
   }
 
@@ -2152,7 +2265,9 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
           ..write('isVerified: $isVerified, ')
           ..write('role: $role, ')
           ..write('company: $company, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('termsVersion: $termsVersion, ')
+          ..write('termsAcceptedAt: $termsAcceptedAt')
           ..write(')'))
         .toString();
   }
@@ -5610,6 +5725,309 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
   }
 }
 
+class $MrpRateRowsTable extends MrpRateRows
+    with TableInfo<$MrpRateRowsTable, MrpRateRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MrpRateRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _validFromMeta = const VerificationMeta(
+    'validFrom',
+  );
+  @override
+  late final GeneratedColumn<DateTime> validFrom = GeneratedColumn<DateTime>(
+    'valid_from',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _amountMeta = const VerificationMeta('amount');
+  @override
+  late final GeneratedColumn<int> amount = GeneratedColumn<int>(
+    'amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, validFrom, amount, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'mrp_rate_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MrpRateRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('valid_from')) {
+      context.handle(
+        _validFromMeta,
+        validFrom.isAcceptableOrUnknown(data['valid_from']!, _validFromMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_validFromMeta);
+    }
+    if (data.containsKey('amount')) {
+      context.handle(
+        _amountMeta,
+        amount.isAcceptableOrUnknown(data['amount']!, _amountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_amountMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  MrpRateRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MrpRateRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      validFrom: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}valid_from'],
+      )!,
+      amount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}amount'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $MrpRateRowsTable createAlias(String alias) {
+    return $MrpRateRowsTable(attachedDatabase, alias);
+  }
+}
+
+class MrpRateRow extends DataClass implements Insertable<MrpRateRow> {
+  final int id;
+
+  /// С какого дня действует.
+  final DateTime validFrom;
+
+  /// Один МРП в тиынах.
+  final int amount;
+  final DateTime createdAt;
+  const MrpRateRow({
+    required this.id,
+    required this.validFrom,
+    required this.amount,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['valid_from'] = Variable<DateTime>(validFrom);
+    map['amount'] = Variable<int>(amount);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  MrpRateRowsCompanion toCompanion(bool nullToAbsent) {
+    return MrpRateRowsCompanion(
+      id: Value(id),
+      validFrom: Value(validFrom),
+      amount: Value(amount),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory MrpRateRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MrpRateRow(
+      id: serializer.fromJson<int>(json['id']),
+      validFrom: serializer.fromJson<DateTime>(json['validFrom']),
+      amount: serializer.fromJson<int>(json['amount']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'validFrom': serializer.toJson<DateTime>(validFrom),
+      'amount': serializer.toJson<int>(amount),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  MrpRateRow copyWith({
+    int? id,
+    DateTime? validFrom,
+    int? amount,
+    DateTime? createdAt,
+  }) => MrpRateRow(
+    id: id ?? this.id,
+    validFrom: validFrom ?? this.validFrom,
+    amount: amount ?? this.amount,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  MrpRateRow copyWithCompanion(MrpRateRowsCompanion data) {
+    return MrpRateRow(
+      id: data.id.present ? data.id.value : this.id,
+      validFrom: data.validFrom.present ? data.validFrom.value : this.validFrom,
+      amount: data.amount.present ? data.amount.value : this.amount,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MrpRateRow(')
+          ..write('id: $id, ')
+          ..write('validFrom: $validFrom, ')
+          ..write('amount: $amount, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, validFrom, amount, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MrpRateRow &&
+          other.id == this.id &&
+          other.validFrom == this.validFrom &&
+          other.amount == this.amount &&
+          other.createdAt == this.createdAt);
+}
+
+class MrpRateRowsCompanion extends UpdateCompanion<MrpRateRow> {
+  final Value<int> id;
+  final Value<DateTime> validFrom;
+  final Value<int> amount;
+  final Value<DateTime> createdAt;
+  const MrpRateRowsCompanion({
+    this.id = const Value.absent(),
+    this.validFrom = const Value.absent(),
+    this.amount = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  MrpRateRowsCompanion.insert({
+    this.id = const Value.absent(),
+    required DateTime validFrom,
+    required int amount,
+    required DateTime createdAt,
+  }) : validFrom = Value(validFrom),
+       amount = Value(amount),
+       createdAt = Value(createdAt);
+  static Insertable<MrpRateRow> custom({
+    Expression<int>? id,
+    Expression<DateTime>? validFrom,
+    Expression<int>? amount,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (validFrom != null) 'valid_from': validFrom,
+      if (amount != null) 'amount': amount,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  MrpRateRowsCompanion copyWith({
+    Value<int>? id,
+    Value<DateTime>? validFrom,
+    Value<int>? amount,
+    Value<DateTime>? createdAt,
+  }) {
+    return MrpRateRowsCompanion(
+      id: id ?? this.id,
+      validFrom: validFrom ?? this.validFrom,
+      amount: amount ?? this.amount,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (validFrom.present) {
+      map['valid_from'] = Variable<DateTime>(validFrom.value);
+    }
+    if (amount.present) {
+      map['amount'] = Variable<int>(amount.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MrpRateRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('validFrom: $validFrom, ')
+          ..write('amount: $amount, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -5633,6 +6051,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $NotificationRowsTable notificationRows = $NotificationRowsTable(
     this,
   );
+  late final $MrpRateRowsTable mrpRateRows = $MrpRateRowsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -5650,6 +6069,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     authCodeRows,
     authTokenRows,
     notificationRows,
+    mrpRateRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -6829,6 +7249,8 @@ typedef $$UserRowsTableCreateCompanionBuilder = UserRowsCompanion Function({
   Value<String> role,
   Value<String?> company,
   required DateTime createdAt,
+  Value<int> termsVersion,
+  Value<DateTime?> termsAcceptedAt,
 });
 typedef $$UserRowsTableUpdateCompanionBuilder = UserRowsCompanion Function({
   Value<int> id,
@@ -6841,6 +7263,8 @@ typedef $$UserRowsTableUpdateCompanionBuilder = UserRowsCompanion Function({
   Value<String> role,
   Value<String?> company,
   Value<DateTime> createdAt,
+  Value<int> termsVersion,
+  Value<DateTime?> termsAcceptedAt,
 });
 
 class $$UserRowsTableFilterComposer
@@ -6899,6 +7323,16 @@ class $$UserRowsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get termsVersion => $composableBuilder(
+    column: $table.termsVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get termsAcceptedAt => $composableBuilder(
+    column: $table.termsAcceptedAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -6961,6 +7395,16 @@ class $$UserRowsTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get termsVersion => $composableBuilder(
+    column: $table.termsVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get termsAcceptedAt => $composableBuilder(
+    column: $table.termsAcceptedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$UserRowsTableAnnotationComposer
@@ -7003,6 +7447,16 @@ class $$UserRowsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get termsVersion => $composableBuilder(
+    column: $table.termsVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get termsAcceptedAt => $composableBuilder(
+    column: $table.termsAcceptedAt,
+    builder: (column) => column,
+  );
 }
 
 class $$UserRowsTableTableManager
@@ -7043,6 +7497,8 @@ class $$UserRowsTableTableManager
                 Value<String> role = const Value.absent(),
                 Value<String?> company = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int> termsVersion = const Value.absent(),
+                Value<DateTime?> termsAcceptedAt = const Value.absent(),
               }) => UserRowsCompanion(
                 id: id,
                 phone: phone,
@@ -7054,6 +7510,8 @@ class $$UserRowsTableTableManager
                 role: role,
                 company: company,
                 createdAt: createdAt,
+                termsVersion: termsVersion,
+                termsAcceptedAt: termsAcceptedAt,
               ),
           createCompanionCallback:
               ({
@@ -7067,6 +7525,8 @@ class $$UserRowsTableTableManager
                 Value<String> role = const Value.absent(),
                 Value<String?> company = const Value.absent(),
                 required DateTime createdAt,
+                Value<int> termsVersion = const Value.absent(),
+                Value<DateTime?> termsAcceptedAt = const Value.absent(),
               }) => UserRowsCompanion.insert(
                 id: id,
                 phone: phone,
@@ -7078,6 +7538,8 @@ class $$UserRowsTableTableManager
                 role: role,
                 company: company,
                 createdAt: createdAt,
+                termsVersion: termsVersion,
+                termsAcceptedAt: termsAcceptedAt,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -9500,6 +9962,190 @@ typedef $$NotificationRowsTableProcessedTableManager =
       NotificationRow,
       PrefetchHooks Function()
     >;
+typedef $$MrpRateRowsTableCreateCompanionBuilder =
+    MrpRateRowsCompanion Function({
+      Value<int> id,
+      required DateTime validFrom,
+      required int amount,
+      required DateTime createdAt,
+    });
+typedef $$MrpRateRowsTableUpdateCompanionBuilder =
+    MrpRateRowsCompanion Function({
+      Value<int> id,
+      Value<DateTime> validFrom,
+      Value<int> amount,
+      Value<DateTime> createdAt,
+    });
+
+class $$MrpRateRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $MrpRateRowsTable> {
+  $$MrpRateRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get validFrom => $composableBuilder(
+    column: $table.validFrom,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MrpRateRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $MrpRateRowsTable> {
+  $$MrpRateRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get validFrom => $composableBuilder(
+    column: $table.validFrom,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MrpRateRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MrpRateRowsTable> {
+  $$MrpRateRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get validFrom =>
+      $composableBuilder(column: $table.validFrom, builder: (column) => column);
+
+  GeneratedColumn<int> get amount =>
+      $composableBuilder(column: $table.amount, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$MrpRateRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $MrpRateRowsTable,
+          MrpRateRow,
+          $$MrpRateRowsTableFilterComposer,
+          $$MrpRateRowsTableOrderingComposer,
+          $$MrpRateRowsTableAnnotationComposer,
+          $$MrpRateRowsTableCreateCompanionBuilder,
+          $$MrpRateRowsTableUpdateCompanionBuilder,
+          (
+            MrpRateRow,
+            BaseReferences<_$AppDatabase, $MrpRateRowsTable, MrpRateRow>,
+          ),
+          MrpRateRow,
+          PrefetchHooks Function()
+        > {
+  $$MrpRateRowsTableTableManager(_$AppDatabase db, $MrpRateRowsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MrpRateRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MrpRateRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MrpRateRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<DateTime> validFrom = const Value.absent(),
+                Value<int> amount = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => MrpRateRowsCompanion(
+                id: id,
+                validFrom: validFrom,
+                amount: amount,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required DateTime validFrom,
+                required int amount,
+                required DateTime createdAt,
+              }) => MrpRateRowsCompanion.insert(
+                id: id,
+                validFrom: validFrom,
+                amount: amount,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$MrpRateRowsTable, MrpRateRow>(table),
+                  BaseReferences<_$AppDatabase, $MrpRateRowsTable, MrpRateRow>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MrpRateRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $MrpRateRowsTable,
+      MrpRateRow,
+      $$MrpRateRowsTableFilterComposer,
+      $$MrpRateRowsTableOrderingComposer,
+      $$MrpRateRowsTableAnnotationComposer,
+      $$MrpRateRowsTableCreateCompanionBuilder,
+      $$MrpRateRowsTableUpdateCompanionBuilder,
+      (
+        MrpRateRow,
+        BaseReferences<_$AppDatabase, $MrpRateRowsTable, MrpRateRow>,
+      ),
+      MrpRateRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -9528,4 +10174,6 @@ class $AppDatabaseManager {
       $$AuthTokenRowsTableTableManager(_db, _db.authTokenRows);
   $$NotificationRowsTableTableManager get notificationRows =>
       $$NotificationRowsTableTableManager(_db, _db.notificationRows);
+  $$MrpRateRowsTableTableManager get mrpRateRows =>
+      $$MrpRateRowsTableTableManager(_db, _db.mrpRateRows);
 }
