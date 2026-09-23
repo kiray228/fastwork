@@ -514,6 +514,7 @@ class _HeroCard extends StatelessWidget {
             runSpacing: 6,
             children: [
               CategoryChip(category: shift.category),
+              if (shift.isFunded) const GuaranteeChip(),
               for (final tag in shift.tags)
                 TagChip(
                   text: tag,
@@ -595,6 +596,27 @@ class _PayCard extends StatelessWidget {
                   value: formatDuration(shift.paidMinutes),
                   highlight: true,
                 ),
+                if (shift.isFunded) ...[
+                  const SizedBox(height: 10),
+                  const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.verified_user_rounded,
+                        size: 14,
+                        color: AppColors.success,
+                      ),
+                      SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Заказчик уже оплатил смену — деньги у сервиса. '
+                          'Вы получите их, когда он подтвердит ваш выход.',
+                          style: TextStyle(fontSize: 12, height: 1.3),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 if (shift.hasUnpaidBreak) ...[
                   const SizedBox(height: 10),
                   Row(

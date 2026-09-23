@@ -7,7 +7,11 @@ import 'package:fastwork_core/data/mrp_store.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/mrp.dart';
 import 'package:fastwork_core/terms.dart';
+import 'package:fastwork_core/payment.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// Тестовая карта: проходит всегда.
+final testCard = tokenizeSandboxCard(kSandboxCardNumber);
 
 /// МРП, лимит в 300 МРП и согласие с правилами.
 void main() {
@@ -132,6 +136,7 @@ void main() {
             workersNeeded: 3,
             createdBy: manager.id,
             city: 'Алматы',
+            card: testCard,
           );
       session.setUser(manager);
       final first = await create('Первая');

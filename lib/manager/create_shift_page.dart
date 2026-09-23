@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:fastwork_core/category.dart';
+import 'package:fastwork_core/payment.dart';
 
 import '../data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
@@ -10,6 +11,7 @@ import '../theme/app_colors.dart';
 import '../widgets/async_state.dart';
 import '../widgets/category_icon.dart';
 import '../widgets/common.dart';
+import '../widgets/payment_sheet.dart';
 
 /// Создание смены заказчиком — и правка уже созданной.
 ///
@@ -179,10 +181,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
       return;
     }
 
-    setState(() {
-      busy = true;
-      error = null;
-    });
+    setState(() => error = null);
 
     final duties = dutiesController.text
         .split('\n')
@@ -192,22 +191,46 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
 
     final existing = widget.editing;
     if (existing != null) {
-      final result = await guarded(
-        context,
-        () => widget.repository.updateShift(
-          shiftId: existing.id,
-          workDate: DateTime(date.year, date.month, date.day),
-          title: title,
-          category: chosen,
-          address: address,
-          startMinutes: _startMinutes,
-          endMinutes: _endMinutes,
-          hourlyRate: rate * 100,
-          workersNeeded: workers,
-          duties: duties,
-          dressCode: existing.dressCode,
-        ),
-      );
+      Future<BookingResult> save([PaymentCard? card]) =>
+          widget.repository.updateShift(
+            shiftId: existing.id,
+            workDate: DateTime(date.year, date.month, date.day),
+            title: title,
+            category: chosen,
+            address: address,
+            startMinutes: _startMinutes,
+            endMinutes: _endMinutes,
+            hourlyRate: rate * 100,
+            workersNeeded: workers,
+            duties: duties,
+            dressCode: existing.dressCode,
+            card: card,
+          );
+
+      setState(() => busy = true);
+      var result = await guarded(context, save);
+
+      // Смена подорожала — сначала доплата. Спрашиваем карту только
+      // тогда, когда хранилище сказало, что без неё нельзя: подешевевшую
+      // смену сохраняем сразу, разницу сервис вернёт сам.
+      if (result == BookingResult.paymentRequired && mounted) {
+        // Своя крутилка у окна оплаты — форма под ним ждать не должна.
+        setState(() => busy = false);
+        final extra =
+            ShiftCost.of(_preview).total - ShiftCost.of(existing).total;
+        BookingResult? afterPay;
+        final paid = await showPaymentSheet(
+          context,
+          title: 'Доплата за смену',
+          note: 'Смена подорожала. Разницу нужно внести сейчас — '
+              'сервис держит оплату за все места заранее.',
+          lines: [PaymentLine('Разница в стоимости', extra)],
+          total: extra,
+          actionLabel: 'Доплатить ${formatMoney(extra)}',
+          onCard: (card) async => afterPay = await save(card),
+        );
+        result = paid ? afterPay : null;
+      }
 
       if (!mounted) return;
       setState(() => busy = false);
@@ -232,9 +255,26 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
       return;
     }
 
-    final created = await guardedDone(
+    // Смена публикуется только оплаченной: сервис — гарант, и деньги
+    // должны быть у него раньше, чем на смену кто-то запишется.
+    final cost = ShiftCost.of(_preview);
+    final created = await showPaymentSheet(
       context,
-      () => widget.repository.createShift(
+      title: 'Оплата смены',
+      note: 'Деньги останутся у сервиса и уйдут исполнителям только после '
+          'того, как вы подтвердите их выход. За невышедших и при отмене '
+          'смены деньги вернутся на карту.',
+      lines: [
+        PaymentLine(
+          'Вознаграждение: ${cost.slots} × ${formatMoney(cost.slotPay)}',
+          cost.pay,
+        ),
+        PaymentLine('Комиссия сервиса $kPlatformFeePercent%', cost.fee),
+      ],
+      total: cost.total,
+      actionLabel: 'Оплатить ${formatMoney(cost.total)}',
+      onCard: (card) => widget.repository.createShift(
+        card: card,
         workDate: DateTime(date.year, date.month, date.day),
         title: title,
         company: widget.session.user?.company ?? 'Компания',
@@ -252,9 +292,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
       ),
     );
 
-    if (!mounted) return;
-    setState(() => busy = false);
-    if (!created) return;
+    if (!mounted || !created) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Смена опубликована')),
@@ -442,7 +480,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
                       color: Colors.white,
                     ),
                   )
-                : Text(isEditing ? 'Сохранить' : 'Опубликовать смену'),
+                : Text(isEditing ? 'Сохранить' : 'Оплатить и опубликовать'),
           ),
         ],
       ),
@@ -484,8 +522,16 @@ class _Summary extends StatelessWidget {
             value: formatMoney(shift.totalPay),
           ),
           _SummaryRow(
-            label: 'За всю смену',
-            value: formatMoney(shift.totalPay * shift.workersNeeded),
+            label: 'Всем исполнителям',
+            value: formatMoney(ShiftCost.of(shift).pay),
+          ),
+          _SummaryRow(
+            label: 'Комиссия сервиса $kPlatformFeePercent%',
+            value: formatMoney(ShiftCost.of(shift).fee),
+          ),
+          _SummaryRow(
+            label: 'К оплате',
+            value: formatMoney(ShiftCost.of(shift).total),
             bold: true,
           ),
         ],

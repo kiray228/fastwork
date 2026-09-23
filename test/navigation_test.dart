@@ -11,9 +11,11 @@ import 'package:fastwork/data/repositories.dart';
 import 'package:fastwork/data/session.dart';
 import 'package:fastwork_core/data/shift_filter.dart';
 import 'package:fastwork_core/data/support_repository.dart';
+import 'package:fastwork_core/data/wallet_repository.dart';
 import 'package:fastwork_core/mrp.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/notification.dart';
+import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_core/user.dart';
@@ -41,13 +43,16 @@ void main() {
   AppRepositories buildRepos({
     FakeShiftRepository? shifts,
     AppUser? signedIn,
-  }) =>
-      AppRepositories(
-        shifts: shifts ?? FakeShiftRepository(),
-        auth: FakeAuthRepository(signedIn: signedIn),
-        documents: FakeDocumentRepository(),
-        support: FakeSupportRepository(),
-      );
+  }) {
+    final store = shifts ?? FakeShiftRepository();
+    return AppRepositories(
+      shifts: store,
+      auth: FakeAuthRepository(signedIn: signedIn),
+      documents: FakeDocumentRepository(),
+      support: FakeSupportRepository(),
+      wallet: FakeWalletRepository(store),
+    );
+  }
 
   /// По умолчанию тестовый «экран» маленький — 800×600, и часть карточек
   /// в него не влезает. А списки во Flutter создают только те элементы,
@@ -142,12 +147,8 @@ void main() {
       final auth = FakeAuthRepository(signedIn: old);
       await tester.pumpWidget(FastworkApp(
         session: session,
-        repos: AppRepositories(
-          shifts: FakeShiftRepository(),
-          auth: auth,
-          documents: FakeDocumentRepository(),
-          support: FakeSupportRepository(),
-        ),
+        repos: buildRepos(signedIn: old)
+            .withAuth(auth),
       ));
       await tester.pumpAndSettle();
 
@@ -184,15 +185,11 @@ void main() {
 
   group('вход по коду с почты', () {
     /// Хранилище, которое ведёт себя как серверное: требует код.
-    AppRepositories codeRepos({AppUser? signedIn}) => AppRepositories(
-          shifts: FakeShiftRepository(),
-          auth: FakeAuthRepository(
-            signedIn: signedIn,
-            requiresEmailCode: true,
-          ),
-          documents: FakeDocumentRepository(),
-          support: FakeSupportRepository(),
-        );
+    AppRepositories codeRepos({AppUser? signedIn}) =>
+        buildRepos(signedIn: signedIn).withAuth(FakeAuthRepository(
+          signedIn: signedIn,
+          requiresEmailCode: true,
+        ));
 
     Future<void> openWithCodes(WidgetTester tester) async {
       useTallPhone(tester);
@@ -522,7 +519,7 @@ void main() {
         (tester) async {
       final repo = FakeShiftRepository(userRating: 5.0);
       // Смена три дня назад: записался, и заказчик подтвердил выход.
-      // Без подтверждения она в заработок не попадёт.
+      // Без подтверждения деньги не начисляются.
       await repo.apply(6);
       await repo.confirmAttendance(shiftId: 6, workerId: 1);
       await openApp(tester, rating: 5.0, shifts: repo);
@@ -532,21 +529,32 @@ void main() {
       await tester.tap(find.text('Выплаты'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Заработано всего'), findsOneWidget);
-      // Сумма видна и в балансе, и в лимите месяца — если смена
-      // пришлась на этот месяц.
-      expect(find.text('12 100 ₸'), findsWidgets);
+      expect(find.text('Доступно к выводу'), findsOneWidget);
+      expect(find.text('Заработано всего: 12 100 ₸'), findsOneWidget);
       expect(find.textContaining('Лимит за'), findsOneWidget);
-      expect(
-        find.textContaining('операций с деньгами приложение не проводит'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('Тестовый режим оплаты'), findsOneWidget);
     });
 
-    testWidgets('кнопка вывода честно говорит, что не подключена',
-        (tester) async {
+    testWidgets('без подтверждения смены выводить нечего', (tester) async {
       final repo = FakeShiftRepository(userRating: 5.0);
       await repo.apply(6);
+      await openApp(tester, rating: 5.0, shifts: repo);
+
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Выплаты'));
+      await tester.pumpAndSettle();
+
+      final button = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Вывести на карту'),
+      );
+      expect(button.onPressed, isNull);
+    });
+
+    testWidgets('заработанное выводится на карту', (tester) async {
+      final repo = FakeShiftRepository(userRating: 5.0);
+      await repo.apply(6);
+      await repo.confirmAttendance(shiftId: 6, workerId: 1);
       await openApp(tester, rating: 5.0, shifts: repo);
 
       await tester.tap(find.text('Профиль'));
@@ -556,7 +564,42 @@ void main() {
       await tester.tap(find.text('Вывести на карту'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Вывод средств пока не подключён'), findsOneWidget);
+      await tester.tap(find.text('Подставить тестовую карту'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Вывести 12 100 ₸'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Деньги отправлены на карту'), findsOneWidget);
+      expect(repo.payments.operations, contains('payout:1210000'));
+      expect(find.text('Вывод на карту Visa •• 4242'), findsOneWidget);
+    });
+
+    testWidgets('отказ банка оставляет окно открытым', (tester) async {
+      final repo = FakeShiftRepository(userRating: 5.0);
+      await repo.apply(6);
+      await repo.confirmAttendance(shiftId: 6, workerId: 1);
+      await openApp(tester, rating: 5.0, shifts: repo);
+
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Выплаты'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Вывести на карту'));
+      await tester.pumpAndSettle();
+
+      final fields = find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(fields.at(0), kSandboxDeclinedCardNumber);
+      await tester.enterText(fields.at(1), '1230');
+      await tester.enterText(fields.at(2), '123');
+      await tester.tap(find.text('Вывести 12 100 ₸'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Банк отклонил'), findsOneWidget);
+      expect(find.text('Вывод на карту'), findsOneWidget); // окно на месте
+      expect(repo.payments.operations, isEmpty);
     });
 
     testWidgets('отзыв о прошедшей смене сохраняется', (tester) async {
@@ -662,7 +705,15 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Грузчик'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Опубликовать смену'));
+      await tester.tap(find.text('Оплатить и опубликовать'));
+      await tester.pumpAndSettle();
+
+      // Без оплаты смена не публикуется: сначала окно карты.
+      expect(find.text('Оплата смены'), findsOneWidget);
+      expect(find.text('Комиссия сервиса 4%'), findsWidgets);
+      await tester.tap(find.text('Подставить тестовую карту'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Оплатить ').last);
       await tester.pumpAndSettle();
 
       // Вернулись на список — смена там, и с категорией.
@@ -679,7 +730,7 @@ void main() {
 
       await tester.enterText(find.byType(TextField).at(0), 'Услуги грузчика');
       await tester.enterText(find.byType(TextField).at(1), 'ул. Абая, 10');
-      await tester.tap(find.text('Опубликовать смену'));
+      await tester.tap(find.text('Оплатить и опубликовать'));
       await tester.pumpAndSettle();
 
       expect(find.text('Выберите категорию работ'), findsOneWidget);
@@ -710,7 +761,7 @@ void main() {
         find.byType(TextField).at(0),
         'Услуги грузчика',
       );
-      await tester.tap(find.text('Опубликовать смену'));
+      await tester.tap(find.text('Оплатить и опубликовать'));
       await tester.pumpAndSettle();
 
       expect(find.text('Укажите адрес'), findsOneWidget);
@@ -1522,4 +1573,15 @@ class SlowShiftRepository extends FakeShiftRepository {
     await _gate.future;
     return super.shiftsOn(date, filter: filter);
   }
+}
+
+/// Те же хранилища, но с другим входом — для тестов про вход.
+extension on AppRepositories {
+  AppRepositories withAuth(AuthRepository auth) => AppRepositories(
+        shifts: shifts,
+        auth: auth,
+        documents: documents,
+        support: support,
+        wallet: wallet,
+      );
 }

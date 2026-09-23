@@ -1,35 +1,46 @@
 import 'package:flutter/material.dart';
 
 import 'package:fastwork_core/data/shift_repository.dart';
+import 'package:fastwork_core/data/wallet_repository.dart';
 import 'package:fastwork_core/mrp.dart';
+import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_core/shift.dart';
 import 'theme/app_colors.dart';
 import 'widgets/async_state.dart';
 import 'widgets/common.dart';
+import 'widgets/payment_sheet.dart';
 import 'widgets/skeleton.dart';
 
-/// Кошелёк — витрина.
+/// Кошелёк исполнителя и платежи заказчика — один экран на обоих.
 ///
-/// Экран показывает начисления по отработанным сменам, но **никаких
-/// операций не проводит**: ни вывода, ни переводов. Настоящие деньги
-/// требуют платёжного провайдера, юрлица и лицензий — это отдельный
-/// большой проект, и к обучению программированию он отношения не имеет.
+/// Раньше здесь была витрина: суммы считались по сменам, а кнопка вывода
+/// честно говорила «не подключено». Теперь за экраном настоящий журнал
+/// движений денег: начисления приходят, когда заказчик подтверждает
+/// выход, а вывод на карту уходит через платёжный шлюз.
 ///
-/// Суммы здесь тоже вычисляются из смен, а не хранятся отдельно.
+/// Заказчику тот же журнал показывает другую сторону: оплаты смен,
+/// доплаты и возвраты.
 class WalletPage extends StatefulWidget {
   final ShiftRepository repository;
+  final WalletRepository wallet;
+  final bool isManager;
 
-  const WalletPage({super.key, required this.repository});
+  const WalletPage({
+    super.key,
+    required this.repository,
+    required this.wallet,
+    this.isManager = false,
+  });
 
   @override
   State<WalletPage> createState() => _WalletPageState();
 }
 
 class _WalletPageState extends State<WalletPage> {
-  Async<List<Shift>> state = const Loading();
+  Async<WalletSummary> state = const Loading();
 
   /// Лимит месяца. Грузится отдельно: не узнали его — кошелёк всё равно
-  /// покажет начисления, просто без полоски.
+  /// покажет деньги, просто без полоски.
   EarningsLimit? limit;
 
   @override
@@ -39,10 +50,11 @@ class _WalletPageState extends State<WalletPage> {
   }
 
   Future<void> _load() async {
-    final result = await load(widget.repository.completedShifts);
+    final result = await load(widget.wallet.summary);
     if (!mounted) return;
     setState(() => state = result);
 
+    if (widget.isManager) return;
     try {
       final loaded = await widget.repository.earningsLimit(DateTime.now());
       if (mounted) setState(() => limit = loaded);
@@ -51,19 +63,36 @@ class _WalletPageState extends State<WalletPage> {
     }
   }
 
-  void _notImplemented() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Вывод средств пока не подключён'),
-      ),
+  /// Вывести весь баланс на карту.
+  ///
+  /// Весь, а не произвольную сумму: так проще и человеку, и нам — поле
+  /// для суммы добавим, когда кто-то попросит вывести половину.
+  Future<void> _withdraw(int balance) async {
+    final done = await showPaymentSheet(
+      context,
+      title: 'Вывод на карту',
+      note: 'Переведём весь баланс. Комиссии за вывод нет.',
+      lines: [PaymentLine('Доступно к выводу', balance)],
+      total: balance,
+      actionLabel: 'Вывести ${formatMoney(balance)}',
+      onCard: (card) => widget.wallet.withdraw(amount: balance, card: card),
     );
+    if (!done || !mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Деньги отправлены на карту')),
+    );
+    setState(() => state = const Loading());
+    await _load();
   }
 
   @override
   Widget build(BuildContext context) {
+    final title = widget.isManager ? 'Платежи' : 'Выплаты';
+
     if (state case Failed(:final error)) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Выплаты')),
+        appBar: AppBar(title: Text(title)),
         body: ErrorView(
           message: describeError(error),
           onRetry: () {
@@ -74,28 +103,35 @@ class _WalletPageState extends State<WalletPage> {
       );
     }
 
-    final list = switch (state) {
+    final summary = switch (state) {
       Ready(:final value) => value,
       _ => null,
     };
-    final total = list == null
-        ? 0
-        : list.fold<int>(0, (sum, shift) => sum + shift.totalPay);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Выплаты')),
-      body: list == null
+      appBar: AppBar(title: Text(title)),
+      body: summary == null
           ? const TileListSkeleton(count: 3)
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
               children: [
-                _BalanceCard(total: total, onWithdraw: _notImplemented),
+                if (widget.isManager)
+                  const _EscrowExplainer()
+                else
+                  _BalanceCard(
+                    summary: summary,
+                    onWithdraw: summary.balance >= kMinWithdrawal
+                        ? () => _withdraw(summary.balance)
+                        : null,
+                  ),
+                if (summary.sandbox) ...[
+                  const SizedBox(height: 14),
+                  const _SandboxNotice(),
+                ],
                 if (limit != null) ...[
                   const SizedBox(height: 14),
                   EarningsLimitCard(limit: limit!),
                 ],
-                const SizedBox(height: 14),
-                const _DemoNotice(),
                 const SizedBox(height: 14),
                 SurfaceCard(
                   child: Column(
@@ -103,21 +139,25 @@ class _WalletPageState extends State<WalletPage> {
                     children: [
                       const SectionHeader(
                         icon: Icons.receipt_long_outlined,
-                        title: 'История начислений',
+                        title: 'История',
                       ),
                       const SizedBox(height: 14),
-                      if (list.isEmpty)
-                        const Text(
-                          'Пока начислений нет. Они появятся после '
-                          'первой отработанной смены.',
-                          style: TextStyle(
+                      if (summary.entries.isEmpty)
+                        Text(
+                          widget.isManager
+                              ? 'Платежей пока нет. Они появятся, когда вы '
+                                  'оплатите первую смену.'
+                              : 'Пока начислений нет. Они появятся, когда '
+                                  'заказчик подтвердит вашу первую смену.',
+                          style: const TextStyle(
                             fontSize: 13.5,
                             color: AppColors.muted,
                             height: 1.4,
                           ),
                         )
                       else
-                        for (final shift in list) _EarningRow(shift: shift),
+                        for (final entry in summary.entries)
+                          _EntryRow(entry: entry),
                     ],
                   ),
                 ),
@@ -128,10 +168,10 @@ class _WalletPageState extends State<WalletPage> {
 }
 
 class _BalanceCard extends StatelessWidget {
-  final int total;
-  final VoidCallback onWithdraw;
+  final WalletSummary summary;
+  final VoidCallback? onWithdraw;
 
-  const _BalanceCard({required this.total, required this.onWithdraw});
+  const _BalanceCard({required this.summary, required this.onWithdraw});
 
   @override
   Widget build(BuildContext context) {
@@ -155,7 +195,7 @@ class _BalanceCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Заработано всего',
+                  'Доступно к выводу',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -169,10 +209,19 @@ class _BalanceCard extends StatelessWidget {
                   // Сумма не появляется готовой, а докручивается от нуля:
                   // так виден результат работы, а не просто число.
                   child: AnimatedNumber(
-                    value: total,
+                    value: summary.balance,
                     format: formatMoney,
                     style: text.displaySmall
                         ?.copyWith(fontSize: 38, color: Colors.white),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Заработано всего: ${formatMoney(summary.earnedTotal)}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.85),
                   ),
                 ),
               ],
@@ -180,14 +229,25 @@ class _BalanceCard extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
+                SizedBox(
+                  width: double.infinity,
                   child: FilledButton(
                     onPressed: onWithdraw,
                     child: const Text('Вывести на карту'),
                   ),
                 ),
+                if (onWithdraw == null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Вывести можно от ${formatMoney(kMinWithdrawal)}',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -197,9 +257,49 @@ class _BalanceCard extends StatelessWidget {
   }
 }
 
-/// Честно предупреждаем, что раздел показательный.
-class _DemoNotice extends StatelessWidget {
-  const _DemoNotice();
+/// Как устроена гарантия — для заказчика.
+class _EscrowExplainer extends StatelessWidget {
+  const _EscrowExplainer();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SurfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(
+            icon: Icons.verified_user_outlined,
+            title: 'Сервис — гарант оплаты',
+          ),
+          SizedBox(height: 10),
+          InfoRow(
+            icon: Icons.lock_outline_rounded,
+            text: 'Вы оплачиваете смену при публикации — деньги держит '
+                'сервис.',
+          ),
+          InfoRow(
+            icon: Icons.how_to_reg_outlined,
+            text: 'Исполнитель получает их, когда вы подтвердите его выход.',
+          ),
+          InfoRow(
+            icon: Icons.undo_rounded,
+            text: 'За невыход и при отмене смены деньги возвращаются '
+                'на карту.',
+          ),
+          InfoRow(
+            icon: Icons.percent_rounded,
+            text: 'Комиссия сервиса — $kPlatformFeePercent% сверх '
+                'вознаграждения.',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Честно предупреждаем, что деньги пока ненастоящие.
+class _SandboxNotice extends StatelessWidget {
+  const _SandboxNotice();
 
   @override
   Widget build(BuildContext context) {
@@ -213,13 +313,12 @@ class _DemoNotice extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline_rounded,
-              size: 18, color: AppColors.accent),
+          const Icon(Icons.science_outlined, size: 18, color: AppColors.accent),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Раздел показательный: суммы считаются по вашим сменам, '
-              'но операций с деньгами приложение не проводит.',
+              'Тестовый режим оплаты: карты тестовые, деньги ненастоящие. '
+              'Правила удержания, начисления и возврата — настоящие.',
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -232,25 +331,46 @@ class _DemoNotice extends StatelessWidget {
   }
 }
 
-class _EarningRow extends StatelessWidget {
-  final Shift shift;
+class _EntryRow extends StatelessWidget {
+  final WalletEntry entry;
 
-  const _EarningRow({required this.shift});
+  const _EntryRow({required this.entry});
+
+  IconData get _icon => switch (entry.kind) {
+        WalletEntryKind.earning => Icons.work_history_rounded,
+        WalletEntryKind.withdrawal => Icons.north_east_rounded,
+        WalletEntryKind.charge => Icons.credit_card_rounded,
+        WalletEntryKind.refund => Icons.undo_rounded,
+        _ => Icons.swap_horiz_rounded,
+      };
 
   @override
   Widget build(BuildContext context) {
+    final incoming = entry.amount > 0;
+    final color = incoming ? AppColors.brand : AppColors.muted;
+    final date = entry.createdAt;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Row(
         children: [
-          CompanyAvatar(company: shift.company, size: 38),
+          Container(
+            width: 38,
+            height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(_icon, size: 18, color: color),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  shift.company,
+                  entry.title,
                   style: Theme.of(context)
                       .textTheme
                       .titleMedium
@@ -258,20 +378,20 @@ class _EarningRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${shift.workDate.day} '
-                  '${monthsShort[shift.workDate.month - 1]} · '
-                  '${formatDuration(shift.paidMinutes)}',
+                  '${date.day} ${monthsShort[date.month - 1]}',
                   style: const TextStyle(fontSize: 12, color: AppColors.muted),
                 ),
               ],
             ),
           ),
           Text(
-            '+${formatMoney(shift.totalPay)}',
-            style: const TextStyle(
+            '${incoming ? '+' : '−'}${formatMoney(entry.amount.abs())}',
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w800,
-              color: AppColors.brand,
+              color: incoming
+                  ? AppColors.brand
+                  : Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ],

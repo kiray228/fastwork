@@ -1,6 +1,7 @@
 import 'package:fastwork_core/category.dart';
 import 'package:fastwork_core/mrp.dart';
 import 'package:fastwork_core/notification.dart';
+import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_core/review.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
@@ -119,8 +120,10 @@ class ApiShiftRepository implements ShiftRepository {
     String? category,
     List<String> duties = const [],
     String? dressCode,
+    PaymentCard? card,
   }) async =>
       _result(await client.post('/api/shifts/$shiftId', {
+        'card': card?.toJson(),
         'workDate': workDate.toIso8601String(),
         'title': title,
         'category': category,
@@ -195,12 +198,15 @@ class ApiShiftRepository implements ShiftRepository {
     required int workersNeeded,
     required int createdBy,
     required String city,
+    required PaymentCard card,
     String category = kOtherCategory,
     List<String> duties = const [],
     String? dressCode,
     double? minRating,
   }) async {
     final data = await client.post('/api/shifts', {
+      // Токен карты, а не её номер: номер остался у провайдера.
+      'card': card.toJson(),
       'workDate': workDate.toIso8601String(),
       'title': title,
       'category': category,

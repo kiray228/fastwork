@@ -8,7 +8,11 @@ import 'package:fastwork_core/notification.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_core/user.dart';
+import 'package:fastwork_core/payment.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// Тестовая карта: проходит всегда.
+final testCard = tokenizeSandboxCard(kSandboxCardNumber);
 
 /// Тесты против **настоящей** SQLite, только в памяти.
 ///
@@ -70,6 +74,7 @@ void main() {
       workersNeeded: 2,
       createdBy: manager.id,
       city: 'Алматы',
+      card: testCard,
     );
 
     // Записывается исполнитель — значит, в сессии должен быть он.
@@ -117,6 +122,7 @@ void main() {
       workersNeeded: 2,
       createdBy: manager.id,
       city: 'Алматы',
+      card: testCard,
     );
 
     session.setUser(worker);
@@ -201,6 +207,7 @@ void main() {
       workersNeeded: 1,
       createdBy: managerId,
       city: 'Алматы',
+      card: testCard,
     );
 
     session.setUser(await auth.refresh(workerId));
@@ -299,6 +306,7 @@ void main() {
         workersNeeded: 1,
         createdBy: manager.id,
         city: city,
+        card: testCard,
       );
     }
 
@@ -345,6 +353,7 @@ void main() {
       workersNeeded: 1,
       createdBy: manager.id,
       city: 'Алматы',
+      card: testCard,
     );
 
     session.setUser(worker);
@@ -511,6 +520,7 @@ void main() {
       workersNeeded: 1,
       createdBy: manager.id,
       city: 'Алматы',
+      card: testCard,
     );
     session.setUser(worker);
     await shifts.apply(secondShift);
@@ -621,6 +631,8 @@ void main() {
         endMinutes: base.endMinutes,
         hourlyRate: hourlyRate ?? base.hourlyRate,
         workersNeeded: workersNeeded ?? base.workersNeeded,
+        // Правка может удорожить смену — тогда доплата с этой карты.
+        card: testCard,
       );
 
   test('заказчик правит свою смену', () async {

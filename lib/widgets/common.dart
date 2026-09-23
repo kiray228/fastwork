@@ -128,6 +128,18 @@ class CategoryChip extends StatelessWidget {
       );
 }
 
+/// Ярлык «оплата гарантирована»: заказчик уже внёс деньги.
+class GuaranteeChip extends StatelessWidget {
+  const GuaranteeChip({super.key});
+
+  @override
+  Widget build(BuildContext context) => const TagChip(
+        text: 'Оплата гарантирована',
+        icon: Icons.verified_user_rounded,
+        color: AppColors.success,
+      );
+}
+
 /// Белая карточка со скруглением и мягкой тенью — основа всей вёрстки.
 class SurfaceCard extends StatelessWidget {
   final Widget child;

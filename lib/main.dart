@@ -6,6 +6,7 @@ import 'auth/terms_page.dart';
 import 'data/api_auth_repository.dart';
 import 'data/api_client.dart';
 import 'data/api_shift_repository.dart';
+import 'data/api_wallet_repository.dart';
 import 'package:fastwork_core/data/auth_repository.dart';
 import 'package:fastwork_core/data/database.dart';
 import 'data/database_flutter.dart';
@@ -14,6 +15,8 @@ import 'data/repositories.dart';
 import 'data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/data/support_repository.dart';
+import 'package:fastwork_core/data/wallet_repository.dart';
+import 'package:fastwork_core/payment.dart';
 import 'home_shell.dart';
 import 'theme/app_theme.dart';
 
@@ -46,13 +49,17 @@ Future<AppRepositories> _localRepositories() async {
   final session = AppSession();
   try {
     final database = AppDatabase(openAppDatabase());
-    final dbShifts = DbShiftRepository(database, session);
+    // Один шлюз на оба хранилища — как один провайдер у настоящего
+    // сервиса. Без сервера он может быть только тестовым.
+    final payments = SandboxPaymentGateway();
+    final dbShifts = DbShiftRepository(database, session, payments: payments);
     await dbShifts.seedIfEmpty();
     return AppRepositories(
       shifts: dbShifts,
       auth: DbAuthRepository(database),
       documents: DbDocumentRepository(database, session),
       support: DbSupportRepository(database, session),
+      wallet: DbWalletRepository(database, session, payments: payments),
     );
   } catch (error, stack) {
     // Если база не открылась (например, браузер запретил хранилище) —
@@ -60,11 +67,13 @@ Future<AppRepositories> _localRepositories() async {
     // в памяти: пользователь всё увидит, просто ничего не сохранится.
     debugPrint('Не удалось открыть базу данных: $error');
     debugPrint('$stack');
+    final shifts = FakeShiftRepository();
     return AppRepositories(
-      shifts: FakeShiftRepository(),
+      shifts: shifts,
       auth: FakeAuthRepository(),
       documents: FakeDocumentRepository(),
       support: FakeSupportRepository(),
+      wallet: FakeWalletRepository(shifts),
     );
   }
 }
@@ -92,6 +101,7 @@ Future<AppRepositories> _serverRepositories(String url) async {
     ),
     documents: ApiDocumentRepository(client),
     support: ApiSupportRepository(client),
+    wallet: ApiWalletRepository(client),
   );
 }
 

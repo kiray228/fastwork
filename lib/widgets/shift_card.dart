@@ -104,6 +104,9 @@ class ShiftCard extends StatelessWidget {
               runSpacing: 6,
               children: [
                 CategoryChip(category: shift.category),
+                // Деньги уже у сервиса — самое важное, что исполнитель
+                // может узнать о заказчике до записи.
+                if (shift.isFunded) const GuaranteeChip(),
                 if (!allowed)
                   TagChip(
                     text: 'Нужен рейтинг '

@@ -130,15 +130,18 @@ class ProfilePage extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Column(
               children: [
-                if (!user.isManager)
-                  _MenuRow(
-                    icon: Icons.payments_outlined,
-                    title: 'Выплаты',
-                    trailing: 'Вознаграждение',
-                    onTap: () => Navigator.of(context).push(
-                      appRoute(WalletPage(repository: repos.shifts)),
-                    ),
+                _MenuRow(
+                  icon: Icons.payments_outlined,
+                  title: user.isManager ? 'Платежи' : 'Выплаты',
+                  trailing: user.isManager ? 'Оплата смен' : 'Вознаграждение',
+                  onTap: () => Navigator.of(context).push(
+                    appRoute(WalletPage(
+                      repository: repos.shifts,
+                      wallet: repos.wallet,
+                      isManager: user.isManager,
+                    )),
                   ),
+                ),
                 if (!user.isManager)
                   _MenuRow(
                     icon: Icons.badge_outlined,

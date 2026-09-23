@@ -12,6 +12,8 @@ import 'package:fastwork_core/category.dart';
 import 'package:fastwork_core/errors.dart';
 import 'package:fastwork_core/data/mrp_store.dart';
 import 'package:fastwork_core/mrp.dart';
+import 'package:fastwork_core/payment.dart';
+import 'package:fastwork_core/data/wallet_repository.dart';
 import 'package:fastwork_core/support.dart';
 import 'package:fastwork_core/notification.dart';
 import 'package:fastwork_core/review.dart';
@@ -39,8 +41,16 @@ class Api {
   /// Пустой — служебные адреса выключены совсем.
   final String adminKey;
 
-  Api(this.db, CodeSender sender, {this.adminKey = ''})
-      : auth = AuthService(db, sender);
+  /// Через кого идут деньги — один шлюз на весь сервер.
+  final PaymentGateway payments;
+
+  Api(
+    this.db,
+    CodeSender sender, {
+    this.adminKey = '',
+    PaymentGateway? payments,
+  })  : auth = AuthService(db, sender),
+        payments = payments ?? SandboxPaymentGateway();
 
   /// Найти пользователя по почте — нужно после ввода кода.
   Future<AppUser?> _userByEmail(String email) async {
@@ -94,7 +104,17 @@ class Api {
   /// обслуживает много людей одновременно, и одна общая сессия перепутала
   /// бы их между собой.
   DbShiftRepository _shiftsFor(AppUser user) =>
-      DbShiftRepository(db, StaticUser(user));
+      DbShiftRepository(db, StaticUser(user), payments: payments);
+
+  /// Карта из тела запроса. null — не прислали.
+  static PaymentCard? _card(Map<String, dynamic> body) {
+    final raw = body['card'];
+    return raw is Map<String, dynamic> ? PaymentCard.fromJson(raw) : null;
+  }
+
+  /// Отказ по деньгам — 402 «нужна оплата». Код редкий, но ровно про это:
+  /// запрос правильный, не хватило платежа.
+  Response _declined(PaymentDeclined e) => _error(e.message, status: 402);
 
   /// Обёртка для адресов, куда пускают только по токену.
   Future<Response> _authorized(
@@ -508,22 +528,33 @@ class Api {
         if (!isKnownCategory(category)) {
           return _error('Неизвестная категория работ');
         }
-        final id = await _shiftsFor(user).createShift(
-          workDate: DateTime.parse(body['workDate'] as String),
-          title: body['title'] as String,
-          company: body['company'] as String,
-          address: body['address'] as String,
-          startMinutes: body['startMinutes'] as int,
-          endMinutes: body['endMinutes'] as int,
-          hourlyRate: body['hourlyRate'] as int,
-          workersNeeded: body['workersNeeded'] as int,
-          createdBy: user.id,
-          city: body['city'] as String? ?? user.city,
-          category: category,
-          duties: (body['duties'] as List<dynamic>? ?? []).cast<String>(),
-          dressCode: body['dressCode'] as String?,
-          minRating: (body['minRating'] as num?)?.toDouble(),
-        );
+        // Смена без оплаты не публикуется — в этом вся гарантия.
+        final card = _card(body);
+        if (card == null) {
+          return _error('Оплатите смену картой', status: 402);
+        }
+        final int id;
+        try {
+          id = await _shiftsFor(user).createShift(
+            card: card,
+            workDate: DateTime.parse(body['workDate'] as String),
+            title: body['title'] as String,
+            company: body['company'] as String,
+            address: body['address'] as String,
+            startMinutes: body['startMinutes'] as int,
+            endMinutes: body['endMinutes'] as int,
+            hourlyRate: body['hourlyRate'] as int,
+            workersNeeded: body['workersNeeded'] as int,
+            createdBy: user.id,
+            city: body['city'] as String? ?? user.city,
+            category: category,
+            duties: (body['duties'] as List<dynamic>? ?? []).cast<String>(),
+            dressCode: body['dressCode'] as String?,
+            minRating: (body['minRating'] as num?)?.toDouble(),
+          );
+        } on PaymentDeclined catch (e) {
+          return _declined(e);
+        }
         return _json({'id': id});
       });
     });
@@ -543,19 +574,25 @@ class Api {
         if (category != null && !isKnownCategory(category)) {
           return _error('Неизвестная категория работ');
         }
-        final result = await _shiftsFor(user).updateShift(
-          shiftId: int.parse(id),
-          workDate: DateTime.parse(body['workDate'] as String),
-          title: body['title'] as String,
-          address: body['address'] as String,
-          startMinutes: body['startMinutes'] as int,
-          endMinutes: body['endMinutes'] as int,
-          hourlyRate: body['hourlyRate'] as int,
-          workersNeeded: body['workersNeeded'] as int,
-          category: category,
-          duties: (body['duties'] as List<dynamic>? ?? []).cast<String>(),
-          dressCode: body['dressCode'] as String?,
-        );
+        final BookingResult result;
+        try {
+          result = await _shiftsFor(user).updateShift(
+            card: _card(body),
+            shiftId: int.parse(id),
+            workDate: DateTime.parse(body['workDate'] as String),
+            title: body['title'] as String,
+            address: body['address'] as String,
+            startMinutes: body['startMinutes'] as int,
+            endMinutes: body['endMinutes'] as int,
+            hourlyRate: body['hourlyRate'] as int,
+            workersNeeded: body['workersNeeded'] as int,
+            category: category,
+            duties: (body['duties'] as List<dynamic>? ?? []).cast<String>(),
+            dressCode: body['dressCode'] as String?,
+          );
+        } on PaymentDeclined catch (e) {
+          return _declined(e);
+        }
         return _json({'result': result.name});
       });
     });
@@ -630,6 +667,34 @@ class Api {
           rating: rating,
           comment: body['comment'] as String?,
         );
+        return _json({'ok': true});
+      });
+    });
+
+    // --- кошелёк -----------------------------------------------------------
+
+    router.get('/api/wallet', (Request request) async {
+      return _authorized(request, (user) async {
+        final summary = await DbWalletRepository(
+          db,
+          StaticUser(user),
+          payments: payments,
+        ).summary();
+        return _json(summary.toJson());
+      });
+    });
+
+    router.post('/api/wallet/withdraw', (Request request) async {
+      return _authorized(request, (user) async {
+        final body = await _body(request);
+        final card = _card(body);
+        if (card == null) return _error('Укажите карту');
+        try {
+          await DbWalletRepository(db, StaticUser(user), payments: payments)
+              .withdraw(amount: body['amount'] as int? ?? 0, card: card);
+        } on PaymentDeclined catch (e) {
+          return _declined(e);
+        }
         return _json({'ok': true});
       });
     });

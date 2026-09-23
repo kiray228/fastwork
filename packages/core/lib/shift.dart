@@ -38,6 +38,9 @@ class Shift {
   /// Когда смену отменил заказчик. null — смена в силе.
   final DateTime? cancelledAt;
 
+  /// Заказчик уже внёс деньги, и сервис их держит — оплата гарантирована.
+  final bool isFunded;
+
   const Shift({
     required this.id,
     required this.workDate,
@@ -62,6 +65,7 @@ class Shift {
     this.cancelledAt,
     this.city = 'Алматы',
     this.category = kOtherCategory,
+    this.isFunded = false,
   });
 
   /// Категория целиком — с названием и разделом.
@@ -79,6 +83,7 @@ class Shift {
     bool clearMyStatus = false,
     DateTime? myCheckedInAt,
     DateTime? cancelledAt,
+    bool? isFunded,
   }) =>
       Shift(
         id: id,
@@ -104,6 +109,7 @@ class Shift {
         myStatus: clearMyStatus ? null : (myStatus ?? this.myStatus),
         myCheckedInAt: myCheckedInAt ?? this.myCheckedInAt,
         cancelledAt: cancelledAt ?? this.cancelledAt,
+        isFunded: isFunded ?? this.isFunded,
       );
 
   /// Сколько всего длится смена.
@@ -426,6 +432,7 @@ extension ShiftJson on Shift {
         'myStatus': myStatus,
         'myCheckedInAt': myCheckedInAt?.toIso8601String(),
         'cancelledAt': cancelledAt?.toIso8601String(),
+        'isFunded': isFunded,
       };
 }
 
@@ -459,4 +466,5 @@ Shift shiftFromJson(Map<String, dynamic> json) => Shift(
       cancelledAt: json['cancelledAt'] == null
           ? null
           : DateTime.parse(json['cancelledAt'] as String),
+      isFunded: json['isFunded'] as bool? ?? false,
     );

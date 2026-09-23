@@ -1,6 +1,7 @@
 import '../category.dart';
 import '../mrp.dart';
 import '../notification.dart';
+import '../payment.dart';
 import '../review.dart';
 import '../shift.dart';
 import '../user.dart';
@@ -44,6 +45,9 @@ class FakeShiftRepository implements ShiftRepository {
       clearMyStatus: status == null,
       myCheckedInAt: _checkIns[s.id],
       cancelledAt: _cancelled.contains(s.id) ? DateTime.now() : null,
+      // В памяти любая смена оплачена: демо-смены «оплатил» сервис,
+      // новые без оплаты не создаются.
+      isFunded: !_refunded.contains(s.id),
     );
   }
 
@@ -128,9 +132,48 @@ class FakeShiftRepository implements ShiftRepository {
     required int shiftId,
     required int workerId,
   }) async {
+    final status = _myStatuses[shiftId];
+    if (status == null) return BookingResult.notFound;
+    if (status == ApplicationStatus.completed) return BookingResult.ok;
+    if (status != ApplicationStatus.active) return BookingResult.alreadyBooked;
+
     _myStatuses[shiftId] = ApplicationStatus.completed;
+    final shift = (await shiftById(shiftId))!;
+    _record(WalletEntryKind.earning, shift.totalPay, '«${shift.title}»',
+        shiftId: shiftId);
     return BookingResult.ok;
   }
+
+  // -------------------------------------------------------------------------
+  // Деньги в памяти
+  // -------------------------------------------------------------------------
+
+  /// Тестовый шлюз — тесты смотрят в его список операций.
+  final payments = SandboxPaymentGateway();
+
+  /// Журнал движений. В памяти один человек на всё, поэтому и журнал один.
+  final List<WalletEntry> ledger = [];
+  int _nextEntryId = 1;
+
+  /// Сколько внесено за смену сверх расчётной цены — после правок.
+  /// Нет записи — внесено ровно по цене смены.
+  final Map<int, int> _paid = {};
+
+  /// Смены, остаток по которым уже вернули.
+  final Set<int> _refunded = {};
+
+  void _record(String kind, int amount, String title, {int? shiftId}) {
+    ledger.add(WalletEntry(
+      id: _nextEntryId++,
+      kind: kind,
+      amount: amount,
+      shiftId: shiftId,
+      title: title,
+      createdAt: DateTime.now(),
+    ));
+  }
+
+  int _paidFor(Shift shift) => _paid[shift.id] ?? ShiftCost.of(shift).total;
 
   @override
   Future<BookingResult> cancelApplication(int shiftId) async {
@@ -240,9 +283,10 @@ class FakeShiftRepository implements ShiftRepository {
     List<String> duties = const [],
     String? dressCode,
     double? minRating,
+    required PaymentCard card,
   }) async {
     final id = (_shifts.map((s) => s.id).fold<int>(0, (a, b) => a > b ? a : b)) + 1;
-    _shifts.add(Shift(
+    final shift = Shift(
       id: id,
       workDate: workDate,
       title: title,
@@ -259,7 +303,12 @@ class FakeShiftRepository implements ShiftRepository {
       dressCode: dressCode,
       minRating: minRating,
       createdBy: createdBy,
-    ));
+    );
+    final total = ShiftCost.of(shift).total;
+    await payments.charge(amount: total, card: card, description: title);
+    _shifts.add(shift);
+    _record(WalletEntryKind.charge, -total, 'Оплата смены «$title»',
+        shiftId: id);
     return id;
   }
 
@@ -358,7 +407,23 @@ class FakeShiftRepository implements ShiftRepository {
     if (index < 0) return BookingResult.notFound;
     if (_shifts[index].isCancelled) return BookingResult.alreadyCancelled;
 
+    final shift = _decorate(_shifts[index]);
+    var rest = _paidFor(shift);
+    for (final e in ledger.where((e) => e.shiftId == shiftId)) {
+      if (e.kind == WalletEntryKind.earning) {
+        rest -= e.amount + platformFee(e.amount);
+      } else if (e.kind == WalletEntryKind.refund) {
+        rest -= e.amount;
+      }
+    }
+    if (rest > 0) {
+      await payments.refund(operation: 'fake', amount: rest);
+      _record(WalletEntryKind.refund, rest, 'Возврат: смена отменена',
+          shiftId: shiftId);
+    }
+
     _cancelled.add(shiftId);
+    _refunded.add(shiftId);
     _myStatuses.remove(shiftId);
     return BookingResult.ok;
   }
@@ -368,7 +433,17 @@ class FakeShiftRepository implements ShiftRepository {
     required int shiftId,
     required int workerId,
   }) async {
+    final status = _myStatuses[shiftId];
+    if (status == null) return BookingResult.notFound;
+    if (status == ApplicationStatus.noShow) return BookingResult.ok;
+    if (status != ApplicationStatus.active) return BookingResult.alreadyBooked;
+
     _myStatuses[shiftId] = ApplicationStatus.noShow;
+    final shift = (await shiftById(shiftId))!;
+    final slot = ShiftCost(slotPay: shift.totalPay, slots: 1).total;
+    await payments.refund(operation: 'fake', amount: slot);
+    _record(WalletEntryKind.refund, slot, 'Возврат за невыход',
+        shiftId: shiftId);
     return BookingResult.ok;
   }
 
@@ -385,6 +460,7 @@ class FakeShiftRepository implements ShiftRepository {
     String? category,
     List<String> duties = const [],
     String? dressCode,
+    PaymentCard? card,
   }) async {
     final index = _shifts.indexWhere((s) => s.id == shiftId);
     if (index < 0) return BookingResult.notFound;
@@ -396,7 +472,7 @@ class FakeShiftRepository implements ShiftRepository {
     }
 
     final old = _shifts[index];
-    _shifts[index] = Shift(
+    final updated = Shift(
       id: old.id,
       workDate: workDate,
       title: title,
@@ -418,6 +494,21 @@ class FakeShiftRepository implements ShiftRepository {
       minRating: old.minRating,
       createdBy: old.createdBy,
     );
+
+    final paid = _paidFor(before);
+    final diff = ShiftCost.of(updated).total - paid;
+    if (diff > 0) {
+      if (card == null) return BookingResult.paymentRequired;
+      await payments.charge(amount: diff, card: card, description: title);
+      _record(WalletEntryKind.charge, -diff, 'Доплата за смену «$title»',
+          shiftId: shiftId);
+    } else if (diff < 0) {
+      await payments.refund(operation: 'fake', amount: -diff);
+      _record(WalletEntryKind.refund, -diff, 'Возврат разницы',
+          shiftId: shiftId);
+    }
+    _paid[shiftId] = paid + diff;
+    _shifts[index] = updated;
     return BookingResult.ok;
   }
 

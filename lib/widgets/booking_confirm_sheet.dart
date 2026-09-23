@@ -142,6 +142,13 @@ class _BookingConfirmSheetState extends State<_BookingConfirmSheet> {
                         '${formatDuration(shift.breakMinutes)} перерыва '
                         'на обед не оплачивается.',
                   ),
+                if (shift.isFunded)
+                  const _Term(
+                    icon: Icons.verified_user_rounded,
+                    text: 'Оплата гарантирована: заказчик уже внёс деньги, '
+                        'сервис переведёт их вам после подтверждения смены. '
+                        'Комиссия с вас не удерживается.',
+                  ),
                 _Term(
                   icon: Icons.account_balance_wallet_outlined,
                   text: shift.payoutDelayDays == 1

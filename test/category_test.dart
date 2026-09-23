@@ -8,7 +8,11 @@ import 'package:fastwork_core/data/shift_filter.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/terms.dart';
+import 'package:fastwork_core/payment.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// Тестовая карта: проходит всегда.
+final testCard = tokenizeSandboxCard(kSandboxCardNumber);
 
 /// Категории работ: справочник, фильтр, поиск и хранение в базе.
 void main() {
@@ -130,6 +134,7 @@ void main() {
         workersNeeded: 1,
         createdBy: session.workerId,
         city: 'Алматы',
+        card: testCard,
         category: 'plumber',
       );
       expect((await shifts.shiftById(id))!.category, 'plumber');
