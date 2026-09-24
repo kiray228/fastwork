@@ -60,7 +60,7 @@ fastwork/                 приложение на Flutter — всё, что �
 
 ```bash
 flutter pub get
-flutter test          # 177 тестов
+flutter test          # 209 тестов
 flutter run           # без сервера — на локальной базе
 ```
 
@@ -88,3 +88,4 @@ dart run bin/server.dart      # http://localhost:8080
 12. [Правила сервиса и лимит в 300 МРП](docs/12-pravila-i-mrp.md)
 13. [Оплата картой: сервис — гарант](docs/13-oplata.md)
 14. [Дизайн: «жидкое стекло»](docs/14-zhidkoe-steklo.md)
+15. [Истории: справка с инфографикой](docs/15-istorii.md)

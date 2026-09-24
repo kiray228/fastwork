@@ -294,6 +294,10 @@ UNIQUE(promo_code_id, user_id)
 
 > Справочный контент («как получить выплату», «зачем санкнижка»).
 > С бизнес-логикой не связан, поэтому и таблица стоит особняком.
+>
+> В самом приложении истории пока живут в коде, а не в этой таблице:
+> картинки в них — это интерфейс, а не файлы. Почему так и как их
+> вынести на сервер — в [15-istorii.md](15-istorii.md).
 
 ### support_tickets / support_messages
 `support_tickets`: id PK, user_id FK, shift_id FK NULL, subject, status, created_at
