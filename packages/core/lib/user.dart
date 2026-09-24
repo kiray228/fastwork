@@ -79,11 +79,14 @@ class AppUser {
   bool get hasRatedShifts => ratingCount > 0;
 
   /// Уровень выводится из числа смен — отдельного поля для него нет.
-  String get level {
-    if (completedShifts >= 50) return 'Профи';
-    if (completedShifts >= 20) return 'Опытный';
-    if (completedShifts >= 5) return 'Уверенный';
-    return 'Новичок';
+  String get level => workerLevelFor(completedShifts).name;
+
+  /// Следующий уровень. null — выше уже некуда.
+  WorkerLevel? get nextLevel {
+    for (final l in kWorkerLevels) {
+      if (l.minShifts > completedShifts) return l;
+    }
+    return null;
   }
 
   /// Первые буквы имени и фамилии для аватарки.
@@ -117,6 +120,30 @@ class AppUser {
         termsVersion: termsVersion ?? this.termsVersion,
       );
 }
+
+/// Уровень исполнителя: название и сколько смен нужно отработать.
+class WorkerLevel {
+  final String name;
+  final int minShifts;
+
+  const WorkerLevel(this.name, this.minShifts);
+}
+
+/// Уровни по возрастанию.
+///
+/// Раньше пороги жили только внутри `AppUser.level`. Теперь их показывает
+/// ещё и история «Рейтинг» — и держать пороги в двух местах значило бы
+/// однажды поменять в одном и забыть про другое.
+const kWorkerLevels = [
+  WorkerLevel('Новичок', 0),
+  WorkerLevel('Уверенный', 5),
+  WorkerLevel('Опытный', 20),
+  WorkerLevel('Профи', 50),
+];
+
+/// Уровень для такого числа смен.
+WorkerLevel workerLevelFor(int completedShifts) =>
+    kWorkerLevels.lastWhere((l) => completedShifts >= l.minShifts);
 
 /// Города, в которых работает fastwork.
 const kCities = [

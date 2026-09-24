@@ -185,6 +185,12 @@ class Shift {
         workDate.day,
       ).add(Duration(minutes: startMinutes));
 
+  /// Момент конца смены. У ночной смены он приходится на следующий день.
+  DateTime get endsAt => startsAt.add(Duration(minutes: durationMinutes));
+
+  /// Смена ещё впереди или идёт прямо сейчас.
+  bool isAheadAt(DateTime now) => now.isBefore(endsAt);
+
   /// Крайний срок отмены: за `cancelDeadlineHours` до начала смены.
   DateTime get cancelDeadline =>
       startsAt.subtract(Duration(hours: cancelDeadlineHours));
@@ -256,6 +262,61 @@ const monthsShort = [
 ];
 
 const weekdaysShort = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+
+/// 2027-03-12 -> «12.03.2027» — так даты пишут в документах.
+String formatDate(DateTime date) =>
+    '${date.day.toString().padLeft(2, '0')}.'
+    '${date.month.toString().padLeft(2, '0')}.${date.year}';
+
+/// 1 -> «1 день», 3 -> «3 дня», 11 -> «11 дней».
+String daysLabel(int days) {
+  final last = days % 10;
+  final lastTwo = days % 100;
+  if (lastTwo >= 11 && lastTwo <= 14) return '$days дней';
+  if (last == 1) return '$days день';
+  if (last >= 2 && last <= 4) return '$days дня';
+  return '$days дней';
+}
+
+/// Смена одним сообщением — чтобы переслать другу в мессенджер.
+///
+/// Кнопка «Поделиться» раньше ничего не делала. Теперь она кладёт в буфер
+/// обмена вот это: всё, что нужно, чтобы решить «пойду или нет», без
+/// ссылок и без необходимости ставить приложение.
+String shiftShareText(Shift shift) {
+  final date = shift.workDate;
+  return [
+    '${shift.title} — ${shift.company}',
+    '${date.day} ${monthsShort[date.month - 1]}, '
+        '${weekdaysShort[date.weekday - 1]}, '
+        '${formatTime(shift.startMinutes)}–${formatTime(shift.endMinutes)}',
+    shift.address,
+    '${formatMoney(shift.totalPay)} за смену'
+        '${shift.isFunded ? ', оплата гарантирована' : ''}',
+    'Смена в fastwork',
+  ].join('\n');
+}
+
+/// «сегодня», «завтра», «послезавтра» или «12 мар, пт».
+///
+/// Про ближайшие дни люди говорят словами, а не числами: «смена завтра»
+/// понятнее, чем «смена 25 сен». Дальше трёх дней слова кончаются.
+String relativeDay(DateTime date, DateTime now) {
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(date.year, date.month, date.day);
+  // Разницу считаем по календарю, а не делением часов на 24: в день
+  // перевода часов в сутках 23 или 25 часов.
+  final diff = DateTime.utc(day.year, day.month, day.day)
+      .difference(DateTime.utc(today.year, today.month, today.day))
+      .inDays;
+  return switch (diff) {
+    0 => 'сегодня',
+    1 => 'завтра',
+    2 => 'послезавтра',
+    _ => '${date.day} ${monthsShort[date.month - 1]}, '
+        '${weekdaysShort[date.weekday - 1]}',
+  };
+}
 
 // ---------------------------------------------------------------------------
 // ДЕМО-ДАННЫЕ
