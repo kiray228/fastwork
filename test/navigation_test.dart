@@ -430,7 +430,8 @@ void main() {
       await tester.tap(find.text('Подтверждаю'));
       await tester.pumpAndSettle();
 
-      await tester.pageBack();
+      // Приложение по-русски, и подсказка у кнопки «назад» тоже.
+      await tester.tap(find.byTooltip('Назад'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Мои'));
       await tester.pumpAndSettle();
@@ -1337,7 +1338,8 @@ void main() {
 
       await tester.tap(find.byTooltip('Уведомления'));
       await tester.pumpAndSettle();
-      await tester.pageBack();
+      // Приложение по-русски, и подсказка у кнопки «назад» тоже.
+      await tester.tap(find.byTooltip('Назад'));
       await tester.pumpAndSettle();
 
       expect(find.text('1'), findsNothing);

@@ -1,88 +1,160 @@
 import 'package:flutter/material.dart';
 
+import '../data/app_preferences.dart';
+import '../stories/story.dart';
 import '../theme/app_colors.dart';
 import '../theme/glass.dart';
 
-/// Одна подсказка в ленте вверху главного экрана.
-class StoryItem {
-  final String title;
-  final IconData icon;
-  final Color color;
-
-  const StoryItem({
-    required this.title,
-    required this.icon,
-    required this.color,
-  });
-}
-
-const demoStories = <StoryItem>[
-  StoryItem(title: 'Выплаты', icon: Icons.payments_outlined, color: Color(0xFF0FA36B)),
-  StoryItem(title: 'Документы', icon: Icons.badge_outlined, color: Color(0xFF6366F1)),
-  StoryItem(title: 'Медкнижка', icon: Icons.local_hospital_outlined, color: Color(0xFFEC4899)),
-  StoryItem(title: 'Правила', icon: Icons.gavel_outlined, color: Color(0xFFF97316)),
-  StoryItem(title: 'Рейтинг', icon: Icons.star_outline, color: Color(0xFFF59E0B)),
-  StoryItem(title: 'Поддержка', icon: Icons.chat_bubble_outline, color: Color(0xFF0EA5E9)),
-];
-
-/// Лента круглых подсказок — как «истории» в соцсетях.
-/// Пока просто оформление: экранов за ними ещё нет.
+/// Лента кружков-историй вверху главного экрана.
+///
+/// Цветное кольцо — историю ещё не смотрели, серое — уже видели. Порядок
+/// не меняется: это справочник, и «Выплаты» должны лежать там же, где
+/// лежали вчера.
 class StoriesRow extends StatelessWidget {
-  const StoriesRow({super.key});
+  final List<Story> stories;
+  final AppPreferences preferences;
+  final ValueChanged<int> onOpen;
+
+  const StoriesRow({
+    super.key,
+    required this.stories,
+    required this.preferences,
+    required this.onOpen,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 92,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: demoStories.length,
-        itemBuilder: (context, index) {
-          final story = demoStories[index];
+    // Слушаем настройки: досмотрел историю — кольцо посерело сразу,
+    // без перезагрузки экрана.
+    return ListenableBuilder(
+      listenable: preferences,
+      builder: (context, _) => SizedBox(
+        height: 108,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          itemCount: stories.length,
+          separatorBuilder: (context, index) => const SizedBox(width: 10),
+          itemBuilder: (context, index) => _StoryBubble(
+            story: stories[index],
+            seen: preferences.isStorySeen(stories[index].id),
+            onTap: () => onOpen(index),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
-          return Padding(
-            padding: const EdgeInsets.only(right: 14),
+class _StoryBubble extends StatefulWidget {
+  final Story story;
+  final bool seen;
+  final VoidCallback onTap;
+
+  const _StoryBubble({
+    required this.story,
+    required this.seen,
+    required this.onTap,
+  });
+
+  @override
+  State<_StoryBubble> createState() => _StoryBubbleState();
+}
+
+class _StoryBubbleState extends State<_StoryBubble> {
+  /// Палец на кружке — он чуть проседает, как настоящая кнопка.
+  bool pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final story = widget.story;
+    final seen = widget.seen;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Semantics(
+      button: true,
+      label: seen
+          ? 'История «${story.title}»'
+          : 'Новая история «${story.title}»',
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => pressed = true),
+        onTapCancel: () => setState(() => pressed = false),
+        onTapUp: (_) => setState(() => pressed = false),
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: pressed ? 0.92 : 1,
+          duration: const Duration(milliseconds: 120),
+          child: SizedBox(
+            width: 70,
             child: Column(
               children: [
                 Container(
-                  width: 56,
-                  height: 56,
+                  width: 64,
+                  height: 64,
                   padding: const EdgeInsets.all(2.5),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    // Кольцо-градиент вокруг иконки — тот самый приём,
-                    // который делает ленту похожей на «истории».
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        story.color,
-                        Color.lerp(story.color, Colors.white, 0.55)!,
-                      ],
-                    ),
+                    // Кольцо-градиент — тот самый знак «здесь новое»,
+                    // знакомый по соцсетям. Просмотренное — тонкое серое.
+                    gradient: seen
+                        ? null
+                        : SweepGradient(
+                            colors: [
+                              story.color,
+                              Color.lerp(story.color, Colors.white, 0.45)!,
+                              AppColors.brand,
+                              story.color,
+                            ],
+                          ),
+                    border: seen
+                        ? Border.all(
+                            color: AppColors.muted.withValues(alpha: 0.45),
+                            width: 1.5,
+                          )
+                        : null,
                   ),
                   child: Container(
+                    padding: const EdgeInsets.all(2.5),
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: GlassTokens.of(context).strongFill,
+                      color: isDark ? AppColors.darkBg : Colors.white,
                     ),
-                    child: Icon(story.icon, size: 24, color: story.color),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            story.color.withValues(alpha: isDark ? 0.35 : 0.2),
+                            GlassTokens.of(context).strongFill,
+                          ],
+                        ),
+                      ),
+                      child: Icon(story.icon, size: 26, color: story.color),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   story.title,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.muted,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    height: 1.15,
+                    fontWeight: seen ? FontWeight.w600 : FontWeight.w800,
+                    color: seen
+                        ? AppColors.muted
+                        : Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
               ],
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }

@@ -21,10 +21,14 @@ class MyShiftsPage extends StatefulWidget {
   final ShiftRepository repository;
   final AppSession session;
 
+  /// Перейти в ленту — с пустого списка «В работе».
+  final VoidCallback? onFindShifts;
+
   const MyShiftsPage({
     super.key,
     required this.repository,
     required this.session,
+    this.onFindShifts,
   });
 
   @override
@@ -142,7 +146,9 @@ class _MyShiftsPageState extends State<MyShiftsPage> {
                   title: 'Пока пусто',
                   subtitle: archived
                       ? 'Сюда попадут завершённые\nи отменённые подработки'
-                      : 'Найдите смену на вкладке «Смены»\nи оставьте заявку',
+                      : 'Найдите смену в ленте\nи запишитесь на неё',
+                  actionLabel: archived ? null : 'Найти смену',
+                  onAction: archived ? null : widget.onFindShifts,
                 ),
                 Ready(:final value) => ListView.builder(
                   key: ValueKey(archived),

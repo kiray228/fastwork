@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../data/app_preferences.dart';
+import '../data/repositories.dart';
 import '../data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/payment.dart';
@@ -9,18 +11,26 @@ import 'package:fastwork_core/user.dart';
 import '../widgets/async_state.dart';
 import '../widgets/common.dart';
 import '../widgets/nav.dart';
+import '../stories/story_actions.dart';
 import '../widgets/skeleton.dart';
+import '../widgets/stories_row.dart';
 import 'create_shift_page.dart';
 
 /// Смены, созданные заказчиком, и кто на них записался.
 class ManagerShiftsPage extends StatefulWidget {
   final AppSession session;
-  final ShiftRepository repository;
+  final AppRepositories repos;
+  final AppPreferences preferences;
+
+  /// Переключить вкладку нижнего меню: 1 — «Создать», 2 — «Оценки».
+  final ValueChanged<int> onOpenTab;
 
   const ManagerShiftsPage({
     super.key,
     required this.session,
-    required this.repository,
+    required this.repos,
+    required this.preferences,
+    required this.onOpenTab,
   });
 
   @override
@@ -30,6 +40,10 @@ class ManagerShiftsPage extends StatefulWidget {
 class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
   Async<List<Shift>> state = const Loading();
 
+  ShiftRepository get repository => widget.repos.shifts;
+
+  late final stories = storiesFor(widget.session);
+
   @override
   void initState() {
     super.initState();
@@ -38,7 +52,7 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
 
   Future<void> _load() async {
     final result = await load(
-      () => widget.repository.shiftsCreatedBy(widget.session.workerId),
+      () => repository.shiftsCreatedBy(widget.session.workerId),
     );
     if (!mounted) return;
     setState(() => state = result);
@@ -75,7 +89,7 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
 
     final result = await guarded(
       context,
-      () => widget.repository.cancelShift(shift.id),
+      () => repository.cancelShift(shift.id),
     );
     if (result == null || !mounted) return;
 
@@ -98,7 +112,7 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
       appRoute(
         CreateShiftPage(
           session: widget.session,
-          repository: widget.repository,
+          repository: repository,
           editing: shift,
           onCreated: () => Navigator.of(context).pop(),
         ),
@@ -110,49 +124,90 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
   Future<void> _openApplicants(Shift shift) async {
     await Navigator.of(context).push(
       appRoute(
-        _ApplicantsPage(shift: shift, repository: widget.repository),
+        _ApplicantsPage(shift: shift, repository: repository),
       ),
     );
     await _load();
   }
 
+  Future<void> _openStory(int index) => openStories(
+        context,
+        session: widget.session,
+        repos: widget.repos,
+        preferences: widget.preferences,
+        initialIndex: index,
+        onCreateShift: () => widget.onOpenTab(1),
+        onRateWorkers: () => widget.onOpenTab(2),
+      );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Мои смены')),
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 260),
-        child: switch (state) {
-          Loading() => const ShiftListSkeleton(count: 2),
-          Failed(:final error) => ErrorView(
-              message: describeError(error),
-              onRetry: () {
-                setState(() => state = const Loading());
-                _load();
-              },
-            ),
-          Ready(value: []) => const EmptyState(
-              icon: Icons.post_add_rounded,
-              title: 'Смен пока нет',
-              subtitle: 'Создайте первую смену на вкладке «Создать»',
-            ),
-          Ready(:final value) => RefreshIndicator(
-              onRefresh: _load,
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                itemCount: value.length,
-                itemBuilder: (context, index) => AnimatedEntrance(
-                  index: index,
-                  child: _ManagerShiftCard(
-                    shift: value[index],
-                    onTap: () => _openApplicants(value[index]),
-                    onCancel: () => _cancelShift(value[index]),
-                    onEdit: () => _editShift(value[index]),
-                  ),
-                ),
+      // Истории листаются вместе со сменами, как у исполнителя.
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(
+              child: StoriesRow(
+                stories: stories,
+                preferences: widget.preferences,
+                onOpen: _openStory,
               ),
             ),
-        },
+            ...switch (state) {
+              Loading() => [
+                  const SliverToBoxAdapter(
+                    child: ShiftListSkeleton(count: 2, shrinkWrap: true),
+                  ),
+                ],
+              Failed(:final error) => [
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: ErrorView(
+                      message: describeError(error),
+                      onRetry: () {
+                        setState(() => state = const Loading());
+                        _load();
+                      },
+                    ),
+                  ),
+                ],
+              Ready(value: []) => [
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: EmptyState(
+                      icon: Icons.post_add_rounded,
+                      title: 'Смен пока нет',
+                      subtitle: 'Опубликуйте первую — люди увидят её\n'
+                          'в ленте сразу после оплаты',
+                      actionLabel: 'Создать смену',
+                      onAction: () => widget.onOpenTab(1),
+                    ),
+                  ),
+                ],
+              Ready(:final value) => [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    sliver: SliverList.builder(
+                      itemCount: value.length,
+                      itemBuilder: (context, index) => AnimatedEntrance(
+                        index: index,
+                        child: _ManagerShiftCard(
+                          shift: value[index],
+                          onTap: () => _openApplicants(value[index]),
+                          onCancel: () => _cancelShift(value[index]),
+                          onEdit: () => _editShift(value[index]),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+            },
+          ],
+        ),
       ),
     );
   }

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import 'auth/terms_page.dart';
+import 'data/app_preferences.dart';
 import 'data/repositories.dart';
 import 'data/session.dart';
 import 'documents_page.dart';
 import 'my_reviews_page.dart';
+import 'stories/story_actions.dart';
 import 'support_ui/support_page.dart';
 import 'theme/app_colors.dart';
 import 'theme/glass.dart';
@@ -17,8 +19,73 @@ import 'widgets/nav.dart';
 class ProfilePage extends StatelessWidget {
   final AppSession session;
   final AppRepositories repos;
+  final AppPreferences preferences;
 
-  const ProfilePage({super.key, required this.session, required this.repos});
+  /// Переключить вкладку нижнего меню — для кнопок в историях заказчика.
+  final ValueChanged<int> onOpenTab;
+
+  const ProfilePage({
+    super.key,
+    required this.session,
+    required this.repos,
+    required this.preferences,
+    required this.onOpenTab,
+  });
+
+  /// Выбрать оформление: как в системе, светлое или тёмное.
+  ///
+  /// «Как в системе» — по умолчанию: телефон сам темнеет вечером, и
+  /// приложение вместе с ним. Но кто-то хочет тёмное всегда, даже днём.
+  Future<void> _changeTheme(BuildContext context) async {
+    final picked = await showModalBottomSheet<ThemeMode>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => GlassSheet(
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SheetHandle(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: Text(
+                  'Оформление',
+                  style: Theme.of(sheetContext)
+                      .textTheme
+                      .headlineSmall
+                      ?.copyWith(fontSize: 20),
+                ),
+              ),
+              for (final mode in ThemeMode.values)
+                ListTile(
+                  leading: Icon(_themeIcon(mode), color: AppColors.brand),
+                  title: Text(_themeName(mode)),
+                  trailing: mode == preferences.themeMode
+                      ? const Icon(Icons.check_rounded, color: AppColors.brand)
+                      : null,
+                  onTap: () => Navigator.of(sheetContext).pop(mode),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked != null) await preferences.setThemeMode(picked);
+  }
+
+  static String _themeName(ThemeMode mode) => switch (mode) {
+        ThemeMode.system => 'Как в системе',
+        ThemeMode.light => 'Светлое',
+        ThemeMode.dark => 'Тёмное',
+      };
+
+  static IconData _themeIcon(ThemeMode mode) => switch (mode) {
+        ThemeMode.system => Icons.brightness_auto_rounded,
+        ThemeMode.light => Icons.light_mode_rounded,
+        ThemeMode.dark => Icons.dark_mode_rounded,
+      };
 
   /// Сменить город.
   ///
@@ -37,17 +104,9 @@ class ProfilePage extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: AppColors.muted.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
+              const SheetHandle(),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                 child: Text(
                   'Ваш город',
                   style: Theme.of(sheetContext)
@@ -175,6 +234,39 @@ class ProfilePage extends StatelessWidget {
                   title: 'Город',
                   trailing: user.city,
                   onTap: () => _changeCity(context),
+                ),
+                // Слушаем тему: подпись справа должна смениться сразу,
+                // даже если цвета остались прежними — например, «как в
+                // системе» днём и «светлое» выглядят одинаково.
+                ValueListenableBuilder<ThemeMode>(
+                  valueListenable: preferences.themeListenable,
+                  builder: (context, mode, _) => _MenuRow(
+                    icon: _themeIcon(mode),
+                    title: 'Оформление',
+                    trailing: _themeName(mode),
+                    onTap: () => _changeTheme(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          SurfaceCard(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(
+              children: [
+                _MenuRow(
+                  icon: Icons.auto_stories_outlined,
+                  title: 'Как работает fastwork',
+                  trailing: 'Истории',
+                  onTap: () => openStories(
+                    context,
+                    session: session,
+                    repos: repos,
+                    preferences: preferences,
+                    onCreateShift: () => onOpenTab(1),
+                    onRateWorkers: () => onOpenTab(2),
+                  ),
                 ),
                 _MenuRow(
                   icon: Icons.gavel_rounded,
@@ -384,13 +476,13 @@ class _MenuRow extends StatelessWidget {
   final IconData icon;
   final String title;
   final String? trailing;
-  final VoidCallback? onTap;
+  final VoidCallback onTap;
 
   const _MenuRow({
     required this.icon,
     required this.title,
+    required this.onTap,
     this.trailing,
-    this.onTap,
   });
 
   @override
@@ -409,10 +501,7 @@ class _MenuRow extends StatelessWidget {
           const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
         ],
       ),
-      onTap: onTap ??
-          () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Этот раздел ещё не сделан')),
-              ),
+      onTap: onTap,
     );
   }
 }

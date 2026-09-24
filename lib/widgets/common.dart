@@ -173,6 +173,32 @@ class SurfaceCard extends StatelessWidget {
   }
 }
 
+/// Ссылка «как это работает»: открывает историю о том, что на экране.
+///
+/// Справка рядом с делом, а не в отдельном разделе: человек, который
+/// смотрит на баланс, спрашивает про выплаты именно сейчас.
+class HelpLink extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const HelpLink({super.key, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      onPressed: onTap,
+      icon: const Icon(Icons.auto_stories_rounded, size: 18),
+      label: Text(label),
+      style: TextButton.styleFrom(
+        foregroundColor: AppColors.brand,
+        minimumSize: const Size(0, 40),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
 /// Строка «иконка + текст» с приглушённой иконкой в мягком квадрате.
 class InfoRow extends StatelessWidget {
   final IconData icon;
@@ -254,11 +280,18 @@ class EmptyState extends StatelessWidget {
   final String title;
   final String subtitle;
 
+  /// Кнопка «что делать дальше». Пустой экран с подсказкой лучше пустого
+  /// без неё, а с кнопкой — лучше, чем с подсказкой.
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
   const EmptyState({
     super.key,
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.actionLabel,
+    this.onAction,
   });
 
   @override
@@ -287,11 +320,21 @@ class EmptyState extends StatelessWidget {
                   ),
             ),
             const SizedBox(height: 8),
+            // Подсказка — самое полезное на пустом экране, поэтому она
+            // цвета обычного текста, а не бледно-серая: на цветном
+            // стеклянном фоне серый почти не читался.
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.muted, height: 1.4),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(height: 1.4),
             ),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 20),
+              FilledButton(onPressed: onAction, child: Text(actionLabel!)),
+            ],
           ],
         ),
       ),
@@ -344,7 +387,10 @@ class ErrorView extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.muted, height: 1.4),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(height: 1.4),
             ),
             const SizedBox(height: 20),
             OutlinedButton.icon(

@@ -5,6 +5,8 @@ import 'package:fastwork_core/data/wallet_repository.dart';
 import 'package:fastwork_core/mrp.dart';
 import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_core/shift.dart';
+import 'stories/story.dart';
+import 'stories/story_actions.dart';
 import 'theme/app_colors.dart';
 import 'widgets/async_state.dart';
 import 'widgets/common.dart';
@@ -124,6 +126,18 @@ class _WalletPageState extends State<WalletPage> {
                         ? () => _withdraw(summary.balance)
                         : null,
                   ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: HelpLink(
+                    label: widget.isManager
+                        ? 'Как устроена оплата смен'
+                        : 'Как работают выплаты',
+                    onTap: () => openHelpStory(
+                      context,
+                      widget.isManager ? 'm.pay' : 'payouts',
+                    ),
+                  ),
+                ),
                 if (summary.sandbox) ...[
                   const SizedBox(height: 14),
                   const _SandboxNotice(),
@@ -131,6 +145,19 @@ class _WalletPageState extends State<WalletPage> {
                 if (limit != null) ...[
                   const SizedBox(height: 14),
                   EarningsLimitCard(limit: limit!),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: HelpLink(
+                      label: 'Что такое лимит $kEarningsLimitMrp МРП',
+                      onTap: () => openHelpStory(
+                        context,
+                        'limit',
+                        data: StoryData(
+                          loadLimit: limitLoader(widget.repository),
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 14),
                 SurfaceCard(
