@@ -70,22 +70,32 @@ class _WalletPageState extends State<WalletPage> {
   /// Весь, а не произвольную сумму: так проще и человеку, и нам — поле
   /// для суммы добавим, когда кто-то попросит вывести половину.
   Future<void> _withdraw(int balance) async {
-    final done = await showPaymentSheet(
+    final result = await showCheckoutSheet(
       context,
       title: 'Вывод на карту',
       note: 'Переведём весь баланс. Комиссии за вывод нет.',
       lines: [PaymentLine('Доступно к выводу', balance)],
       total: balance,
       actionLabel: 'Вывести ${formatMoney(balance)}',
-      onCard: (card) => widget.wallet.withdraw(amount: balance, card: card),
+      payout: true,
+      start: (method, phone, previous) =>
+          widget.wallet.startWithdrawal(balance),
+      status: widget.wallet.withdrawalStatus,
+      completeSandbox: (id, card) =>
+          widget.wallet.completeSandboxWithdrawal(id, card!),
     );
-    if (!done || !mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Деньги отправлены на карту')),
-    );
+    if (!mounted) return;
+    // Окно закрыли — баланс мог измениться в любом случае: сумма уходит с
+    // него сразу, как только вывод начат.
     setState(() => state = const Loading());
     await _load();
+    if (result == null || !mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(result.isPaid
+          ? 'Деньги отправлены на карту'
+          : 'Перевод в обработке — деньги придут, когда банк его проведёт'),
+    ));
   }
 
   @override
@@ -368,6 +378,7 @@ class _EntryRow extends StatelessWidget {
         WalletEntryKind.withdrawal => Icons.north_east_rounded,
         WalletEntryKind.charge => Icons.credit_card_rounded,
         WalletEntryKind.refund => Icons.undo_rounded,
+        WalletEntryKind.payoutDone => Icons.check_circle_outline_rounded,
         _ => Icons.swap_horiz_rounded,
       };
 
@@ -411,6 +422,8 @@ class _EntryRow extends StatelessWidget {
               ],
             ),
           ),
+          // Отметка «перевод дошёл» — без суммы: деньги уже учтены.
+          if (entry.amount != 0)
           Text(
             '${incoming ? '+' : '−'}${formatMoney(entry.amount.abs())}',
             style: TextStyle(

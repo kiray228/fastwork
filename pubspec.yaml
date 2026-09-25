@@ -51,6 +51,9 @@ dependencies:
   drift_flutter: ^0.3.1
   http: ^1.6.0
   shared_preferences: ^2.5.5
+  # Открыть страницу оплаты провайдера: в браузере — новой вкладкой, на
+  # телефоне — в браузере системы.
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

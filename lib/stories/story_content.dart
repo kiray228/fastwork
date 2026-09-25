@@ -111,7 +111,7 @@ List<Story> workerStories() => [
         ],
       ),
       Story(
-        id: 'payouts.1',
+        id: 'payouts.2',
         title: 'Выплаты',
         icon: Icons.payments_rounded,
         color: _money,
@@ -125,7 +125,7 @@ List<Story> workerStories() => [
               color: _money,
               items: [
                 StepItem(Icons.credit_card_rounded, 'Заказчик оплатил смену',
-                    caption: 'Картой, при публикации'),
+                    caption: 'Картой или через Kaspi, при публикации'),
                 StepItem(Icons.shield_rounded, 'Сервис держит деньги',
                     caption: 'До конца смены'),
                 StepItem(Icons.fact_check_rounded, 'Вы отработали',
@@ -171,9 +171,9 @@ List<Story> workerStories() => [
           ),
           StorySlide(
             title: 'Вывод на карту',
-            body: 'Выводите весь баланс, от ${formatMoney(kMinWithdrawal)}. '
-                'Комиссии за вывод нет. Номер карты к нам не попадает — '
-                'храним только последние четыре цифры.',
+            body: 'Выводите весь баланс, от ${formatMoney(kMinWithdrawal)}, '
+                'на карту любого банка — хоть на Kaspi Gold. Комиссии нет, '
+                'а карту вы вводите на странице платёжного сервиса.',
             visual: (context, data) =>
                 const CardMock(caption: 'Комиссия за вывод — 0 ₸'),
             action: StoryAction.wallet,
@@ -467,7 +467,7 @@ List<Story> workerStories() => [
 /// Истории заказчика — на его главном экране «Мои смены».
 List<Story> managerStories() => [
       Story(
-        id: 'm.how.1',
+        id: 'm.how.2',
         title: 'Как нанять',
         icon: Icons.bolt_rounded,
         color: _how,
@@ -481,8 +481,8 @@ List<Story> managerStories() => [
               items: [
                 StepItem(Icons.add_circle_rounded, 'Создайте смену',
                     caption: 'Категория, время, ставка, число мест'),
-                StepItem(Icons.credit_card_rounded, 'Оплатите картой',
-                    caption: 'Деньги держит сервис'),
+                StepItem(Icons.credit_card_rounded, 'Оплатите',
+                    caption: 'Картой или счётом в Kaspi.kz'),
                 StepItem(Icons.groups_rounded, 'Люди записываются',
                     caption: 'Видно рейтинг каждого'),
                 StepItem(Icons.fact_check_rounded, 'Отметьте, кто вышел',

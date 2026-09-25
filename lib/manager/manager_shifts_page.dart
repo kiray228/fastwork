@@ -11,6 +11,7 @@ import 'package:fastwork_core/user.dart';
 import '../widgets/async_state.dart';
 import '../widgets/common.dart';
 import '../widgets/nav.dart';
+import '../widgets/payment_sheet.dart';
 import '../stories/story_actions.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/stories_row.dart';
@@ -121,6 +122,36 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
     await _load();
   }
 
+  /// Оплатить смену, которая так и не оплачена.
+  Future<void> _payShift(Shift shift) async {
+    final cost = ShiftCost.of(shift);
+    final result = await showCheckoutSheet(
+      context,
+      title: 'Оплата смены',
+      note: 'Смена появится в ленте, как только пройдёт оплата.',
+      lines: [
+        PaymentLine(
+          'Вознаграждение: ${cost.slots} × ${formatMoney(cost.slotPay)}',
+          cost.pay,
+        ),
+        PaymentLine('Комиссия сервиса $kPlatformFeePercent%', cost.fee),
+      ],
+      total: cost.total,
+      actionLabel: 'Оплатить ${formatMoney(cost.total)}',
+      phone: widget.session.user?.phone ?? '',
+      start: (method, phone, _) =>
+          repository.retryPayment(shift.id, method: method, phone: phone),
+      status: repository.paymentStatus,
+      completeSandbox: (id, card) =>
+          repository.completeSandboxPayment(id, card: card),
+    );
+    await _load();
+    if (!mounted || result == null || !result.isPaid) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Смена опубликована')),
+    );
+  }
+
   Future<void> _openApplicants(Shift shift) async {
     await Navigator.of(context).push(
       appRoute(
@@ -200,6 +231,7 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
                           onTap: () => _openApplicants(value[index]),
                           onCancel: () => _cancelShift(value[index]),
                           onEdit: () => _editShift(value[index]),
+                          onPay: () => _payShift(value[index]),
                         ),
                       ),
                     ),
@@ -218,12 +250,14 @@ class _ManagerShiftCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onCancel;
   final VoidCallback onEdit;
+  final VoidCallback onPay;
 
   const _ManagerShiftCard({
     required this.shift,
     required this.onTap,
     required this.onCancel,
     required this.onEdit,
+    required this.onPay,
   });
 
   @override
@@ -251,6 +285,12 @@ class _ManagerShiftCard extends StatelessWidget {
                 ),
                 if (shift.isCancelled)
                   const TagChip(text: 'Отменена', color: AppColors.danger)
+                else if (shift.awaitingPayment)
+                  const TagChip(
+                    text: 'Ждёт оплаты',
+                    icon: Icons.hourglass_top_rounded,
+                    color: AppColors.warning,
+                  )
                 else if (isPast)
                   const TagChip(text: 'Прошла')
                 else if (!shift.hasFreeSlots)
@@ -275,8 +315,24 @@ class _ManagerShiftCard extends StatelessWidget {
               text: '${formatMoney(shift.totalPay)} за смену · '
                   '${formatMoney(shift.hourlyRate)}/ч',
             ),
-            // Где сейчас деньги: у сервиса или уже вернулись.
-            if (shift.isFunded)
+            // Где сейчас деньги: у сервиса, ещё не пришли или вернулись.
+            if (shift.awaitingPayment && !shift.isCancelled) ...[
+              const InfoRow(
+                icon: Icons.visibility_off_outlined,
+                iconColor: AppColors.warning,
+                text: 'Исполнители не видят смену, пока она не оплачена',
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onPay,
+                  icon: const Icon(Icons.lock_rounded, size: 18),
+                  label: Text(
+                      'Оплатить ${formatMoney(ShiftCost.of(shift).total)}'),
+                ),
+              ),
+            ] else if (shift.isFunded)
               InfoRow(
                 icon: Icons.verified_user_outlined,
                 iconColor: AppColors.success,
@@ -339,6 +395,9 @@ class _ManagerShiftCard extends StatelessWidget {
                 // Отменить можно только смену, которая ещё впереди:
                 // прошедшую отменять поздно, отменённую — незачем.
                 if (!isPast && !shift.isCancelled) ...[
+                  // Неоплаченную не правим: за неё могут платить по
+                  // старой цене прямо сейчас.
+                  if (!shift.awaitingPayment)
                   TextButton(
                     onPressed: onEdit,
                     style: TextButton.styleFrom(

@@ -108,7 +108,7 @@ class ApiShiftRepository implements ShiftRepository {
       _result(await client.post('/api/shifts/$shiftId/cancel-shift'));
 
   @override
-  Future<BookingResult> updateShift({
+  Future<ShiftEditResult> updateShift({
     required int shiftId,
     required DateTime workDate,
     required String title,
@@ -120,10 +120,12 @@ class ApiShiftRepository implements ShiftRepository {
     String? category,
     List<String> duties = const [],
     String? dressCode,
-    PaymentCard? card,
+    PaymentMethod method = PaymentMethod.card,
+    String? phone,
   }) async =>
-      _result(await client.post('/api/shifts/$shiftId', {
-        'card': card?.toJson(),
+      ShiftEditResult.fromJson(await client.post('/api/shifts/$shiftId', {
+        'method': method.id,
+        'phone': phone,
         'workDate': workDate.toIso8601String(),
         'title': title,
         'category': category,
@@ -134,7 +136,7 @@ class ApiShiftRepository implements ShiftRepository {
         'workersNeeded': workersNeeded,
         'duties': duties,
         'dressCode': dressCode,
-      }));
+      }) as Map<String, dynamic>);
 
   @override
   Future<BookingResult> confirmAttendance({
@@ -187,7 +189,7 @@ class ApiShiftRepository implements ShiftRepository {
   }
 
   @override
-  Future<int> createShift({
+  Future<PaymentCheckout> createShift({
     required DateTime workDate,
     required String title,
     required String company,
@@ -198,15 +200,18 @@ class ApiShiftRepository implements ShiftRepository {
     required int workersNeeded,
     required int createdBy,
     required String city,
-    required PaymentCard card,
+    required PaymentMethod method,
+    String? phone,
     String category = kOtherCategory,
     List<String> duties = const [],
     String? dressCode,
     double? minRating,
   }) async {
     final data = await client.post('/api/shifts', {
-      // Токен карты, а не её номер: номер остался у провайдера.
-      'card': card.toJson(),
+      // Ни номера карты, ни денег: только способ. Платит человек у
+      // провайдера, а сервер узнаёт об этом от провайдера сам.
+      'method': method.id,
+      'phone': phone,
       'workDate': workDate.toIso8601String(),
       'title': title,
       'category': category,
@@ -221,8 +226,34 @@ class ApiShiftRepository implements ShiftRepository {
       'dressCode': dressCode,
       'minRating': minRating,
     });
-    return (data as Map<String, dynamic>)['id'] as int;
+    return PaymentCheckout.fromJson(data as Map<String, dynamic>);
   }
+
+  @override
+  Future<PaymentCheckout> retryPayment(
+    int shiftId, {
+    required PaymentMethod method,
+    String? phone,
+  }) async =>
+      PaymentCheckout.fromJson(await client.post('/api/shifts/$shiftId/pay', {
+        'method': method.id,
+        'phone': phone,
+      }) as Map<String, dynamic>);
+
+  @override
+  Future<PaymentCheckout> paymentStatus(int paymentId) async =>
+      PaymentCheckout.fromJson(
+          await client.get('/api/payments/$paymentId') as Map<String, dynamic>);
+
+  @override
+  Future<PaymentCheckout> completeSandboxPayment(
+    int paymentId, {
+    PaymentCard? card,
+  }) async =>
+      PaymentCheckout.fromJson(await client.post(
+        '/api/payments/$paymentId/sandbox',
+        {'card': card?.toJson()},
+      ) as Map<String, dynamic>);
 
   @override
   Future<List<Shift>> shiftsCreatedBy(int managerId) async =>
