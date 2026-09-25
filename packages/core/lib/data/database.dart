@@ -310,24 +310,100 @@ class PaymentRows extends Table {
   /// Комиссия сервиса, в тиынах.
   IntColumn get fee => integer()();
 
-  /// `held` — деньги у сервиса, `refunded` — остаток вернули заказчику.
+  /// `pending` — смена ждёт оплаты и в ленте её нет, `held` — деньги у
+  /// сервиса, `refunded` — остаток вернули заказчику.
   TextColumn get status => text()();
 
+  /// Чем платили: «Visa •• 4242», «Kaspi.kz». Пусто, пока не заплатили.
   TextColumn get cardLast4 => text()();
   TextColumn get cardBrand => text()();
 
-  /// Номер операции у провайдера. По нему делают возврат.
+  /// Номер первой операции у провайдера. Возвраты идут по операциям из
+  /// `charge_rows` — их у смены может быть несколько, если доплачивали.
   TextColumn get operation => text()();
+
+  /// Способ: `card` или `kaspi`. Добавлен в четырнадцатой версии.
+  TextColumn get method => text().withDefault(const Constant('card'))();
 
   DateTimeColumn get createdAt => dateTime()();
 }
 
-/// Состояния оплаты.
+/// Состояния оплаты смены.
 class PaymentStatus {
   PaymentStatus._();
 
+  static const pending = 'pending';
   static const held = 'held';
   static const refunded = 'refunded';
+}
+
+/// Каждое списание у провайдера — отдельной строкой.
+///
+/// У смены их может быть несколько: первая оплата, потом доплата, когда
+/// смену сделали дороже. Возвращать деньги провайдер умеет только по той
+/// операции, по которой их взял, и не больше, чем взял. Поэтому у каждой
+/// строки свой номер операции и своё «уже возвращено».
+class ChargeRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get shiftId => integer().references(ShiftRows, #id)();
+  IntColumn get payerId => integer()();
+
+  /// `shift` — оплата смены, `topup` — доплата после правки.
+  TextColumn get kind => text()();
+
+  /// `card` или `kaspi`.
+  TextColumn get method => text()();
+
+  /// Сколько списываем вместе с комиссией, в тиынах.
+  IntColumn get amount => integer()();
+
+  /// Сколько по этой операции уже вернули.
+  IntColumn get refunded => integer().withDefault(const Constant(0))();
+
+  /// `pending`, `paid`, `failed` — см. `CheckoutStatus`.
+  TextColumn get status => text()();
+
+  /// Кто принимает: `sandbox`, `ioka`, `apipay`.
+  TextColumn get provider => text()();
+
+  /// Номер операции у провайдера. Пусто — провайдер ещё не ответил.
+  TextColumn get operation => text().withDefault(const Constant(''))();
+
+  /// Куда отправить человека платить. null — никуда: счёт в Kaspi.kz.
+  TextColumn get checkoutUrl => text().nullable()();
+
+  /// Телефон, на который выставлен счёт Kaspi.
+  TextColumn get phone => text().nullable()();
+
+  /// Для доплаты — новые условия смены. Они вступят в силу, только когда
+  /// доплата пройдёт: иначе смена подорожала бы в ленте за чужой счёт.
+  TextColumn get payload => text().nullable()();
+
+  /// Почему не прошло.
+  TextColumn get message => text().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get paidAt => dateTime().nullable()();
+}
+
+/// Выводы денег исполнителям.
+///
+/// Вывод тоже идёт через провайдера и тоже не мгновенный: человек вводит
+/// карту на странице провайдера, провайдер переводит. Пока идёт перевод,
+/// сумма уже списана с баланса — иначе можно было бы вывести её дважды.
+class PayoutRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer()();
+  IntColumn get amount => integer()();
+
+  /// `pending`, `paid`, `failed`.
+  TextColumn get status => text()();
+  TextColumn get provider => text()();
+  TextColumn get operation => text().withDefault(const Constant(''))();
+  TextColumn get checkoutUrl => text().nullable()();
+  TextColumn get message => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get doneAt => dateTime().nullable()();
 }
 
 /// Движения денег — история кошелька.
@@ -484,6 +560,8 @@ class NotificationRows extends Table {
     MrpRateRows,
     PaymentRows,
     WalletEntryRows,
+    ChargeRows,
+    PayoutRows,
   ],
 )
 /// Описание базы: какие таблицы и какой версии схема.
@@ -592,7 +670,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -653,6 +731,28 @@ class AppDatabase extends _$AppDatabase {
           if (from < 13) {
             await m.createTable(paymentRows);
             await m.createTable(walletEntryRows);
+          }
+          if (from < 14) {
+            await addColumnIfMissing(m, paymentRows, paymentRows.method);
+            await m.createTable(chargeRows);
+            await m.createTable(payoutRows);
+            // Оплаты, сделанные до четырнадцатой версии, — это одна
+            // операция на смену. Переносим их в журнал операций, чтобы
+            // по ним работали возвраты. `NOT EXISTS` — чтобы повторный
+            // запуск обновления не завёл их дважды.
+            await customStatement('''
+              INSERT INTO charge_rows (shift_id, payer_id, kind, method,
+                amount, refunded, status, provider, operation,
+                created_at, paid_at)
+              SELECT p.shift_id, p.payer_id, 'shift', 'card',
+                p.amount + p.fee,
+                CASE WHEN p.status = 'refunded' THEN p.amount + p.fee
+                  ELSE 0 END,
+                'paid', 'sandbox', p.operation, p.created_at, p.created_at
+              FROM payment_rows p
+              WHERE NOT EXISTS (
+                SELECT 1 FROM charge_rows c WHERE c.shift_id = p.shift_id)
+            ''');
           }
         },
         beforeOpen: (details) async {

@@ -41,6 +41,10 @@ class Shift {
   /// Заказчик уже внёс деньги, и сервис их держит — оплата гарантирована.
   final bool isFunded;
 
+  /// Смена создана, но ещё не оплачена. Такую видит только заказчик —
+  /// в ленту она попадёт, когда провайдер подтвердит оплату.
+  final bool awaitingPayment;
+
   const Shift({
     required this.id,
     required this.workDate,
@@ -66,6 +70,7 @@ class Shift {
     this.city = 'Алматы',
     this.category = kOtherCategory,
     this.isFunded = false,
+    this.awaitingPayment = false,
   });
 
   /// Категория целиком — с названием и разделом.
@@ -84,6 +89,7 @@ class Shift {
     DateTime? myCheckedInAt,
     DateTime? cancelledAt,
     bool? isFunded,
+    bool? awaitingPayment,
   }) =>
       Shift(
         id: id,
@@ -110,6 +116,7 @@ class Shift {
         myCheckedInAt: myCheckedInAt ?? this.myCheckedInAt,
         cancelledAt: cancelledAt ?? this.cancelledAt,
         isFunded: isFunded ?? this.isFunded,
+        awaitingPayment: awaitingPayment ?? this.awaitingPayment,
       );
 
   /// Сколько всего длится смена.
@@ -494,6 +501,7 @@ extension ShiftJson on Shift {
         'myCheckedInAt': myCheckedInAt?.toIso8601String(),
         'cancelledAt': cancelledAt?.toIso8601String(),
         'isFunded': isFunded,
+        'awaitingPayment': awaitingPayment,
       };
 }
 
@@ -528,4 +536,5 @@ Shift shiftFromJson(Map<String, dynamic> json) => Shift(
           ? null
           : DateTime.parse(json['cancelledAt'] as String),
       isFunded: json['isFunded'] as bool? ?? false,
+      awaitingPayment: json['awaitingPayment'] as bool? ?? false,
     );

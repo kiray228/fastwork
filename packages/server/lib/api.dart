@@ -21,6 +21,9 @@ import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
 import 'auth_service.dart';
 import 'code_sender.dart';
+import 'payments/ioka.dart';
+import 'payments/kaspi.dart';
+import 'payments/http_json.dart';
 
 /// Все адреса сервера.
 ///
@@ -44,11 +47,16 @@ class Api {
   /// Через кого идут деньги — один шлюз на весь сервер.
   final PaymentGateway payments;
 
+  /// Секреты подписи вебхуков: `ioka`, `apipay`. Пусто — подпись не
+  /// проверяем, но и не доверяем: вебхук только повод спросить провайдера.
+  final Map<String, String> webhookSecrets;
+
   Api(
     this.db,
     CodeSender sender, {
     this.adminKey = '',
     PaymentGateway? payments,
+    this.webhookSecrets = const {},
   })  : auth = AuthService(db, sender),
         payments = payments ?? SandboxPaymentGateway();
 
@@ -111,6 +119,9 @@ class Api {
     final raw = body['card'];
     return raw is Map<String, dynamic> ? PaymentCard.fromJson(raw) : null;
   }
+
+  DbWalletRepository _walletFor(AppUser? user) =>
+      DbWalletRepository(db, StaticUser(user), payments: payments);
 
   /// Отказ по деньгам — 402 «нужна оплата». Код редкий, но ровно про это:
   /// запрос правильный, не хватило платежа.
@@ -528,15 +539,19 @@ class Api {
         if (!isKnownCategory(category)) {
           return _error('Неизвестная категория работ');
         }
-        // Смена без оплаты не публикуется — в этом вся гарантия.
-        final card = _card(body);
-        if (card == null) {
-          return _error('Оплатите смену картой', status: 402);
+        // Смена без оплаты не публикуется — в этом вся гарантия. Способ
+        // обязателен: старое приложение, которое присылало карту прямо
+        // сюда, должно обновиться.
+        final method = body['method'] as String?;
+        if (method == null) {
+          return _error('Обновите приложение: изменился способ оплаты',
+              status: 426);
         }
-        final int id;
+        final PaymentCheckout checkout;
         try {
-          id = await _shiftsFor(user).createShift(
-            card: card,
+          checkout = await _shiftsFor(user).createShift(
+            method: PaymentMethod.fromId(method),
+            phone: body['phone'] as String?,
             workDate: DateTime.parse(body['workDate'] as String),
             title: body['title'] as String,
             company: body['company'] as String,
@@ -555,7 +570,25 @@ class Api {
         } on PaymentDeclined catch (e) {
           return _declined(e);
         }
-        return _json({'id': id});
+        return _json(checkout.toJson());
+      });
+    });
+
+    // Оплатить неоплаченную смену ещё раз — другим способом или заново.
+    router.post('/api/shifts/<id|[0-9]+>/pay',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        final body = await _body(request);
+        try {
+          final checkout = await _shiftsFor(user).retryPayment(
+            int.parse(id),
+            method: PaymentMethod.fromId(body['method'] as String?),
+            phone: body['phone'] as String?,
+          );
+          return _json(checkout.toJson());
+        } on PaymentDeclined catch (e) {
+          return _declined(e);
+        }
       });
     });
 
@@ -574,10 +607,11 @@ class Api {
         if (category != null && !isKnownCategory(category)) {
           return _error('Неизвестная категория работ');
         }
-        final BookingResult result;
+        final ShiftEditResult result;
         try {
           result = await _shiftsFor(user).updateShift(
-            card: _card(body),
+            method: PaymentMethod.fromId(body['method'] as String?),
+            phone: body['phone'] as String?,
             shiftId: int.parse(id),
             workDate: DateTime.parse(body['workDate'] as String),
             title: body['title'] as String,
@@ -593,7 +627,7 @@ class Api {
         } on PaymentDeclined catch (e) {
           return _declined(e);
         }
-        return _json({'result': result.name});
+        return _json(result.toJson());
       });
     });
 
@@ -687,16 +721,119 @@ class Api {
     router.post('/api/wallet/withdraw', (Request request) async {
       return _authorized(request, (user) async {
         final body = await _body(request);
-        final card = _card(body);
-        if (card == null) return _error('Укажите карту');
         try {
-          await DbWalletRepository(db, StaticUser(user), payments: payments)
-              .withdraw(amount: body['amount'] as int? ?? 0, card: card);
+          final checkout = await _walletFor(user)
+              .startWithdrawal(body['amount'] as int? ?? 0);
+          return _json(checkout.toJson());
         } on PaymentDeclined catch (e) {
           return _declined(e);
         }
-        return _json({'ok': true});
       });
+    });
+
+    router.get('/api/wallet/payouts/<id|[0-9]+>',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        try {
+          return _json(
+              (await _walletFor(user).withdrawalStatus(int.parse(id))).toJson());
+        } on PaymentDeclined catch (e) {
+          return _declined(e);
+        }
+      });
+    });
+
+    router.post('/api/wallet/payouts/<id|[0-9]+>/sandbox',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        final card = _card(await _body(request));
+        if (card == null) return _error('Укажите карту');
+        try {
+          final checkout = await _walletFor(user)
+              .completeSandboxWithdrawal(int.parse(id), card);
+          return _json(checkout.toJson());
+        } on PaymentDeclined catch (e) {
+          return _declined(e);
+        }
+      });
+    });
+
+    // --- оплаты ------------------------------------------------------------
+
+    // Как идёт оплата. Приложение спрашивает раз в несколько секунд, пока
+    // человек платит на странице провайдера или в Kaspi.kz. Если провайдер
+    // уже подтвердил — смена публикуется прямо в этом запросе.
+    router.get('/api/payments/<id|[0-9]+>', (Request request, String id) async {
+      return _authorized(request, (user) async {
+        try {
+          return _json(
+              (await _shiftsFor(user).paymentStatus(int.parse(id))).toJson());
+        } on PaymentDeclined catch (e) {
+          return _declined(e);
+        }
+      });
+    });
+
+    // Тестовый режим: «заплатить» без провайдера.
+    router.post('/api/payments/<id|[0-9]+>/sandbox',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        try {
+          final checkout = await _shiftsFor(user).completeSandboxPayment(
+            int.parse(id),
+            card: _card(await _body(request)),
+          );
+          return _json(checkout.toJson());
+        } on PaymentDeclined catch (e) {
+          return _declined(e);
+        }
+      });
+    });
+
+    // Вебхуки провайдеров: «по операции такой-то что-то произошло».
+    //
+    // Верим не вебхуку, а провайдеру: по номеру операции сами спрашиваем,
+    // как она прошла. Поддельный вебхук поэтому ничего не сломает. Подпись
+    // всё равно проверяем, если секрет задан: так мусорные запросы даже
+    // не доходят до провайдера.
+    router.post('/api/payments/webhook/<provider|ioka|apipay>',
+        (Request request, String provider) async {
+      final raw = await request.read().expand((chunk) => chunk).toList();
+      final secret = webhookSecrets[provider] ?? '';
+      if (secret.isNotEmpty) {
+        final signature = request.headers[
+            provider == 'ioka' ? 'x-signature' : 'x-webhook-signature'];
+        if (!verifyHmac(secret: secret, body: raw, signature: signature)) {
+          return _error('Подпись не сходится', status: 401);
+        }
+      }
+
+      final Map<String, dynamic> json;
+      try {
+        json = jsonDecode(utf8.decode(raw)) as Map<String, dynamic>;
+      } catch (_) {
+        return _error('Ожидался JSON');
+      }
+      final operation = provider == 'ioka'
+          ? IokaProvider.operationFromWebhook(json)
+          : KaspiInvoiceProvider.operationFromWebhook(json);
+      if (operation != null) {
+        await DbShiftRepository(db, const StaticUser(null), payments: payments)
+            .settleOperation(provider, operation);
+        await _walletFor(null).settleOperation(provider, operation);
+      }
+      return _json({'ok': true});
+    });
+
+    // Сюда провайдер возвращает человека после оплаты. Само приложение
+    // осталось открытым в другой вкладке и уже знает, чем всё кончилось, —
+    // здесь только просьба вернуться в него.
+    router.get('/api/payments/return', (Request request) {
+      final failed = request.url.queryParameters['result'] == 'failure';
+      return Response.ok(
+        _returnPage(failed),
+        headers: {'content-type': 'text/html; charset=utf-8'},
+      );
     });
 
     // --- документы ---------------------------------------------------------
@@ -781,3 +918,24 @@ class Api {
     return router;
   }
 }
+
+/// Страница «вернитесь в приложение» после оплаты у провайдера.
+String _returnPage(bool failed) => """<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fastwork — оплата</title>
+<style>
+body{margin:0;min-height:100vh;display:flex;align-items:center;
+justify-content:center;background:#EFF6F3;font-family:system-ui,
+-apple-system,sans-serif;color:#0F172A;text-align:center;padding:24px}
+.card{max-width:360px;background:#fff;border-radius:24px;padding:32px;
+box-shadow:0 12px 40px rgba(15,61,46,.12)}
+.icon{font-size:48px}h1{font-size:22px;margin:12px 0 8px}
+p{color:#475569;line-height:1.45;margin:0}
+</style></head><body><div class="card">
+<div class="icon">${failed ? '⚠️' : '✅'}</div>
+<h1>${failed ? 'Оплата не прошла' : 'Оплата принята'}</h1>
+<p>${failed ? 'Вернитесь в приложение fastwork и попробуйте ещё раз '
+        'или выберите другой способ.' : 'Вернитесь в приложение fastwork — '
+        'смена появится в ленте, как только банк подтвердит платёж.'}</p>
+</div></body></html>""";

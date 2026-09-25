@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:fastwork_core/data/database.dart';
 import 'package:fastwork_core/data/current_user.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
+import 'package:fastwork_core/data/wallet_repository.dart';
+import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_server/api.dart';
 import 'package:fastwork_server/code_sender.dart';
 import 'package:fastwork_server/open_database.dart';
@@ -34,8 +37,10 @@ Future<void> main(List<String> args) async {
   // в это же окно. Приложение разницы не замечает.
   final sender = resolveCodeSender();
 
-  // Тестовый шлюз, пока не подключён настоящий провайдер.
-  final payments = resolvePaymentGateway();
+  // Карты, Kaspi и выплаты: настоящие провайдеры, если заданы ключи,
+  // иначе тестовый режим. См. lib/payment_gateway.dart.
+  final setup = resolvePayments();
+  final payments = setup.gateway;
 
   // Первый запуск: кладём демонстрационные смены, иначе лента пустая.
   await DbShiftRepository(db, const StaticUser(null)).seedIfEmpty();
@@ -48,7 +53,10 @@ Future<void> main(List<String> args) async {
         sender,
         adminKey: Platform.environment['ADMIN_KEY'] ?? '',
         payments: payments,
+        webhookSecrets: setup.webhookSecrets,
       ).router.call);
+
+  _settleEveryMinute(db, payments);
 
   // InternetAddress.anyIPv4 — «слушать все сетевые интерфейсы».
   // На localhost хватило бы и loopback, но в облаке запрос приходит
@@ -57,9 +65,7 @@ Future<void> main(List<String> args) async {
 
   stdout.writeln('fastwork сервер слушает http://localhost:${server.port}');
   stdout.writeln('база: ${describeDatabase()}');
-  stdout.writeln(payments.isSandbox
-      ? 'оплата: тестовый режим — карты тестовые, деньги ненастоящие'
-      : 'оплата: боевой режим');
+  stdout.writeln('оплата: ${describePayments(payments)}');
   stdout.writeln(switch (sender) {
     ConsoleCodeSender() =>
       'письма НЕ отправляются — код входа будет напечатан здесь',
@@ -95,3 +101,27 @@ const _corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Key',
 };
+
+/// Раз в минуту спрашиваем провайдеров о незавершённых оплатах и выводах.
+///
+/// Обычно о них расскажет вебхук или приложение, которое ждёт ответа. Но
+/// вебхук может не дойти — сервер на бесплатном тарифе засыпает, — а
+/// человек может закрыть приложение, не дождавшись. Без этой проверки
+/// оплаченная смена так и висела бы неопубликованной.
+void _settleEveryMinute(AppDatabase db, PaymentGateway payments) {
+  var busy = false;
+  Timer.periodic(const Duration(minutes: 1), (_) async {
+    if (busy) return; // прошлая проверка ещё идёт — не наслаиваем
+    busy = true;
+    try {
+      await DbShiftRepository(db, const StaticUser(null), payments: payments)
+          .settlePending();
+      await DbWalletRepository(db, const StaticUser(null), payments: payments)
+          .settlePending();
+    } catch (error) {
+      stderr.writeln('проверка оплат не удалась: $error');
+    } finally {
+      busy = false;
+    }
+  });
+}
