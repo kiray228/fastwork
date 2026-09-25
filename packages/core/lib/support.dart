@@ -54,6 +54,31 @@ class UserDocument {
 
   bool get isApproved => status == 'approved';
   bool get isPending => status == 'pending';
+
+  /// Срок вышел. Документ действует до конца последнего дня.
+  bool isExpiredAt(DateTime now) {
+    final until = expiresAt;
+    if (until == null) return false;
+    return !now.isBefore(DateTime(until.year, until.month, until.day + 1));
+  }
+
+  /// Сколько полных дней осталось. null — срока у документа нет.
+  int? daysLeftAt(DateTime now) {
+    final until = expiresAt;
+    if (until == null) return null;
+    final today = DateTime.utc(now.year, now.month, now.day);
+    return DateTime.utc(until.year, until.month, until.day)
+        .difference(today)
+        .inDays;
+  }
+
+  /// Срок скоро выйдет — пора записываться на медосмотр.
+  ///
+  /// Месяц — столько обычно хватает, чтобы пройти врачей без спешки.
+  bool expiresSoonAt(DateTime now) {
+    final left = daysLeftAt(now);
+    return left != null && left >= 0 && left < 30;
+  }
 }
 
 /// Типы документов и их названия для экрана.
@@ -61,6 +86,10 @@ const documentTypes = {
   'id_card': 'Удостоверение личности',
   'medical_book': 'Санитарная книжка',
 };
+
+/// Документы со сроком действия. Удостоверение тоже не вечное, но оно
+/// действует десять лет, а медосмотр в книжке нужно проходить регулярно.
+const documentsWithExpiry = {'medical_book'};
 
 // ---------------------------------------------------------------------------
 // JSON

@@ -1,5 +1,5 @@
 name: fastwork
-description: "A new Flutter project."
+description: "fastwork — подработка по сменам: лента смен, запись, оплата с гарантией."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -31,6 +31,12 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Русский язык для того, что рисует сам Flutter: календарь, выбор
+  # времени (24 часа, а не AM/PM), подсказки кнопок, меню «Вставить».
+  # Без этого пакета всё это было по-английски.
+  flutter_localizations:
+    sdk: flutter
+
   # Суть приложения лежит в отдельном пакете рядом. Он ничего не знает
   # ни про Flutter, ни про экраны — поэтому его может использовать и
   # сервер. `path` значит «пакет лежит в этой папке», а не скачивается.
@@ -45,6 +51,9 @@ dependencies:
   drift_flutter: ^0.3.1
   http: ^1.6.0
   shared_preferences: ^2.5.5
+  # Открыть страницу оплаты провайдера: в браузере — новой вкладкой, на
+  # телефоне — в браузере системы.
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

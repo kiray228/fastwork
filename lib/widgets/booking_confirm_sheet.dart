@@ -188,7 +188,7 @@ class _BookingConfirmSheetState extends State<_BookingConfirmSheet> {
                             child: Padding(
                               padding: EdgeInsets.only(top: 12),
                               child: Text(
-                                'Я прочитал условия и подтверждаю, '
+                                'Условия прочитаны — подтверждаю, '
                                 'что выйду на смену',
                                 style: TextStyle(fontSize: 13.5, height: 1.35),
                               ),

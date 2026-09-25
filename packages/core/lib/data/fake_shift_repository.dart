@@ -45,9 +45,9 @@ class FakeShiftRepository implements ShiftRepository {
       clearMyStatus: status == null,
       myCheckedInAt: _checkIns[s.id],
       cancelledAt: _cancelled.contains(s.id) ? DateTime.now() : null,
-      // В памяти любая смена оплачена: демо-смены «оплатил» сервис,
-      // новые без оплаты не создаются.
-      isFunded: !_refunded.contains(s.id),
+      // Демо-смены «оплатил» сервис, новые оплачены, когда прошла оплата.
+      isFunded: !_refunded.contains(s.id) && !_awaiting.contains(s.id),
+      awaitingPayment: _awaiting.contains(s.id),
     );
   }
 
@@ -60,7 +60,7 @@ class FakeShiftRepository implements ShiftRepository {
         .where((s) =>
             isSameDay(s.workDate, date) &&
             s.city == city &&
-            !_cancelled.contains(s.id))
+            _published(s))
         .map(_decorate)
         .toList();
     return applyFilter(list, filter);
@@ -68,14 +68,14 @@ class FakeShiftRepository implements ShiftRepository {
 
   @override
   Future<Set<DateTime>> daysWithShifts() async => _shifts
-      .where((s) => s.city == city && !_cancelled.contains(s.id))
+      .where((s) => s.city == city && _published(s))
       .map((s) => DateTime(s.workDate.year, s.workDate.month, s.workDate.day))
       .toSet();
 
   @override
   Future<List<String>> companies() async {
     final names = _shifts
-        .where((s) => s.city == city && !_cancelled.contains(s.id))
+        .where((s) => s.city == city && _published(s))
         .map((s) => s.company)
         .toSet()
         .toList()
@@ -85,7 +85,7 @@ class FakeShiftRepository implements ShiftRepository {
 
   @override
   Future<List<String>> categories() async => sortCategories(_shifts
-      .where((s) => s.city == city && !_cancelled.contains(s.id))
+      .where((s) => s.city == city && _published(s))
       .map((s) => s.category));
 
   @override
@@ -161,6 +161,18 @@ class FakeShiftRepository implements ShiftRepository {
 
   /// Смены, остаток по которым уже вернули.
   final Set<int> _refunded = {};
+
+  /// Смены, которые ещё ждут оплаты: их нет в ленте.
+  final Set<int> _awaiting = {};
+
+  /// Сколько по смене вернули за невыходы.
+  final Map<int, int> _noShowRefunds = {};
+
+  /// Все попытки оплаты: и смен, и доплат.
+  final List<_FakeCharge> _charges = [];
+
+  bool _published(Shift s) =>
+      !_cancelled.contains(s.id) && !_awaiting.contains(s.id);
 
   void _record(String kind, int amount, String title, {int? shiftId}) {
     ledger.add(WalletEntry(
@@ -268,7 +280,7 @@ class FakeShiftRepository implements ShiftRepository {
   }
 
   @override
-  Future<int> createShift({
+  Future<PaymentCheckout> createShift({
     required DateTime workDate,
     required String title,
     required String company,
@@ -279,11 +291,12 @@ class FakeShiftRepository implements ShiftRepository {
     required int workersNeeded,
     required int createdBy,
     required String city,
+    required PaymentMethod method,
+    String? phone,
     String category = kOtherCategory,
     List<String> duties = const [],
     String? dressCode,
     double? minRating,
-    required PaymentCard card,
   }) async {
     final id = (_shifts.map((s) => s.id).fold<int>(0, (a, b) => a > b ? a : b)) + 1;
     final shift = Shift(
@@ -304,12 +317,114 @@ class FakeShiftRepository implements ShiftRepository {
       minRating: minRating,
       createdBy: createdBy,
     );
-    final total = ShiftCost.of(shift).total;
-    await payments.charge(amount: total, card: card, description: title);
+    final kaspiPhone = _phoneFor(method, phone);
     _shifts.add(shift);
-    _record(WalletEntryKind.charge, -total, 'Оплата смены «$title»',
-        shiftId: id);
-    return id;
+    _awaiting.add(id);
+    return _start(_FakeCharge(
+      id: _charges.length + 1,
+      shiftId: id,
+      method: method,
+      amount: ShiftCost.of(shift).total,
+      phone: kaspiPhone,
+    ));
+  }
+
+  static String? _phoneFor(PaymentMethod method, String? phone) {
+    if (method != PaymentMethod.kaspi) return null;
+    final normalized = normalizeKzPhone(phone ?? '');
+    if (normalized == null) {
+      throw const PaymentDeclined(
+          'Укажите номер телефона, к которому привязан Kaspi.kz');
+    }
+    return normalized;
+  }
+
+  Future<PaymentCheckout> _start(_FakeCharge charge) async {
+    final started = await payments.provider(charge.method).startCheckout(
+          amount: charge.amount,
+          reference: 'charge-${charge.id}',
+          description: 'Смена',
+          phone: charge.phone,
+        );
+    charge.operation = started.operation;
+    _charges.add(charge);
+    return charge.checkout;
+  }
+
+  _FakeCharge _chargeById(int id) => _charges.firstWhere(
+        (c) => c.id == id,
+        orElse: () => throw const PaymentDeclined('Оплата не найдена'),
+      );
+
+  @override
+  Future<PaymentCheckout> retryPayment(
+    int shiftId, {
+    required PaymentMethod method,
+    String? phone,
+  }) async {
+    if (!_awaiting.contains(shiftId)) {
+      throw const PaymentDeclined('Смена уже оплачена');
+    }
+    final shift = _shifts.firstWhere((s) => s.id == shiftId);
+    return _start(_FakeCharge(
+      id: _charges.length + 1,
+      shiftId: shiftId,
+      method: method,
+      amount: ShiftCost.of(shift).total,
+      phone: _phoneFor(method, phone),
+    ));
+  }
+
+  @override
+  Future<PaymentCheckout> paymentStatus(int paymentId) async {
+    final charge = _chargeById(paymentId);
+    await _settle(charge);
+    return charge.checkout;
+  }
+
+  @override
+  Future<PaymentCheckout> completeSandboxPayment(
+    int paymentId, {
+    PaymentCard? card,
+  }) async {
+    final charge = _chargeById(paymentId);
+    payments.sandboxFor(charge.method)!.complete(charge.operation, card: card);
+    await _settle(charge);
+    return charge.checkout;
+  }
+
+  Future<void> _settle(_FakeCharge charge) async {
+    if (charge.status != CheckoutStatus.pending) return;
+    final result =
+        await payments.provider(charge.method).checkStatus(charge.operation);
+    switch (result.state) {
+      case ProviderState.pending:
+        return;
+      case ProviderState.failed:
+        charge.status = CheckoutStatus.failed;
+        charge.message = result.message;
+      case ProviderState.paid:
+        charge.status = CheckoutStatus.paid;
+        final shiftId = charge.shiftId;
+        final edit = charge.edit;
+        if (edit == null) {
+          if (!_awaiting.remove(shiftId)) {
+            // Смену уже оплатили другой попыткой — эти деньги вернуть.
+            await payments.card.refund(operation: 'fake', amount: charge.amount);
+            return;
+          }
+          _record(WalletEntryKind.charge, -charge.amount,
+              'Оплата смены · ${result.paidWith}',
+              shiftId: shiftId);
+        } else {
+          final index = _shifts.indexWhere((s) => s.id == shiftId);
+          _paid[shiftId] = _paidFor(_shifts[index]) + charge.amount;
+          _shifts[index] = edit;
+          _record(WalletEntryKind.charge, -charge.amount,
+              'Доплата за смену «${edit.title}»',
+              shiftId: shiftId);
+        }
+    }
   }
 
   @override
@@ -408,16 +523,16 @@ class FakeShiftRepository implements ShiftRepository {
     if (_shifts[index].isCancelled) return BookingResult.alreadyCancelled;
 
     final shift = _decorate(_shifts[index]);
-    var rest = _paidFor(shift);
+    var rest = shift.awaitingPayment
+        ? 0
+        : _paidFor(shift) - (_noShowRefunds[shiftId] ?? 0);
     for (final e in ledger.where((e) => e.shiftId == shiftId)) {
       if (e.kind == WalletEntryKind.earning) {
-        rest -= e.amount + platformFee(e.amount);
-      } else if (e.kind == WalletEntryKind.refund) {
-        rest -= e.amount;
+        rest -= ShiftCost(slotPay: e.amount, slots: 1).total;
       }
     }
     if (rest > 0) {
-      await payments.refund(operation: 'fake', amount: rest);
+      await payments.card.refund(operation: 'fake', amount: rest);
       _record(WalletEntryKind.refund, rest, 'Возврат: смена отменена',
           shiftId: shiftId);
     }
@@ -441,14 +556,15 @@ class FakeShiftRepository implements ShiftRepository {
     _myStatuses[shiftId] = ApplicationStatus.noShow;
     final shift = (await shiftById(shiftId))!;
     final slot = ShiftCost(slotPay: shift.totalPay, slots: 1).total;
-    await payments.refund(operation: 'fake', amount: slot);
+    await payments.card.refund(operation: 'fake', amount: slot);
+    _noShowRefunds[shiftId] = (_noShowRefunds[shiftId] ?? 0) + slot;
     _record(WalletEntryKind.refund, slot, 'Возврат за невыход',
         shiftId: shiftId);
     return BookingResult.ok;
   }
 
   @override
-  Future<BookingResult> updateShift({
+  Future<ShiftEditResult> updateShift({
     required int shiftId,
     required DateTime workDate,
     required String title,
@@ -460,15 +576,21 @@ class FakeShiftRepository implements ShiftRepository {
     String? category,
     List<String> duties = const [],
     String? dressCode,
-    PaymentCard? card,
+    PaymentMethod method = PaymentMethod.card,
+    String? phone,
   }) async {
     final index = _shifts.indexWhere((s) => s.id == shiftId);
-    if (index < 0) return BookingResult.notFound;
+    if (index < 0) return const ShiftEditResult(BookingResult.notFound);
 
     final before = _decorate(_shifts[index]);
-    if (before.isCancelled) return BookingResult.alreadyCancelled;
+    if (before.isCancelled) {
+      return const ShiftEditResult(BookingResult.alreadyCancelled);
+    }
+    if (before.awaitingPayment) {
+      return const ShiftEditResult(BookingResult.awaitingPayment);
+    }
     if (workersNeeded < before.workersHired) {
-      return BookingResult.fewerThanHired;
+      return const ShiftEditResult(BookingResult.fewerThanHired);
     }
 
     final old = _shifts[index];
@@ -498,18 +620,25 @@ class FakeShiftRepository implements ShiftRepository {
     final paid = _paidFor(before);
     final diff = ShiftCost.of(updated).total - paid;
     if (diff > 0) {
-      if (card == null) return BookingResult.paymentRequired;
-      await payments.charge(amount: diff, card: card, description: title);
-      _record(WalletEntryKind.charge, -diff, 'Доплата за смену «$title»',
-          shiftId: shiftId);
-    } else if (diff < 0) {
-      await payments.refund(operation: 'fake', amount: -diff);
+      // Подорожала — правка ждёт доплаты и применится, когда она пройдёт.
+      final checkout = await _start(_FakeCharge(
+        id: _charges.length + 1,
+        shiftId: shiftId,
+        method: method,
+        amount: diff,
+        phone: _phoneFor(method, phone),
+        edit: updated,
+      ));
+      return ShiftEditResult(BookingResult.paymentRequired, checkout: checkout);
+    }
+    if (diff < 0) {
+      await payments.card.refund(operation: 'fake', amount: -diff);
       _record(WalletEntryKind.refund, -diff, 'Возврат разницы',
           shiftId: shiftId);
     }
     _paid[shiftId] = paid + diff;
     _shifts[index] = updated;
-    return BookingResult.ok;
+    return const ShiftEditResult(BookingResult.ok);
   }
 
   /// Номера отменённых смен. В памяти проще держать отдельным множеством,
@@ -563,4 +692,39 @@ class FakeShiftRepository implements ShiftRepository {
       return archived ? !isActive : isActive;
     }).map(_decorate).toList();
   }
+}
+
+/// Попытка оплаты в памяти.
+class _FakeCharge {
+  final int id;
+  final int shiftId;
+  final PaymentMethod method;
+  final int amount;
+  final String? phone;
+
+  /// Доплата: смена с новыми условиями.
+  final Shift? edit;
+  String status = CheckoutStatus.pending;
+  String operation = '';
+  String? message;
+
+  _FakeCharge({
+    required this.id,
+    required this.shiftId,
+    required this.method,
+    required this.amount,
+    this.phone,
+    this.edit,
+  });
+
+  PaymentCheckout get checkout => PaymentCheckout(
+        id: id,
+        shiftId: shiftId,
+        method: method,
+        amount: amount,
+        status: status,
+        phone: phone,
+        sandbox: true,
+        message: message,
+      );
 }

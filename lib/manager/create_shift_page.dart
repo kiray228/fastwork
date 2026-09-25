@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fastwork_core/errors.dart';
 import 'package:flutter/services.dart';
 
 import 'package:fastwork_core/category.dart';
@@ -192,7 +193,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
 
     final existing = widget.editing;
     if (existing != null) {
-      Future<BookingResult> save([PaymentCard? card]) =>
+      Future<ShiftEditResult> save(PaymentMethod method, String? phone) =>
           widget.repository.updateShift(
             shiftId: existing.id,
             workDate: DateTime(date.year, date.month, date.day),
@@ -205,47 +206,63 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
             workersNeeded: workers,
             duties: duties,
             dressCode: existing.dressCode,
-            card: card,
+            method: method,
+            phone: phone,
           );
 
-      setState(() => busy = true);
-      var result = await guarded(context, save);
+      final extra = ShiftCost.of(_preview).total - ShiftCost.of(existing).total;
+      BookingResult? result;
 
-      // Смена подорожала — сначала доплата. Спрашиваем карту только
-      // тогда, когда хранилище сказало, что без неё нельзя: подешевевшую
-      // смену сохраняем сразу, разницу сервис вернёт сам.
-      if (result == BookingResult.paymentRequired && mounted) {
-        // Своя крутилка у окна оплаты — форма под ним ждать не должна.
-        setState(() => busy = false);
-        final extra =
-            ShiftCost.of(_preview).total - ShiftCost.of(existing).total;
-        BookingResult? afterPay;
-        final paid = await showPaymentSheet(
-          context,
+      if (extra > 0) {
+        // Смена подорожала — сначала доплата. Новые условия вступят в
+        // силу, когда провайдер подтвердит деньги.
+        final paid = await _checkout(
           title: 'Доплата за смену',
-          note: 'Смена подорожала. Разницу нужно внести сейчас — '
-              'сервис держит оплату за все места заранее.',
+          note: 'Смена подорожала. Новые условия появятся в ленте, как '
+              'только пройдёт доплата: сервис держит оплату за все места '
+              'заранее.',
           lines: [PaymentLine('Разница в стоимости', extra)],
           total: extra,
           actionLabel: 'Доплатить ${formatMoney(extra)}',
-          onCard: (card) async => afterPay = await save(card),
+          start: (method, phone, _) async {
+            final edit = await save(method, phone);
+            if (edit.checkout != null) return edit.checkout!;
+            if (edit.result == BookingResult.ok) {
+              // Подорожание оказалось не таким, как думал экран, и
+              // доплата не понадобилась — правка уже сохранена.
+              return PaymentCheckout(
+                id: 0,
+                method: method,
+                amount: 0,
+                status: CheckoutStatus.paid,
+              );
+            }
+            throw UserError(_editError(edit.result, existing));
+          },
         );
-        result = paid ? afterPay : null;
+        if (!mounted || paid == null) return;
+        if (!paid.isPaid) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Правка применится, когда пройдёт доплата'),
+          ));
+          widget.onCreated();
+          return;
+        }
+        result = BookingResult.ok;
+      } else {
+        setState(() => busy = true);
+        result = (await guarded(
+          context,
+          () => save(PaymentMethod.card, null),
+        ))
+            ?.result;
+        if (!mounted) return;
+        setState(() => busy = false);
       }
 
-      if (!mounted) return;
-      setState(() => busy = false);
       if (result == null) return;
-
       if (result != BookingResult.ok) {
-        setState(() => error = switch (result) {
-              BookingResult.fewerThanHired =>
-                'Уже набрано ${existing.workersHired} чел. — '
-                    'мест не может быть меньше',
-              BookingResult.notMine => 'Это не ваша смена',
-              BookingResult.alreadyCancelled => 'Смена отменена',
-              _ => 'Не получилось сохранить',
-            });
+        setState(() => error = _editError(result!, existing));
         return;
       }
 
@@ -259,12 +276,11 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
     // Смена публикуется только оплаченной: сервис — гарант, и деньги
     // должны быть у него раньше, чем на смену кто-то запишется.
     final cost = ShiftCost.of(_preview);
-    final created = await showPaymentSheet(
-      context,
+    final result = await _checkout(
       title: 'Оплата смены',
       note: 'Деньги останутся у сервиса и уйдут исполнителям только после '
           'того, как вы подтвердите их выход. За невышедших и при отмене '
-          'смены деньги вернутся на карту.',
+          'смены деньги вернутся.',
       lines: [
         PaymentLine(
           'Вознаграждение: ${cost.slots} × ${formatMoney(cost.slotPay)}',
@@ -274,32 +290,80 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
       ],
       total: cost.total,
       actionLabel: 'Оплатить ${formatMoney(cost.total)}',
-      onCard: (card) => widget.repository.createShift(
-        card: card,
-        workDate: DateTime(date.year, date.month, date.day),
-        title: title,
-        company: widget.session.user?.company ?? 'Компания',
-        address: address,
-        startMinutes: _startMinutes,
-        endMinutes: _endMinutes,
-        hourlyRate: rate * 100, // в тиынах
-        workersNeeded: workers,
-        createdBy: widget.session.workerId,
-        // Город берём из профиля заказчика: смену увидят исполнители
-        // того же города.
-        city: widget.session.city,
-        category: chosen,
-        duties: duties,
-      ),
+      // Первая попытка создаёт смену, повторная оплачивает уже созданную —
+      // иначе каждая неудачная карта заводила бы по смене.
+      start: (method, phone, previous) => previous?.shiftId == null
+          ? widget.repository.createShift(
+              method: method,
+              phone: phone,
+              workDate: DateTime(date.year, date.month, date.day),
+              title: title,
+              company: widget.session.user?.company ?? 'Компания',
+              address: address,
+              startMinutes: _startMinutes,
+              endMinutes: _endMinutes,
+              hourlyRate: rate * 100, // в тиынах
+              workersNeeded: workers,
+              createdBy: widget.session.workerId,
+              // Город берём из профиля заказчика: смену увидят исполнители
+              // того же города.
+              city: widget.session.city,
+              category: chosen,
+              duties: duties,
+            )
+          : widget.repository.retryPayment(
+              previous!.shiftId!,
+              method: method,
+              phone: phone,
+            ),
     );
 
-    if (!mounted || !created) return;
+    if (!mounted || result == null) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Смена опубликована')),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(result.isPaid
+          ? 'Смена опубликована'
+          : 'Смена сохранена и появится в ленте, когда пройдёт оплата. '
+              'Оплатить можно в «Моих сменах»'),
+    ));
     widget.onCreated();
   }
+
+  /// Окно оплаты для этого экрана: статус и тестовая оплата — через
+  /// хранилище смен, телефон для Kaspi — из профиля.
+  Future<PaymentCheckout?> _checkout({
+    required String title,
+    required String note,
+    required List<PaymentLine> lines,
+    required int total,
+    required String actionLabel,
+    required StartCheckout start,
+  }) =>
+      showCheckoutSheet(
+        context,
+        title: title,
+        note: note,
+        lines: lines,
+        total: total,
+        actionLabel: actionLabel,
+        phone: widget.session.user?.phone ?? '',
+        start: start,
+        status: widget.repository.paymentStatus,
+        completeSandbox: (id, card) =>
+            widget.repository.completeSandboxPayment(id, card: card),
+      );
+
+  static String _editError(BookingResult result, Shift existing) =>
+      switch (result) {
+        BookingResult.fewerThanHired =>
+          'Уже набрано ${existing.workersHired} чел. — '
+              'мест не может быть меньше',
+        BookingResult.notMine => 'Это не ваша смена',
+        BookingResult.alreadyCancelled => 'Смена отменена',
+        BookingResult.awaitingPayment =>
+          'Смена ещё не оплачена — сначала оплатите её',
+        _ => 'Не получилось сохранить',
+      };
 
   @override
   Widget build(BuildContext context) {

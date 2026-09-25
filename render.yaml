@@ -32,6 +32,20 @@ services:
       # сервиса. В репозиторий ключ не попадает.
       - key: ADMIN_KEY
         generateValue: true
+      # Деньги. Пока ключей нет, оплата картой и через Kaspi работает в
+      # тестовом режиме. Когда будут договоры, впишите ключи в настройках
+      # сервиса на Render (Environment) — sync: false значит «значение
+      # задаётся там, а не в этом файле». Подробно — docs/13-oplata.md.
+      - key: IOKA_API_KEY
+        sync: false
+      - key: IOKA_API_URL
+        sync: false
+      - key: IOKA_WEBHOOK_SECRET
+        sync: false
+      - key: APIPAY_API_KEY
+        sync: false
+      - key: APIPAY_WEBHOOK_SECRET
+        sync: false
 
 # Отдельная база. Она и есть причина всей затеи: файл на диске сервиса
 # пропадает при каждом перезапуске, а это — самостоятельная служба со

@@ -149,12 +149,19 @@ PostgreSQL — см. раздел 7. С ней данные не пропада�
 | `POST /api/shifts/<id>/checkin` | отметиться на месте |
 | `POST /api/shifts/<id>/confirm` | заказчик подтверждает выход |
 | `GET /api/my-shifts?archived=...` | мои смены |
-| `POST /api/shifts` | создать смену — только с картой: без оплаты смена не публикуется |
+| `POST /api/shifts` | создать смену и начать оплату (`method`: `card` или `kaspi`) — в ленте она появится после оплаты |
+| `POST /api/shifts/<id>/pay` | оплатить неоплаченную смену ещё раз |
+| `GET /api/payments/<id>` | как идёт оплата; если провайдер подтвердил — смена публикуется |
+| `POST /api/payments/<id>/sandbox` | тестовый режим: «заплатить» без провайдера |
+| `POST /api/payments/webhook/ioka` | вебхук ioka (подпись `X-Signature`) |
+| `POST /api/payments/webhook/apipay` | вебхук Kaspi через ApiPay (подпись `X-Webhook-Signature`) |
+| `GET /api/payments/return` | страница «вернитесь в приложение» после оплаты |
 | `GET /api/categories` | категории, по которым в городе есть смены |
 | `POST /api/me/accept-terms` | принять действующие правила сервиса |
 | `GET /api/me/limit?month=...` | сколько набрано за месяц и лимит в 300 МРП |
 | `GET /api/wallet` | баланс и история денег |
-| `POST /api/wallet/withdraw` | вывести на карту |
+| `POST /api/wallet/withdraw` | начать вывод на карту — сумма сразу уходит с баланса |
+| `GET /api/wallet/payouts/<id>` | как идёт вывод |
 | `GET /api/mrp` | значения МРП и лимит |
 | `POST /api/admin/mrp` | записать новый МРП — по ключу `ADMIN_KEY` |
 | `GET /api/health` | жив ли сервер |

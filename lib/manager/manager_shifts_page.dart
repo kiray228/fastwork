@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../data/app_preferences.dart';
+import '../data/repositories.dart';
 import '../data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/payment.dart';
@@ -9,18 +11,27 @@ import 'package:fastwork_core/user.dart';
 import '../widgets/async_state.dart';
 import '../widgets/common.dart';
 import '../widgets/nav.dart';
+import '../widgets/payment_sheet.dart';
+import '../stories/story_actions.dart';
 import '../widgets/skeleton.dart';
+import '../widgets/stories_row.dart';
 import 'create_shift_page.dart';
 
 /// Смены, созданные заказчиком, и кто на них записался.
 class ManagerShiftsPage extends StatefulWidget {
   final AppSession session;
-  final ShiftRepository repository;
+  final AppRepositories repos;
+  final AppPreferences preferences;
+
+  /// Переключить вкладку нижнего меню: 1 — «Создать», 2 — «Оценки».
+  final ValueChanged<int> onOpenTab;
 
   const ManagerShiftsPage({
     super.key,
     required this.session,
-    required this.repository,
+    required this.repos,
+    required this.preferences,
+    required this.onOpenTab,
   });
 
   @override
@@ -30,6 +41,10 @@ class ManagerShiftsPage extends StatefulWidget {
 class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
   Async<List<Shift>> state = const Loading();
 
+  ShiftRepository get repository => widget.repos.shifts;
+
+  late final stories = storiesFor(widget.session);
+
   @override
   void initState() {
     super.initState();
@@ -38,7 +53,7 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
 
   Future<void> _load() async {
     final result = await load(
-      () => widget.repository.shiftsCreatedBy(widget.session.workerId),
+      () => repository.shiftsCreatedBy(widget.session.workerId),
     );
     if (!mounted) return;
     setState(() => state = result);
@@ -75,7 +90,7 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
 
     final result = await guarded(
       context,
-      () => widget.repository.cancelShift(shift.id),
+      () => repository.cancelShift(shift.id),
     );
     if (result == null || !mounted) return;
 
@@ -98,7 +113,7 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
       appRoute(
         CreateShiftPage(
           session: widget.session,
-          repository: widget.repository,
+          repository: repository,
           editing: shift,
           onCreated: () => Navigator.of(context).pop(),
         ),
@@ -107,52 +122,124 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
     await _load();
   }
 
+  /// Оплатить смену, которая так и не оплачена.
+  Future<void> _payShift(Shift shift) async {
+    final cost = ShiftCost.of(shift);
+    final result = await showCheckoutSheet(
+      context,
+      title: 'Оплата смены',
+      note: 'Смена появится в ленте, как только пройдёт оплата.',
+      lines: [
+        PaymentLine(
+          'Вознаграждение: ${cost.slots} × ${formatMoney(cost.slotPay)}',
+          cost.pay,
+        ),
+        PaymentLine('Комиссия сервиса $kPlatformFeePercent%', cost.fee),
+      ],
+      total: cost.total,
+      actionLabel: 'Оплатить ${formatMoney(cost.total)}',
+      phone: widget.session.user?.phone ?? '',
+      start: (method, phone, _) =>
+          repository.retryPayment(shift.id, method: method, phone: phone),
+      status: repository.paymentStatus,
+      completeSandbox: (id, card) =>
+          repository.completeSandboxPayment(id, card: card),
+    );
+    await _load();
+    if (!mounted || result == null || !result.isPaid) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Смена опубликована')),
+    );
+  }
+
   Future<void> _openApplicants(Shift shift) async {
     await Navigator.of(context).push(
       appRoute(
-        _ApplicantsPage(shift: shift, repository: widget.repository),
+        _ApplicantsPage(shift: shift, repository: repository),
       ),
     );
     await _load();
   }
 
+  Future<void> _openStory(int index) => openStories(
+        context,
+        session: widget.session,
+        repos: widget.repos,
+        preferences: widget.preferences,
+        initialIndex: index,
+        onCreateShift: () => widget.onOpenTab(1),
+        onRateWorkers: () => widget.onOpenTab(2),
+      );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Мои смены')),
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 260),
-        child: switch (state) {
-          Loading() => const ShiftListSkeleton(count: 2),
-          Failed(:final error) => ErrorView(
-              message: describeError(error),
-              onRetry: () {
-                setState(() => state = const Loading());
-                _load();
-              },
-            ),
-          Ready(value: []) => const EmptyState(
-              icon: Icons.post_add_rounded,
-              title: 'Смен пока нет',
-              subtitle: 'Создайте первую смену на вкладке «Создать»',
-            ),
-          Ready(:final value) => RefreshIndicator(
-              onRefresh: _load,
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                itemCount: value.length,
-                itemBuilder: (context, index) => AnimatedEntrance(
-                  index: index,
-                  child: _ManagerShiftCard(
-                    shift: value[index],
-                    onTap: () => _openApplicants(value[index]),
-                    onCancel: () => _cancelShift(value[index]),
-                    onEdit: () => _editShift(value[index]),
-                  ),
-                ),
+      // Истории листаются вместе со сменами, как у исполнителя.
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(
+              child: StoriesRow(
+                stories: stories,
+                preferences: widget.preferences,
+                onOpen: _openStory,
               ),
             ),
-        },
+            ...switch (state) {
+              Loading() => [
+                  const SliverToBoxAdapter(
+                    child: ShiftListSkeleton(count: 2, shrinkWrap: true),
+                  ),
+                ],
+              Failed(:final error) => [
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: ErrorView(
+                      message: describeError(error),
+                      onRetry: () {
+                        setState(() => state = const Loading());
+                        _load();
+                      },
+                    ),
+                  ),
+                ],
+              Ready(value: []) => [
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: EmptyState(
+                      icon: Icons.post_add_rounded,
+                      title: 'Смен пока нет',
+                      subtitle: 'Опубликуйте первую — люди увидят её\n'
+                          'в ленте сразу после оплаты',
+                      actionLabel: 'Создать смену',
+                      onAction: () => widget.onOpenTab(1),
+                    ),
+                  ),
+                ],
+              Ready(:final value) => [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    sliver: SliverList.builder(
+                      itemCount: value.length,
+                      itemBuilder: (context, index) => AnimatedEntrance(
+                        index: index,
+                        child: _ManagerShiftCard(
+                          shift: value[index],
+                          onTap: () => _openApplicants(value[index]),
+                          onCancel: () => _cancelShift(value[index]),
+                          onEdit: () => _editShift(value[index]),
+                          onPay: () => _payShift(value[index]),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+            },
+          ],
+        ),
       ),
     );
   }
@@ -163,12 +250,14 @@ class _ManagerShiftCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onCancel;
   final VoidCallback onEdit;
+  final VoidCallback onPay;
 
   const _ManagerShiftCard({
     required this.shift,
     required this.onTap,
     required this.onCancel,
     required this.onEdit,
+    required this.onPay,
   });
 
   @override
@@ -196,6 +285,12 @@ class _ManagerShiftCard extends StatelessWidget {
                 ),
                 if (shift.isCancelled)
                   const TagChip(text: 'Отменена', color: AppColors.danger)
+                else if (shift.awaitingPayment)
+                  const TagChip(
+                    text: 'Ждёт оплаты',
+                    icon: Icons.hourglass_top_rounded,
+                    color: AppColors.warning,
+                  )
                 else if (isPast)
                   const TagChip(text: 'Прошла')
                 else if (!shift.hasFreeSlots)
@@ -220,8 +315,24 @@ class _ManagerShiftCard extends StatelessWidget {
               text: '${formatMoney(shift.totalPay)} за смену · '
                   '${formatMoney(shift.hourlyRate)}/ч',
             ),
-            // Где сейчас деньги: у сервиса или уже вернулись.
-            if (shift.isFunded)
+            // Где сейчас деньги: у сервиса, ещё не пришли или вернулись.
+            if (shift.awaitingPayment && !shift.isCancelled) ...[
+              const InfoRow(
+                icon: Icons.visibility_off_outlined,
+                iconColor: AppColors.warning,
+                text: 'Исполнители не видят смену, пока она не оплачена',
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onPay,
+                  icon: const Icon(Icons.lock_rounded, size: 18),
+                  label: Text(
+                      'Оплатить ${formatMoney(ShiftCost.of(shift).total)}'),
+                ),
+              ),
+            ] else if (shift.isFunded)
               InfoRow(
                 icon: Icons.verified_user_outlined,
                 iconColor: AppColors.success,
@@ -284,6 +395,9 @@ class _ManagerShiftCard extends StatelessWidget {
                 // Отменить можно только смену, которая ещё впереди:
                 // прошедшую отменять поздно, отменённую — незачем.
                 if (!isPast && !shift.isCancelled) ...[
+                  // Неоплаченную не правим: за неё могут платить по
+                  // старой цене прямо сейчас.
+                  if (!shift.awaitingPayment)
                   TextButton(
                     onPressed: onEdit,
                     style: TextButton.styleFrom(

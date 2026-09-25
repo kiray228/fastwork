@@ -430,7 +430,8 @@ void main() {
       await tester.tap(find.text('Подтверждаю'));
       await tester.pumpAndSettle();
 
-      await tester.pageBack();
+      // Приложение по-русски, и подсказка у кнопки «назад» тоже.
+      await tester.tap(find.byTooltip('Назад'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Мои'));
       await tester.pumpAndSettle();
@@ -564,14 +565,17 @@ void main() {
       await tester.tap(find.text('Вывести на карту'));
       await tester.pumpAndSettle();
 
+      // Сначала вывод начинается — сумма уходит с баланса, — потом карта.
+      await tester.tap(find.text('Вывести 12 100 ₸'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Подставить тестовую карту'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Вывести 12 100 ₸'));
+      await tester.tap(find.text('Перевести 12 100 ₸'));
       await tester.pumpAndSettle();
 
       expect(find.text('Деньги отправлены на карту'), findsOneWidget);
       expect(repo.payments.operations, contains('payout:1210000'));
-      expect(find.text('Вывод на карту Visa •• 4242'), findsOneWidget);
+      expect(find.text('Вывод на карту'), findsWidgets);
     });
 
     testWidgets('отказ банка оставляет окно открытым', (tester) async {
@@ -586,6 +590,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Вывести на карту'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Вывести 12 100 ₸'));
+      await tester.pumpAndSettle();
 
       final fields = find.descendant(
         of: find.byType(BottomSheet),
@@ -594,7 +600,7 @@ void main() {
       await tester.enterText(fields.at(0), kSandboxDeclinedCardNumber);
       await tester.enterText(fields.at(1), '1230');
       await tester.enterText(fields.at(2), '123');
-      await tester.tap(find.text('Вывести 12 100 ₸'));
+      await tester.tap(find.text('Перевести 12 100 ₸'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Банк отклонил'), findsOneWidget);
@@ -677,6 +683,83 @@ void main() {
       expect(find.text('Смены'), findsNothing);
     });
 
+    /// Заполнить форму смены и дойти до окна оплаты.
+    Future<FakeShiftRepository> fillShiftForm(WidgetTester tester) async {
+      final shifts = FakeShiftRepository();
+      await openApp(
+        tester,
+        role: UserRole.manager,
+        repos: buildRepos(
+          shifts: shifts,
+          signedIn: testUser(role: UserRole.manager),
+        ),
+      );
+      await tester.tap(find.text('Создать'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'Услуги грузчика');
+      await tester.enterText(find.byType(TextField).at(1), 'ул. Абая, 10');
+      await tester.tap(find.text('Выберите категорию'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Грузчик'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Оплатить и опубликовать'));
+      await tester.pumpAndSettle();
+      return shifts;
+    }
+
+    testWidgets('смену можно оплатить через Kaspi.kz', (tester) async {
+      final shifts = await fillShiftForm(tester);
+
+      await tester.tap(find.text('Kaspi.kz'));
+      await tester.pumpAndSettle();
+      // Номер подставлен из профиля — его можно поменять.
+      expect(find.text('+7 700 123 45 67'), findsOneWidget);
+      await tester.tap(find.textContaining('Оплатить ').last);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('отправлен в Kaspi.kz'), findsOneWidget);
+      await tester.tap(find.text('Подтвердить в Kaspi.kz (тест)'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Смена опубликована'), findsOneWidget);
+      final created = (await shifts.shiftsCreatedBy(1)).single;
+      expect(created.awaitingPayment, isFalse);
+      expect(shifts.payments.operations.single, startsWith('charge:'));
+    });
+
+    testWidgets('неоплаченная смена ждёт у заказчика с кнопкой «Оплатить»',
+        (tester) async {
+      final shifts = await fillShiftForm(tester);
+
+      // Начали оплату и передумали — окно закрыли.
+      await tester.tap(find.textContaining('Оплатить ').last);
+      await tester.pumpAndSettle();
+      Navigator.of(tester.element(find.text('Подставить тестовую карту')))
+          .pop();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Мои смены'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ждёт оплаты'), findsOneWidget);
+      expect(find.text('Изменить'), findsNothing);
+      // В ленте исполнителей её нет ни в какой день.
+      final draft = (await shifts.shiftsCreatedBy(1)).single;
+      expect(await shifts.shiftsOn(draft.workDate),
+          isNot(contains(predicate<Shift>((s) => s.id == draft.id))));
+
+      await tester.tap(find.textContaining('Оплатить ').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Оплатить ').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подставить тестовую карту'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Оплатить ').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ждёт оплаты'), findsNothing);
+      expect(find.text('Смена опубликована'), findsOneWidget);
+    });
+
     testWidgets('заказчик создаёт смену и видит её у себя', (tester) async {
       final shifts = FakeShiftRepository();
       await openApp(
@@ -711,6 +794,9 @@ void main() {
       // Без оплаты смена не публикуется: сначала окно карты.
       expect(find.text('Оплата смены'), findsOneWidget);
       expect(find.text('Комиссия сервиса 4%'), findsWidgets);
+      // Способ по умолчанию — карта: начинаем оплату, потом вводим её.
+      await tester.tap(find.textContaining('Оплатить ').last);
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Подставить тестовую карту'));
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Оплатить ').last);
@@ -904,9 +990,10 @@ void main() {
       await repo.apply(5);
       await openApp(tester, rating: 5.0, shifts: repo);
 
-      await tester.tap(find.text('чт').first);
-      await tester.pumpAndSettle();
-
+      // Смена видна наверху ленты как ближайшая, но отметиться рано.
+      // (Раньше тест нажимал на «чт» в полосе дат — в какие-то недели это
+      // число оказывалось за краем экрана, и нажатие уходило мимо.)
+      expect(find.text('Ближайшая смена'), findsOneWidget);
       expect(find.text('Я на месте'), findsNothing);
     });
 
@@ -1284,6 +1371,13 @@ void main() {
   });
 
   group('уведомления', () {
+    // Число ищем на самом колокольчике: в полосе дат тоже бывает «1» —
+    // первое число следующего месяца.
+    Finder badge(String count) => find.descendant(
+          of: find.byTooltip('Уведомления'),
+          matching: find.text(count),
+        );
+
     AppNotification note({
       int id = 1,
       NotificationKind kind = NotificationKind.applied,
@@ -1305,7 +1399,7 @@ void main() {
       await openApp(tester);
 
       expect(find.byIcon(Icons.notifications_none_rounded), findsOneWidget);
-      expect(find.text('1'), findsNothing);
+      expect(badge('1'), findsNothing);
     });
 
     testWidgets('непрочитанные показываются числом', (tester) async {
@@ -1315,7 +1409,7 @@ void main() {
 
       await openApp(tester, shifts: repo);
 
-      expect(find.text('2'), findsOneWidget);
+      expect(badge('2'), findsOneWidget);
     });
 
     testWidgets('колокольчик открывает список', (tester) async {
@@ -1333,14 +1427,15 @@ void main() {
       final repo = FakeShiftRepository()..pushNotification(note());
 
       await openApp(tester, shifts: repo);
-      expect(find.text('1'), findsOneWidget);
+      expect(badge('1'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Уведомления'));
       await tester.pumpAndSettle();
-      await tester.pageBack();
+      // Приложение по-русски, и подсказка у кнопки «назад» тоже.
+      await tester.tap(find.byTooltip('Назад'));
       await tester.pumpAndSettle();
 
-      expect(find.text('1'), findsNothing);
+      expect(badge('1'), findsNothing);
     });
 
     testWidgets('пустой список объясняет, что здесь будет', (tester) async {

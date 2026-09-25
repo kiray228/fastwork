@@ -155,12 +155,17 @@ class ShiftCardSkeleton extends StatelessWidget {
 class ShiftListSkeleton extends StatelessWidget {
   final int count;
 
-  const ShiftListSkeleton({super.key, this.count = 3});
+  /// Скелет внутри другого списка — берёт высоту по содержимому, а не
+  /// весь экран.
+  final bool shrinkWrap;
+
+  const ShiftListSkeleton({super.key, this.count = 3, this.shrinkWrap = false});
 
   @override
   Widget build(BuildContext context) {
     return Shimmer(
       child: ListView(
+        shrinkWrap: shrinkWrap,
         // Скелет не листают — он живёт меньше секунды.
         physics: const NeverScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),

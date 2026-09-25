@@ -2,12 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'data/app_preferences.dart';
+import 'data/repositories.dart';
 import 'data/session.dart';
 import 'package:fastwork_core/data/shift_filter.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/shift.dart';
 import 'notifications_page.dart';
 import 'shift_detail_page.dart';
+import 'stories/story_actions.dart';
 import 'theme/app_colors.dart';
 import 'theme/glass.dart';
 import 'widgets/async_state.dart';
@@ -19,15 +22,17 @@ import 'widgets/shift_card.dart';
 import 'widgets/skeleton.dart';
 import 'widgets/stories_row.dart';
 
-/// Главный экран: подсказки, полоса дат и список смен.
+/// Главный экран: истории, ближайшая смена, полоса дат и список смен.
 class ShiftsPage extends StatefulWidget {
-  final ShiftRepository repository;
+  final AppRepositories repos;
   final AppSession session;
+  final AppPreferences preferences;
 
   const ShiftsPage({
     super.key,
-    required this.repository,
+    required this.repos,
     required this.session,
+    required this.preferences,
   });
 
   @override
@@ -57,6 +62,12 @@ class _ShiftsPageState extends State<ShiftsPage> {
   /// Сколько уведомлений не прочитано — число в кружке на колокольчике.
   int unread = 0;
 
+  /// Ближайшая смена, на которую человек записан. null — таких нет.
+  Shift? upcoming;
+
+  /// Идёт отметка «я на месте» с баннера — кнопку прячем под кружок.
+  bool checkingIn = false;
+
   final TextEditingController searchController = TextEditingController();
 
   /// Отложенный запуск поиска.
@@ -67,6 +78,12 @@ class _ShiftsPageState extends State<ShiftsPage> {
   /// Приём называется debounce.
   Timer? searchDebounce;
 
+  ShiftRepository get repository => widget.repos.shifts;
+
+  /// Истории собираются один раз на экран: в них картинки и тексты,
+  /// пересобирать их на каждое движение ленты незачем.
+  late final stories = storiesFor(widget.session);
+
   @override
   void initState() {
     super.initState();
@@ -74,6 +91,7 @@ class _ShiftsPageState extends State<ShiftsPage> {
     today = DateTime(now.year, now.month, now.day);
     _load();
     _loadUnread();
+    _loadUpcoming();
   }
 
   @override
@@ -104,13 +122,13 @@ class _ShiftsPageState extends State<ShiftsPage> {
   /// и `await` говорит «подожди ответа, но не морозь при этом экран».
   Future<void> _load() async {
     final result = await load(() async {
-      final loaded = await widget.repository.shiftsOn(
+      final loaded = await repository.shiftsOn(
         dayAt(selectedDay),
         filter: filter,
       );
-      final days = await widget.repository.daysWithShifts();
-      final names = await widget.repository.companies();
-      final kinds = await widget.repository.categories();
+      final days = await repository.daysWithShifts();
+      final names = await repository.companies();
+      final kinds = await repository.categories();
       return (loaded, days, names, kinds);
     });
 
@@ -133,6 +151,13 @@ class _ShiftsPageState extends State<ShiftsPage> {
     });
   }
 
+  /// Потянули ленту вниз — обновляем всё, что на экране.
+  Future<void> _refresh() => Future.wait([
+        _load(),
+        _loadUnread(),
+        _loadUpcoming(),
+      ]);
+
   /// Число непрочитанных грузим **отдельным** запросом, а не вместе
   /// со сменами.
   ///
@@ -141,11 +166,31 @@ class _ShiftsPageState extends State<ShiftsPage> {
   /// остался бы без смен из-за неработающего колокольчика.
   Future<void> _loadUnread() async {
     try {
-      final count = await widget.repository.unreadNotifications();
+      final count = await repository.unreadNotifications();
       if (!mounted) return;
       setState(() => unread = count);
     } catch (_) {
       // Не узнали — просто не показываем кружок.
+    }
+  }
+
+  /// Ближайшая смена — по тому же правилу, что и колокольчик: отдельным
+  /// запросом, чтобы её сбой не оставил человека без ленты.
+  ///
+  /// Раньше, чтобы узнать, когда и куда идти, нужно было открыть «Мои» и
+  /// найти смену в списке. Теперь главное — на главном экране.
+  Future<void> _loadUpcoming() async {
+    try {
+      final mine = await repository.myShifts(archived: false);
+      final now = DateTime.now();
+      final ahead = mine
+          .where((s) => s.isApplied && !s.isCancelled && s.isAheadAt(now))
+          .toList()
+        ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+      if (!mounted) return;
+      setState(() => upcoming = ahead.isEmpty ? null : ahead.first);
+    } catch (_) {
+      // Не узнали — баннера просто не будет.
     }
   }
 
@@ -154,13 +199,21 @@ class _ShiftsPageState extends State<ShiftsPage> {
       appRoute(
         NotificationsPage(
           session: widget.session,
-          repository: widget.repository,
+          repository: repository,
         ),
       ),
     );
     // Вернулись — уведомления уже прочитаны, кружок пора убрать.
     await _loadUnread();
   }
+
+  Future<void> _openStory(int index) => openStories(
+        context,
+        session: widget.session,
+        repos: widget.repos,
+        preferences: widget.preferences,
+        initialIndex: index,
+      );
 
   void _retry() {
     setState(() => state = const Loading());
@@ -199,12 +252,34 @@ class _ShiftsPageState extends State<ShiftsPage> {
       appRoute(
         ShiftDetailPage(
           shiftId: shift.id,
-          repository: widget.repository,
+          repository: repository,
           session: widget.session,
         ),
       ),
     );
-    await _load();
+    await _refresh();
+  }
+
+  /// «Я на месте» прямо с главного экрана — без захода в смену.
+  Future<void> _checkIn(Shift shift) async {
+    setState(() => checkingIn = true);
+    final result = await guarded(context, () => repository.checkIn(shift.id));
+    if (!mounted) return;
+    setState(() => checkingIn = false);
+    if (result == null) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(switch (result) {
+          BookingResult.ok => 'Отметка принята — заказчик её видит',
+          BookingResult.alreadyBooked => 'Вы уже отметились',
+          BookingResult.tooEarlyToCheckIn =>
+            'Отметиться можно в день смены, не раньше чем за час до начала',
+          _ => 'Не получилось отметиться',
+        }),
+      ),
+    );
+    await _loadUpcoming();
   }
 
   @override
@@ -214,6 +289,7 @@ class _ShiftsPageState extends State<ShiftsPage> {
       Ready(:final value) => value.length,
       _ => null,
     };
+    final next = upcoming;
 
     return Scaffold(
       appBar: AppBar(
@@ -223,63 +299,107 @@ class _ShiftsPageState extends State<ShiftsPage> {
           const SizedBox(width: 4),
         ],
       ),
-      body: Column(
-        children: [
-          const StoriesRow(),
-          DateStrip(
-            today: today,
-            selectedDay: selectedDay,
-            hasShiftsOn: (date) => daysWithShifts.contains(date),
-            onDaySelected: _selectDay,
-          ),
-          _SearchField(
-            controller: searchController,
-            onChanged: _onSearchChanged,
-            onClear: () {
-              searchController.clear();
-              _onSearchChanged('');
-            },
-          ),
-          _ListHeader(
-            date: selectedDate,
-            count: count,
-            filter: filter,
-            onFilterTap: _openFilter,
-          ),
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 260),
-              child: switch (state) {
-                Loading() => const ShiftListSkeleton(),
-                Failed(:final error) => ErrorView(
-                    message: describeError(error),
-                    onRetry: _retry,
+      // Вся лента листается целиком — истории и даты уезжают вверх вместе
+      // со сменами. Раньше они стояли на месте и на телефоне занимали
+      // половину экрана, а на карточки оставалось полторы строки.
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: CustomScrollView(
+          // Тянуть вниз можно, даже когда смен нет: обновить пустой день
+          // тоже бывает нужно.
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(
+              child: StoriesRow(
+                stories: stories,
+                preferences: widget.preferences,
+                onOpen: _openStory,
+              ),
+            ),
+            if (next != null)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
+                  child: _NextShiftBanner(
+                    shift: next,
+                    now: DateTime.now(),
+                    busy: checkingIn,
+                    onOpen: () => _openShift(next),
+                    onCheckIn: () => _checkIn(next),
                   ),
-                Ready(value: []) => EmptyState(
-                    icon: filter.isEmpty
-                        ? Icons.event_busy_rounded
-                        : Icons.filter_alt_off_rounded,
-                    title: filter.isEmpty
-                        ? 'На этот день смен нет'
-                        : filter.query.isNotEmpty
-                            ? 'По запросу ничего нет'
-                            : 'Ничего не найдено',
-                    subtitle: filter.isEmpty
-                        ? 'Выберите другую дату — зелёная точка\n'
-                            'под числом означает, что смены есть'
-                        : filter.query.isNotEmpty
-                            ? 'Проверьте написание\nили поищите в другой день'
-                            : 'Попробуйте убрать часть условий\nв фильтре',
+                ),
+              ),
+            SliverToBoxAdapter(
+              child: DateStrip(
+                today: today,
+                selectedDay: selectedDay,
+                hasShiftsOn: (date) => daysWithShifts.contains(date),
+                onDaySelected: _selectDay,
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: _SearchField(
+                controller: searchController,
+                onChanged: _onSearchChanged,
+                onClear: () {
+                  searchController.clear();
+                  _onSearchChanged('');
+                },
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: _ListHeader(
+                date: selectedDate,
+                count: count,
+                filter: filter,
+                onFilterTap: _openFilter,
+              ),
+            ),
+            ...switch (state) {
+              Loading() => [
+                  const SliverToBoxAdapter(
+                    child: ShiftListSkeleton(shrinkWrap: true),
                   ),
-                Ready(:final value) => RefreshIndicator(
-                    onRefresh: _load,
-                    // Ключ по дню: при смене даты AnimatedSwitcher видит
-                    // новый список и проигрывает появление заново.
-                    key: ValueKey(selectedDay),
-                    child: ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                ],
+              Failed(:final error) => [
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: ErrorView(
+                      message: describeError(error),
+                      onRetry: _retry,
+                    ),
+                  ),
+                ],
+              Ready(value: []) => [
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: EmptyState(
+                      icon: filter.isEmpty
+                          ? Icons.event_busy_rounded
+                          : Icons.filter_alt_off_rounded,
+                      title: filter.isEmpty
+                          ? 'На этот день смен нет'
+                          : filter.query.isNotEmpty
+                              ? 'По запросу ничего нет'
+                              : 'Ничего не найдено',
+                      subtitle: filter.isEmpty
+                          ? 'Выберите другую дату — зелёная точка\n'
+                              'под числом означает, что смены есть'
+                          : filter.query.isNotEmpty
+                              ? 'Проверьте написание\nили поищите в другой день'
+                              : 'Попробуйте убрать часть условий\nв фильтре',
+                    ),
+                  ),
+                ],
+              Ready(:final value) => [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    sliver: SliverList.builder(
                       itemCount: value.length,
                       itemBuilder: (context, index) => AnimatedEntrance(
+                        // Ключ по дню: при смене даты карточки появляются
+                        // волной заново, а не просто подменяются.
+                        key: ValueKey('$selectedDay/${value[index].id}'),
                         index: index,
                         child: ShiftCard(
                           shift: value[index],
@@ -289,9 +409,133 @@ class _ShiftsPageState extends State<ShiftsPage> {
                       ),
                     ),
                   ),
-              },
-            ),
+                ],
+            },
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Ближайшая смена — прямо на главном экране.
+///
+/// Когда можно отметиться, на баннере появляется кнопка «Я на месте»:
+/// человек у проходной не должен искать смену по вкладкам.
+class _NextShiftBanner extends StatelessWidget {
+  final Shift shift;
+  final DateTime now;
+  final bool busy;
+  final VoidCallback onOpen;
+  final VoidCallback onCheckIn;
+
+  const _NextShiftBanner({
+    required this.shift,
+    required this.now,
+    required this.busy,
+    required this.onOpen,
+    required this.onCheckIn,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final canCheckIn = shift.canCheckInAt(now);
+    final started = !now.isBefore(shift.startsAt);
+    final day = relativeDay(shift.workDate, now);
+
+    // Три строки вместо одной длинной: «что», «когда», «где». В одну
+    // строку «Ближайшая смена · послезавтра, 09:00» не влезала, и время —
+    // самое важное — обрезалось многоточием.
+    final status = shift.isCheckedIn
+        ? 'Вы на смене'
+        : started
+            ? 'Смена идёт'
+            : 'Ближайшая смена';
+    final when = '${day[0].toUpperCase()}${day.substring(1)}, '
+        '${formatTime(shift.startMinutes)} — ${formatTime(shift.endMinutes)}';
+
+    return SurfaceCard(
+      onTap: onOpen,
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [AppColors.brand, AppColors.brandDark],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  shift.isCheckedIn
+                      ? Icons.how_to_reg_rounded
+                      : Icons.event_available_rounded,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      status,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.brand,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      when,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontSize: 15.5),
+                    ),
+                    Text(
+                      '${shift.company} · ${shift.address}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(fontSize: 12.5),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+            ],
           ),
+          if (canCheckIn) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: busy ? null : onCheckIn,
+                icon: busy
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.location_on_rounded, size: 18),
+                label: const Text('Я на месте'),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -343,11 +587,10 @@ class _ListHeader extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             _countLabel,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.muted,
-            ),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
           ),
           const Spacer(),
           _FilterButton(activeCount: active, onTap: onFilterTap),

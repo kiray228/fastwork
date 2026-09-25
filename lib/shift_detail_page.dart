@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
@@ -159,6 +160,12 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     );
   }
 
+  /// Положить текст в буфер обмена и сказать об этом.
+  Future<void> _copy(String text, String message) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) _showResult(message);
+  }
+
   void _showResult(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
@@ -180,7 +187,14 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
       appBar: AppBar(
         title: const Text('Смена'),
         actions: [
-          IconButton(onPressed: () {}, icon: const Icon(Icons.share_outlined)),
+          IconButton(
+            onPressed: () => _copy(
+              shiftShareText(current),
+              'Описание смены скопировано — вставьте его в чат',
+            ),
+            tooltip: 'Поделиться',
+            icon: const Icon(Icons.share_outlined),
+          ),
           const SizedBox(width: 4),
         ],
       ),
@@ -204,6 +218,10 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
                 ],
                 _HeroCard(
                   shift: current,
+                  onCopyAddress: () => _copy(
+                    current.address,
+                    'Адрес скопирован — вставьте его в карты',
+                  ),
                   onCompanyTap: () => Navigator.of(context).push(
                     appRoute(
                       CompanyPage(
@@ -404,8 +422,13 @@ class _RatingLockBanner extends StatelessWidget {
 class _HeroCard extends StatelessWidget {
   final Shift shift;
   final VoidCallback onCompanyTap;
+  final VoidCallback onCopyAddress;
 
-  const _HeroCard({required this.shift, required this.onCompanyTap});
+  const _HeroCard({
+    required this.shift,
+    required this.onCompanyTap,
+    required this.onCopyAddress,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -508,7 +531,34 @@ class _HeroCard extends StatelessWidget {
                 '${shift.crossesMidnight ? ' (следующий день)' : ''}'
                 ' · ${formatDuration(shift.durationMinutes)}',
           ),
-          InfoRow(icon: Icons.place_outlined, text: shift.address),
+          // Адрес копируется одним касанием: его почти всегда вставляют
+          // в карты, а перепечатывать «ул. Султана Бейбарыса, 1» с экрана
+          // неудобно и легко ошибиться.
+          InkWell(
+            onTap: onCopyAddress,
+            borderRadius: BorderRadius.circular(10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: InfoRow(
+                    icon: Icons.place_outlined,
+                    text: shift.address,
+                  ),
+                ),
+                const Tooltip(
+                  message: 'Скопировать адрес',
+                  child: Padding(
+                    padding: EdgeInsets.all(6),
+                    child: Icon(
+                      Icons.copy_rounded,
+                      size: 18,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 12),
           Wrap(
             spacing: 6,

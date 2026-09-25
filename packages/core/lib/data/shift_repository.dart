@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import '../category.dart';
+import '../errors.dart';
 import '../mrp.dart';
 import '../notification.dart';
 import '../payment.dart';
@@ -27,8 +30,35 @@ enum BookingResult {
   alreadyCancelled, // смена уже отменена
   fewerThanHired, // мест меньше, чем уже набрано людей
   earningsLimit, // с этой сменой доход за месяц превысит 300 МРП
-  paymentRequired, // правка удорожает смену — нужна доплата картой
+  paymentRequired, // правка удорожает смену — нужна доплата
+  awaitingPayment, // смена ещё не оплачена — сначала оплата
   notFound,
+}
+
+/// Чем кончилась правка смены.
+///
+/// Обычно — просто результатом. Но если смена подорожала, правка ждёт
+/// доплаты: тогда рядом лежит начатая оплата, и новые условия вступят в
+/// силу, когда она пройдёт.
+class ShiftEditResult {
+  final BookingResult result;
+  final PaymentCheckout? checkout;
+
+  const ShiftEditResult(this.result, {this.checkout});
+
+  Map<String, dynamic> toJson() => {
+        'result': result.name,
+        'checkout': checkout?.toJson(),
+      };
+
+  static ShiftEditResult fromJson(Map<String, dynamic> json) =>
+      ShiftEditResult(
+        BookingResult.values.byName(json['result'] as String),
+        checkout: json['checkout'] == null
+            ? null
+            : PaymentCheckout.fromJson(
+                json['checkout'] as Map<String, dynamic>),
+      );
 }
 
 // ---------------------------------------------------------------------------
@@ -86,12 +116,13 @@ abstract class ShiftRepository {
     String? comment,
   });
 
-  /// Создать смену. Доступно роли «заказчик».
+  /// Создать смену и начать её оплату. Доступно роли «заказчик».
   ///
-  /// Смена без денег не публикуется: `card` — чем заплатить. Сначала
-  /// списываем деньги, потом создаём смену. Не прошла оплата — смены нет,
-  /// а исключение `PaymentDeclined` объясняет почему.
-  Future<int> createShift({
+  /// Смена без денег не публикуется. Она сохраняется сразу, но в ленте
+  /// её нет, пока провайдер не подтвердит оплату: картой на его странице
+  /// или счётом в Kaspi.kz на номер `phone`. Не заплатили — смена ждёт у
+  /// заказчика в «Моих сменах», оплатить можно позже.
+  Future<PaymentCheckout> createShift({
     required DateTime workDate,
     required String title,
     required String company,
@@ -102,11 +133,30 @@ abstract class ShiftRepository {
     required int workersNeeded,
     required int createdBy,
     required String city,
-    required PaymentCard card,
+    required PaymentMethod method,
+    String? phone,
     String category,
     List<String> duties,
     String? dressCode,
     double? minRating,
+  });
+
+  /// Оплатить смену заново — если прошлая попытка не прошла или человек
+  /// передумал и выбрал другой способ.
+  Future<PaymentCheckout> retryPayment(
+    int shiftId, {
+    required PaymentMethod method,
+    String? phone,
+  });
+
+  /// Как идёт оплата. Если провайдер уже подтвердил — смена публикуется
+  /// прямо в этом вызове.
+  Future<PaymentCheckout> paymentStatus(int paymentId);
+
+  /// Тестовый режим: «заплатить» картой или в Kaspi без провайдера.
+  Future<PaymentCheckout> completeSandboxPayment(
+    int paymentId, {
+    PaymentCard? card,
   });
 
   /// Смены, созданные этим заказчиком.
@@ -123,7 +173,7 @@ abstract class ShiftRepository {
   /// Меняется не всё подряд: день, время, ставка, адрес, описание и число
   /// мест. Компанию и город не трогаем — они берутся из профиля заказчика,
   /// а не набираются руками.
-  Future<BookingResult> updateShift({
+  Future<ShiftEditResult> updateShift({
     required int shiftId,
     required DateTime workDate,
     required String title,
@@ -135,7 +185,9 @@ abstract class ShiftRepository {
     String? category, // null — оставить как было
     List<String> duties,
     String? dressCode,
-    PaymentCard? card, // чем доплатить, если смена подорожала
+    // Чем доплатить, если смена подорожала.
+    PaymentMethod method,
+    String? phone,
   });
 
   /// Отметиться на смене: «я на месте».
@@ -283,7 +335,18 @@ class DbShiftRepository implements ShiftRepository {
   /// Подзапрос: держит ли сервис деньги за эту смену.
   static const _fundedSql = '''
     (SELECT COUNT(*) FROM payment_rows p
-      WHERE p.shift_id = s.id AND p.status = 'held') AS funded''';
+      WHERE p.shift_id = s.id AND p.status = 'held') AS funded,
+    (SELECT COUNT(*) FROM payment_rows p2
+      WHERE p2.shift_id = s.id AND p2.status = 'pending') AS awaiting''';
+
+  /// Условие: смена опубликована — то есть не ждёт оплаты.
+  ///
+  /// Отдельного флага «опубликована» нет: это следует из оплаты. Смена
+  /// ждёт, пока её оплата ждёт, — и хранить то же самое второй раз
+  /// значило бы однажды получить смену «оплачена, но не опубликована».
+  static const _publishedSql = '''
+    NOT EXISTS (SELECT 1 FROM payment_rows pp
+      WHERE pp.shift_id = s.id AND pp.status = 'pending')''';
 
   /// Подзапросы про мою запись: её состояние и время отметки.
   String get _mineSql => '''
@@ -321,6 +384,7 @@ class DbShiftRepository implements ShiftRepository {
         createdBy: row.readNullable<int>('created_by'),
         cancelledAt: row.readNullable<DateTime>('cancelled_at'),
         isFunded: row.read<int>('funded') > 0,
+        awaitingPayment: row.read<int>('awaiting') > 0,
       );
 
   static List<String> _splitDuties(String raw) =>
@@ -341,7 +405,7 @@ class DbShiftRepository implements ShiftRepository {
       SELECT s.*, $_hiredSql, $_mineSql, $_fundedSql
       FROM shift_rows s
       WHERE s.work_date >= ? AND s.work_date < ? AND s.city = ?
-        AND s.cancelled_at IS NULL
+        AND s.cancelled_at IS NULL AND $_publishedSql
       ''',
       variables: [
         Variable.withDateTime(from),
@@ -357,8 +421,8 @@ class DbShiftRepository implements ShiftRepository {
   @override
   Future<Set<DateTime>> daysWithShifts() async {
     final rows = await db.query(
-      'SELECT DISTINCT work_date FROM shift_rows '
-      'WHERE city = ? AND cancelled_at IS NULL',
+      'SELECT DISTINCT s.work_date FROM shift_rows s '
+      'WHERE s.city = ? AND s.cancelled_at IS NULL AND $_publishedSql',
       variables: [Variable.withString(session.city)],
       readsFrom: {db.shiftRows},
     ).get();
@@ -372,8 +436,9 @@ class DbShiftRepository implements ShiftRepository {
   @override
   Future<List<String>> companies() async {
     final rows = await db.query(
-      'SELECT DISTINCT company FROM shift_rows '
-      'WHERE city = ? AND cancelled_at IS NULL ORDER BY company',
+      'SELECT DISTINCT s.company FROM shift_rows s '
+      'WHERE s.city = ? AND s.cancelled_at IS NULL AND $_publishedSql '
+      'ORDER BY s.company',
       variables: [Variable.withString(session.city)],
       readsFrom: {db.shiftRows},
     ).get();
@@ -383,8 +448,8 @@ class DbShiftRepository implements ShiftRepository {
   @override
   Future<List<String>> categories() async {
     final rows = await db.query(
-      'SELECT DISTINCT category FROM shift_rows '
-      'WHERE city = ? AND cancelled_at IS NULL',
+      'SELECT DISTINCT s.category FROM shift_rows s '
+      'WHERE s.city = ? AND s.cancelled_at IS NULL AND $_publishedSql',
       variables: [Variable.withString(session.city)],
       readsFrom: {db.shiftRows},
     ).get();
@@ -393,8 +458,20 @@ class DbShiftRepository implements ShiftRepository {
 
   @override
   Future<Shift?> shiftById(int id) async {
+    final shift = await _loadShift(id);
+    // Неоплаченную смену видит только её заказчик: для остальных её
+    // ещё нет.
+    if (shift != null && shift.awaitingPayment && shift.createdBy != _workerId) {
+      return null;
+    }
+    return shift;
+  }
+
+  /// Смена как есть, без оглядки на то, кто спрашивает.
+  Future<Shift?> _loadShift(int id) async {
     final rows = await db.query(
-      'SELECT s.*, $_hiredSql, $_mineSql, $_fundedSql FROM shift_rows s WHERE s.id = ?',
+      'SELECT s.*, $_hiredSql, $_mineSql, $_fundedSql '
+      'FROM shift_rows s WHERE s.id = ?',
       variables: [Variable.withInt(id)],
       readsFrom: {db.shiftRows, db.applicationRows},
     ).get();
@@ -696,13 +773,11 @@ class DbShiftRepository implements ShiftRepository {
     final payment = await _heldPayment(shiftId);
     if (payment != null) {
       final cost = ShiftCost(slotPay: shift.totalPay, slots: 1);
-      await payments.refund(operation: payment.operation, amount: cost.total);
-      await _record(
-        userId: payment.payerId,
-        shiftId: shiftId,
-        kind: WalletEntryKind.refund,
-        amount: cost.total,
-        title: 'Возврат за невыход: «${shift.title}»',
+      await _refund(
+        shiftId,
+        payment.payerId,
+        cost.total,
+        'Возврат за невыход: «${shift.title}»',
       );
     }
 
@@ -884,7 +959,7 @@ class DbShiftRepository implements ShiftRepository {
   }
 
   @override
-  Future<int> createShift({
+  Future<PaymentCheckout> createShift({
     required DateTime workDate,
     required String title,
     required String company,
@@ -895,7 +970,8 @@ class DbShiftRepository implements ShiftRepository {
     required int workersNeeded,
     required int createdBy,
     required String city,
-    required PaymentCard card,
+    required PaymentMethod method,
+    String? phone,
     String category = kOtherCategory,
     List<String> duties = const [],
     String? dressCode,
@@ -915,60 +991,135 @@ class DbShiftRepository implements ShiftRepository {
       workersNeeded: workersNeeded,
       workersHired: 0,
     ));
+    final kaspiPhone = _phoneFor(method, phone);
 
-    // Сначала деньги, потом смена. Наоборот нельзя: иначе на секунду в
-    // ленте появилась бы смена, за которую никто не заплатил, — а если
-    // карту отклонят, на неё успели бы записаться.
-    final operation = await payments.charge(
-      amount: cost.total,
-      card: card,
-      description: 'Смена «$title»',
+    // Смену сохраняем сразу, но со строкой «ждёт оплаты» — и в ленте её
+    // нет, пока провайдер не подтвердит деньги. Сохранить смену только
+    // после оплаты нельзя: оплата идёт у провайдера минутами, человек
+    // может закрыть приложение, и заполненная форма пропала бы.
+    final chargeId = await db.transaction(() async {
+      final id = await _insertShift(
+        workDate: workDate,
+        title: title,
+        category: category,
+        company: company,
+        address: address,
+        city: city,
+        startMinutes: startMinutes,
+        endMinutes: endMinutes,
+        hourlyRate: hourlyRate,
+        workersNeeded: workersNeeded,
+        createdBy: createdBy,
+        duties: duties,
+        dressCode: dressCode,
+        minRating: minRating,
+      );
+      await db.into(db.paymentRows).insert(PaymentRowsCompanion.insert(
+            shiftId: id,
+            payerId: createdBy,
+            amount: cost.pay,
+            fee: cost.fee,
+            status: PaymentStatus.pending,
+            cardLast4: '',
+            cardBrand: '',
+            operation: '',
+            method: Value(method.id),
+            createdAt: DateTime.now(),
+          ));
+      return _insertCharge(
+        shiftId: id,
+        payerId: createdBy,
+        kind: _ChargeKind.shift,
+        method: method,
+        amount: cost.total,
+        phone: kaspiPhone,
+      );
+    });
+
+    return _startCharge(chargeId, 'Смена «$title»');
+  }
+
+  @override
+  Future<PaymentCheckout> retryPayment(
+    int shiftId, {
+    required PaymentMethod method,
+    String? phone,
+  }) async {
+    final shift = await shiftById(shiftId);
+    if (shift == null || shift.createdBy != _workerId) {
+      throw const PaymentDeclined('Смена не найдена');
+    }
+    if (shift.isCancelled) throw const PaymentDeclined('Смена отменена');
+    final funding = await _funding(shiftId);
+    if (funding == null || funding.status != PaymentStatus.pending) {
+      throw const PaymentDeclined('Смена уже оплачена');
+    }
+
+    // Прошлую попытку не отменяем: вдруг человек всё-таки заплатил по
+    // ней. Тогда деньги придут, увидят, что смена уже оплачена этой
+    // попыткой, и вернутся сами.
+    final chargeId = await _insertCharge(
+      shiftId: shiftId,
+      payerId: funding.payerId,
+      kind: _ChargeKind.shift,
+      method: method,
+      amount: funding.amount + funding.fee,
+      phone: _phoneFor(method, phone),
     );
+    return _startCharge(chargeId, 'Смена «${shift.title}»');
+  }
 
-    try {
-      return await db.transaction(() async {
-        final id = await _insertShift(
-          workDate: workDate,
-          title: title,
-          category: category,
-          company: company,
-          address: address,
-          city: city,
-          startMinutes: startMinutes,
-          endMinutes: endMinutes,
-          hourlyRate: hourlyRate,
-          workersNeeded: workersNeeded,
-          createdBy: createdBy,
-          duties: duties,
-          dressCode: dressCode,
-          minRating: minRating,
-        );
-        await db.into(db.paymentRows).insert(PaymentRowsCompanion.insert(
-              shiftId: id,
-              payerId: createdBy,
-              amount: cost.pay,
-              fee: cost.fee,
-              status: PaymentStatus.held,
-              cardLast4: card.last4,
-              cardBrand: card.brand,
-              operation: operation,
-              createdAt: DateTime.now(),
-            ));
-        await _record(
-          userId: createdBy,
-          shiftId: id,
-          kind: WalletEntryKind.charge,
-          amount: -cost.total,
-          title: 'Оплата смены «$title» · ${card.masked}',
-        );
-        return id;
-      });
-    } catch (_) {
-      // Деньги списали, а смена не сохранилась — возвращаем их сразу.
-      // Взять деньги и ничего не дать взамен — худшее, что может
-      // сделать гарант.
-      await payments.refund(operation: operation, amount: cost.total);
-      rethrow;
+  @override
+  Future<PaymentCheckout> paymentStatus(int paymentId) async =>
+      _checkoutOf(await _settle(await _myCharge(paymentId)));
+
+  @override
+  Future<PaymentCheckout> completeSandboxPayment(
+    int paymentId, {
+    PaymentCard? card,
+  }) async {
+    final charge = await _myCharge(paymentId);
+    final sandbox = payments.sandboxFor(PaymentMethod.fromId(charge.method));
+    if (sandbox == null || charge.provider != sandbox.name) {
+      throw const PaymentDeclined(
+          'Эта оплата идёт через платёжный сервис, а не в тестовом режиме');
+    }
+    sandbox.complete(charge.operation, card: card);
+    return _checkoutOf(await _settle(charge));
+  }
+
+  /// Довести до конца оплаты, о которых провайдер ещё не рассказал.
+  ///
+  /// Сервер зовёт это раз в минуту. Вебхук провайдера может потеряться,
+  /// а человек — закрыть приложение, не дождавшись «Оплачено». Смена
+  /// всё равно опубликуется: мы сами спросим у провайдера.
+  Future<void> settlePending({
+    Duration within = const Duration(days: 3),
+  }) async {
+    final since = DateTime.now().subtract(within);
+    final pending = await (db.select(db.chargeRows)
+          ..where((c) =>
+              c.status.equals(CheckoutStatus.pending) &
+              c.createdAt.isBiggerThanValue(since) &
+              c.provider.equals('sandbox').not()))
+        .get();
+    for (final charge in pending) {
+      await _settle(charge);
+    }
+  }
+
+  /// Провайдер прислал вебхук про операцию — проверяем её.
+  ///
+  /// Сам вебхук ничего не решает: по нему мы только идём спросить
+  /// провайдера. Подделанный вебхук поэтому безвреден — в худшем случае
+  /// мы лишний раз спросим и услышим «ещё не оплачено».
+  Future<void> settleOperation(String provider, String operation) async {
+    final charges = await (db.select(db.chargeRows)
+          ..where((c) =>
+              c.provider.equals(provider) & c.operation.equals(operation)))
+        .get();
+    for (final charge in charges) {
+      await _settle(charge);
     }
   }
 
@@ -1263,7 +1414,8 @@ class DbShiftRepository implements ShiftRepository {
   }
 
   @override
-  Future<BookingResult> updateShift({
+  @override
+  Future<ShiftEditResult> updateShift({
     required int shiftId,
     required DateTime workDate,
     required String title,
@@ -1275,87 +1427,134 @@ class DbShiftRepository implements ShiftRepository {
     String? category,
     List<String> duties = const [],
     String? dressCode,
-    PaymentCard? card,
+    PaymentMethod method = PaymentMethod.card,
+    String? phone,
   }) async {
+    final before = await shiftById(shiftId);
+    if (before == null) return const ShiftEditResult(BookingResult.notFound);
+    if (before.createdBy != _workerId) {
+      return const ShiftEditResult(BookingResult.notMine);
+    }
+    if (before.isCancelled) {
+      return const ShiftEditResult(BookingResult.alreadyCancelled);
+    }
+    // Неоплаченную смену не правят: за неё уже могут платить по старой
+    // цене. Проще отменить и создать заново.
+    if (before.awaitingPayment) {
+      return const ShiftEditResult(BookingResult.awaitingPayment);
+    }
+    // Мест не может стать меньше, чем людей уже набрано. Иначе кого-то
+    // пришлось бы выставить — а обещание работы уже дано.
+    if (workersNeeded < before.workersHired) {
+      return const ShiftEditResult(BookingResult.fewerThanHired);
+    }
+
+    final edit = _ShiftEdit(
+      workDate: workDate,
+      title: title,
+      address: address,
+      startMinutes: startMinutes,
+      endMinutes: endMinutes,
+      hourlyRate: hourlyRate,
+      workersNeeded: workersNeeded,
+      category: category,
+      duties: duties,
+      dressCode: dressCode,
+    );
+
+    final funding = await _heldPayment(shiftId);
+    // Старые смены, созданные до оплаты, правятся без денег.
+    if (funding == null) {
+      return ShiftEditResult(await _applyEdit(before, edit));
+    }
+
+    final cost = ShiftCost.of(edit.applyTo(before));
+    final diff = cost.total - (funding.amount + funding.fee);
+
+    // Подорожала — сначала доплата. Новые условия лежат вместе с ней и
+    // вступят в силу, когда провайдер подтвердит деньги. До тех пор в
+    // ленте смена прежняя: иначе люди записывались бы на новую ставку,
+    // которую никто ещё не оплатил.
+    if (diff > 0) {
+      final chargeId = await _insertCharge(
+        shiftId: shiftId,
+        payerId: funding.payerId,
+        kind: _ChargeKind.topup,
+        method: method,
+        amount: diff,
+        phone: _phoneFor(method, phone),
+        payload: jsonEncode(edit.toJson()),
+      );
+      final checkout =
+          await _startCharge(chargeId, 'Доплата за смену «$title»');
+      return ShiftEditResult(BookingResult.paymentRequired, checkout: checkout);
+    }
+
+    // Подешевела — разницу возвращаем сами, ни о чём не спрашивая: это
+    // деньги заказчика, и держать их у себя у сервиса нет причин.
     return db.transaction(() async {
-      final before = await shiftById(shiftId);
-      if (before == null) return BookingResult.notFound;
-      if (before.createdBy != _workerId) return BookingResult.notMine;
-      if (before.isCancelled) return BookingResult.alreadyCancelled;
-
-      // Мест не может стать меньше, чем людей уже набрано. Иначе кого-то
-      // пришлось бы выставить — а обещание работы уже дано.
-      if (workersNeeded < before.workersHired) {
-        return BookingResult.fewerThanHired;
+      if (diff < 0) {
+        await _refund(
+          shiftId,
+          funding.payerId,
+          -diff,
+          'Возврат разницы: смена «$title» подешевела',
+        );
+        await _setFunding(funding.id, cost);
       }
-
-      // Деньги — до правки смены: не хватило доплаты — смена остаётся
-      // прежней, и транзакция ничего не меняет.
-      final settled = await _settleEdit(
-        before,
-        Shift(
-          id: before.id,
-          workDate: workDate,
-          title: title,
-          company: before.company,
-          address: address,
-          startMinutes: startMinutes,
-          endMinutes: endMinutes,
-          breakMinutes: before.breakMinutes,
-          hourlyRate: hourlyRate,
-          workersNeeded: workersNeeded,
-          workersHired: before.workersHired,
-        ),
-        card,
-      );
-      if (settled != BookingResult.ok) return settled;
-
-      await (db.update(db.shiftRows)..where((s) => s.id.equals(shiftId)))
-          .write(ShiftRowsCompanion(
-        workDate: Value(workDate),
-        title: Value(title),
-        category: Value.absentIfNull(category),
-        address: Value(address),
-        startMinutes: Value(startMinutes),
-        endMinutes: Value(endMinutes),
-        hourlyRate: Value(hourlyRate),
-        workersNeeded: Value(workersNeeded),
-        duties: Value(duties.join('\n')),
-        dressCode: Value(dressCode),
-      ));
-
-      final changes = _describeChanges(
-        before,
-        workDate: workDate,
-        address: address,
-        startMinutes: startMinutes,
-        endMinutes: endMinutes,
-        hourlyRate: hourlyRate,
-      );
-
-      // Молчим, если поменяли мелочь вроде описания: уведомление о том,
-      // чего человек не заметит, только приучает не читать уведомления.
-      if (changes.isNotEmpty) {
-        final affected = await (db.select(db.applicationRows)
-              ..where((a) =>
-                  a.shiftId.equals(shiftId) &
-                  a.status.equals(ApplicationStatus.active)))
-            .get();
-
-        for (final application in affected) {
-          await _notify(
-            userId: application.workerId,
-            kind: NotificationKind.shiftChanged,
-            title: 'Смена изменилась',
-            body: '«${before.title}» ${_dayText(before.workDate)}: '
-                '${changes.join(', ')}.',
-            shiftId: shiftId,
-          );
-        }
-      }
-
-      return BookingResult.ok;
+      return ShiftEditResult(await _applyEdit(before, edit));
     });
+  }
+
+  /// Записать новые условия смены и предупредить записавшихся.
+  Future<BookingResult> _applyEdit(Shift before, _ShiftEdit edit) async {
+    final hired = (await _loadShift(before.id))?.workersHired ?? 0;
+    if (edit.workersNeeded < hired) return BookingResult.fewerThanHired;
+
+    await (db.update(db.shiftRows)..where((s) => s.id.equals(before.id)))
+        .write(ShiftRowsCompanion(
+      workDate: Value(edit.workDate),
+      title: Value(edit.title),
+      category: Value.absentIfNull(edit.category),
+      address: Value(edit.address),
+      startMinutes: Value(edit.startMinutes),
+      endMinutes: Value(edit.endMinutes),
+      hourlyRate: Value(edit.hourlyRate),
+      workersNeeded: Value(edit.workersNeeded),
+      duties: Value(edit.duties.join('\n')),
+      dressCode: Value(edit.dressCode),
+    ));
+
+    final changes = _describeChanges(
+      before,
+      workDate: edit.workDate,
+      address: edit.address,
+      startMinutes: edit.startMinutes,
+      endMinutes: edit.endMinutes,
+      hourlyRate: edit.hourlyRate,
+    );
+
+    // Молчим, если поменяли мелочь вроде описания: уведомление о том,
+    // чего человек не заметит, только приучает не читать уведомления.
+    if (changes.isNotEmpty) {
+      final affected = await (db.select(db.applicationRows)
+            ..where((a) =>
+                a.shiftId.equals(before.id) &
+                a.status.equals(ApplicationStatus.active)))
+          .get();
+
+      for (final application in affected) {
+        await _notify(
+          userId: application.workerId,
+          kind: NotificationKind.shiftChanged,
+          title: 'Смена изменилась',
+          body: '«${before.title}» ${_dayText(before.workDate)}: '
+              '${changes.join(', ')}.',
+          shiftId: before.id,
+        );
+      }
+    }
+    return BookingResult.ok;
   }
 
   /// Что именно изменилось — человеческим языком, для уведомления.
@@ -1431,37 +1630,303 @@ class DbShiftRepository implements ShiftRepository {
                 p.status.equals(PaymentStatus.held)))
           .getSingleOrNull();
 
+  /// Строка оплаты смены в любом состоянии.
+  Future<PaymentRow?> _funding(int shiftId) =>
+      (db.select(db.paymentRows)..where((p) => p.shiftId.equals(shiftId)))
+          .getSingleOrNull();
+
+  Future<void> _setFunding(int paymentId, ShiftCost cost) =>
+      (db.update(db.paymentRows)..where((p) => p.id.equals(paymentId)))
+          .write(PaymentRowsCompanion(
+        amount: Value(cost.pay),
+        fee: Value(cost.fee),
+      ));
+
+  /// Номер для счёта Kaspi. Для карты номер не нужен.
+  static String? _phoneFor(PaymentMethod method, String? phone) {
+    if (method != PaymentMethod.kaspi) return null;
+    final normalized = normalizeKzPhone(phone ?? '');
+    if (normalized == null) {
+      throw const PaymentDeclined(
+          'Укажите номер телефона, к которому привязан Kaspi.kz');
+    }
+    return normalized;
+  }
+
+  Future<int> _insertCharge({
+    required int shiftId,
+    required int payerId,
+    required String kind,
+    required PaymentMethod method,
+    required int amount,
+    String? phone,
+    String? payload,
+  }) =>
+      db.into(db.chargeRows).insert(ChargeRowsCompanion.insert(
+            shiftId: shiftId,
+            payerId: payerId,
+            kind: kind,
+            method: method.id,
+            amount: amount,
+            status: CheckoutStatus.pending,
+            provider: payments.provider(method).name,
+            phone: Value(phone),
+            payload: Value(payload),
+            createdAt: DateTime.now(),
+          ));
+
+  Future<ChargeRow> _charge(int id) =>
+      (db.select(db.chargeRows)..where((c) => c.id.equals(id))).getSingle();
+
+  /// Оплата текущего человека. Чужую не показываем: в ней сумма и телефон.
+  Future<ChargeRow> _myCharge(int id) async {
+    final charge = await (db.select(db.chargeRows)
+          ..where((c) => c.id.equals(id)))
+        .getSingleOrNull();
+    if (charge == null || charge.payerId != _workerId) {
+      throw const PaymentDeclined('Оплата не найдена');
+    }
+    return charge;
+  }
+
+  PaymentCheckout _checkoutOf(ChargeRow c) => PaymentCheckout(
+        id: c.id,
+        shiftId: c.shiftId,
+        method: PaymentMethod.fromId(c.method),
+        amount: c.amount,
+        status: c.status,
+        url: c.checkoutUrl,
+        phone: c.phone,
+        sandbox: c.provider == 'sandbox',
+        message: c.message,
+      );
+
+  /// Попросить провайдера начать оплату.
+  Future<PaymentCheckout> _startCharge(int chargeId, String description) async {
+    final charge = await _charge(chargeId);
+    final method = PaymentMethod.fromId(charge.method);
+    try {
+      final started = await payments.provider(method).startCheckout(
+            amount: charge.amount,
+            reference: 'charge-$chargeId',
+            description: description,
+            phone: charge.phone,
+          );
+      await (db.update(db.chargeRows)..where((c) => c.id.equals(chargeId)))
+          .write(ChargeRowsCompanion(
+        operation: Value(started.operation),
+        checkoutUrl: Value(started.url),
+      ));
+    } catch (error) {
+      // Провайдер отказал сразу или не ответил. Смена остаётся у
+      // заказчика неоплаченной — оплатить её можно ещё раз.
+      final message = error is UserError
+          ? error.message
+          : 'Платёжный сервис не ответил. Попробуйте ещё раз';
+      await _failCharge(chargeId, message);
+      throw PaymentDeclined(message);
+    }
+    return _checkoutOf(await _charge(chargeId));
+  }
+
+  Future<void> _failCharge(int id, String message) =>
+      (db.update(db.chargeRows)
+            ..where((c) =>
+                c.id.equals(id) & c.status.equals(CheckoutStatus.pending)))
+          .write(ChargeRowsCompanion(
+        status: const Value(CheckoutStatus.failed),
+        message: Value(message),
+      ));
+
+  /// Спросить провайдера о незавершённой оплате и довести её до конца.
+  Future<ChargeRow> _settle(ChargeRow charge) async {
+    if (charge.status != CheckoutStatus.pending || charge.operation.isEmpty) {
+      return charge;
+    }
+    final method = PaymentMethod.fromId(charge.method);
+    final provider = payments.provider(method);
+    // Сервер переключили на другого провайдера — эту операцию спросить
+    // больше не у кого.
+    if (provider.name != charge.provider) return charge;
+
+    final ProviderResult result;
+    try {
+      result = await provider.checkStatus(charge.operation);
+    } catch (_) {
+      return charge; // не ответил — спросим в следующий раз
+    }
+    switch (result.state) {
+      case ProviderState.pending:
+        return charge;
+      case ProviderState.failed:
+        await _failCharge(charge.id, result.message ?? 'Оплата не прошла');
+      case ProviderState.paid:
+        await _onPaid(charge, result.paidWith ?? method.title);
+    }
+    return _charge(charge.id);
+  }
+
+  /// Деньги пришли — публикуем смену или применяем правку.
+  Future<void> _onPaid(ChargeRow charge, String paidWith) async {
+    // «Оплачено» ставим условным обновлением: только если оплата ещё
+    // ждала. Вебхук и опрос могут прийти одновременно, и оба увидят
+    // «провайдер говорит — оплачено». Опубликует смену и запишет деньги
+    // только тот, чьё обновление сработало первым.
+    final won = await (db.update(db.chargeRows)
+          ..where((c) =>
+              c.id.equals(charge.id) &
+              c.status.equals(CheckoutStatus.pending)))
+        .write(ChargeRowsCompanion(
+      status: const Value(CheckoutStatus.paid),
+      paidAt: Value(DateTime.now()),
+      message: Value(paidWith),
+    ));
+    if (won == 0) return;
+
+    final shift = await _loadShift(charge.shiftId);
+    final funding = await _funding(charge.shiftId);
+    if (shift == null || funding == null) return;
+    final isTopup = charge.kind == _ChargeKind.topup;
+
+    await _record(
+      userId: charge.payerId,
+      shiftId: shift.id,
+      kind: WalletEntryKind.charge,
+      amount: -charge.amount,
+      title: isTopup
+          ? 'Доплата за смену «${shift.title}» · $paidWith'
+          : 'Оплата смены «${shift.title}» · $paidWith',
+    );
+
+    // Деньги пришли, а взять их уже не за что: смену отменили, пока
+    // человек платил, или её уже оплатили другой попыткой. Возвращаем
+    // сразу — гарант не держит чужих денег без причины.
+    final expected = isTopup ? PaymentStatus.held : PaymentStatus.pending;
+    if (shift.isCancelled || funding.status != expected) {
+      await _refundCharge(
+          charge, charge.amount, 'Возврат: оплата «${shift.title}» не понадобилась');
+      return;
+    }
+
+    if (!isTopup) {
+      await (db.update(db.paymentRows)..where((p) => p.id.equals(funding.id)))
+          .write(PaymentRowsCompanion(
+        status: const Value(PaymentStatus.held),
+        cardBrand: Value(paidWith),
+        operation: Value(charge.operation),
+        method: Value(charge.method),
+      ));
+      return;
+    }
+
+    final edit = _ShiftEdit.fromJson(
+        jsonDecode(charge.payload ?? '{}') as Map<String, dynamic>);
+    final applied = await _applyEdit(shift, edit);
+    if (applied != BookingResult.ok) {
+      await _refundCharge(charge, charge.amount,
+          'Возврат доплаты: правка «${shift.title}» не применена');
+      return;
+    }
+    await _setFunding(funding.id, ShiftCost.of(edit.applyTo(shift)));
+  }
+
+  /// Вызвать возврат у провайдера по одной операции.
+  Future<void> _providerRefund(ChargeRow charge, int amount) async {
+    final provider = payments.provider(PaymentMethod.fromId(charge.method));
+    // Демо-смены «оплатил» сам сервис, а тестовые операции прошлых версий
+    // вернуть некому: денег по ним и не было.
+    if (provider.name != charge.provider) return;
+    await provider.refund(operation: charge.operation, amount: amount);
+  }
+
+  /// Вернуть всю или часть одной операции.
+  Future<void> _refundCharge(ChargeRow charge, int amount, String title) async {
+    await _providerRefund(charge, amount);
+    await (db.update(db.chargeRows)..where((c) => c.id.equals(charge.id)))
+        .write(ChargeRowsCompanion(refunded: Value(charge.refunded + amount)));
+    await _record(
+      userId: charge.payerId,
+      shiftId: charge.shiftId,
+      kind: WalletEntryKind.refund,
+      amount: amount,
+      title: title,
+    );
+  }
+
+  /// Вернуть заказчику сумму по смене.
+  ///
+  /// Возвращать провайдер умеет только по той операции, по которой взял,
+  /// и не больше, чем взял. Если смену оплачивали в два приёма — сначала
+  /// оплата, потом доплата, — возврат раскладывается по операциям, начиная
+  /// с последней.
+  Future<void> _refund(
+    int shiftId,
+    int payerId,
+    int amount,
+    String title,
+  ) async {
+    final charges = await (db.select(db.chargeRows)
+          ..where((c) =>
+              c.shiftId.equals(shiftId) &
+              c.status.equals(CheckoutStatus.paid))
+          ..orderBy([(c) => OrderingTerm.desc(c.id)]))
+        .get();
+
+    var left = amount;
+    for (final charge in charges) {
+      if (left == 0) break;
+      final part = [left, charge.amount - charge.refunded]
+          .reduce((a, b) => a < b ? a : b);
+      if (part <= 0) continue;
+      await _providerRefund(charge, part);
+      await (db.update(db.chargeRows)..where((c) => c.id.equals(charge.id)))
+          .write(ChargeRowsCompanion(refunded: Value(charge.refunded + part)));
+      left -= part;
+    }
+
+    await _record(
+      userId: payerId,
+      shiftId: shiftId,
+      kind: WalletEntryKind.refund,
+      amount: amount - left,
+      title: title,
+    );
+  }
+
   /// Вернуть заказчику всё, что сервис ещё держит по смене.
   ///
-  /// Остаток не хранится — он считается: внесено, минус начислено
-  /// исполнителям (вместе с комиссией за их места), минус уже возвращено.
-  /// Храни мы его отдельной колонкой, её пришлось бы править при каждом
-  /// движении — и однажды забыли бы.
+  /// Остаток не хранится — он считается по операциям: внесено, минус уже
+  /// возвращено, минус начислено исполнителям вместе с комиссией за их
+  /// места. Храни мы его отдельной колонкой, её пришлось бы править при
+  /// каждом движении — и однажды забыли бы.
   Future<void> _refundRest(Shift shift) async {
     final payment = await _heldPayment(shift.id);
     if (payment == null) return;
 
-    final moved = await (db.select(db.walletEntryRows)
-          ..where((e) => e.shiftId.equals(shift.id)))
+    final charges = await (db.select(db.chargeRows)
+          ..where((c) =>
+              c.shiftId.equals(shift.id) &
+              c.status.equals(CheckoutStatus.paid)))
         .get();
-    var rest = payment.amount + payment.fee;
-    for (final e in moved) {
-      if (e.kind == WalletEntryKind.earning) {
-        rest -= e.amount + platformFee(e.amount);
-      } else if (e.kind == WalletEntryKind.refund &&
-          e.userId == payment.payerId) {
-        rest -= e.amount;
-      }
+    var rest = 0;
+    for (final c in charges) {
+      rest += c.amount - c.refunded;
+    }
+    final earned = await (db.select(db.walletEntryRows)
+          ..where((e) =>
+              e.shiftId.equals(shift.id) &
+              e.kind.equals(WalletEntryKind.earning)))
+        .get();
+    for (final e in earned) {
+      rest -= ShiftCost(slotPay: e.amount, slots: 1).total;
     }
 
     if (rest > 0) {
-      await payments.refund(operation: payment.operation, amount: rest);
-      await _record(
-        userId: payment.payerId,
-        shiftId: shift.id,
-        kind: WalletEntryKind.refund,
-        amount: rest,
-        title: 'Возврат: смена «${shift.title}» отменена',
+      await _refund(
+        shift.id,
+        payment.payerId,
+        rest,
+        'Возврат: смена «${shift.title}» отменена',
       );
     }
     await (db.update(db.paymentRows)..where((p) => p.id.equals(payment.id)))
@@ -1470,63 +1935,24 @@ class DbShiftRepository implements ShiftRepository {
     ));
   }
 
-  /// Правка изменила цену — доплатить или вернуть разницу.
-  ///
-  /// Подорожала — нужна карта для доплаты, без неё правка не проходит.
-  /// Подешевела — разницу возвращаем сами, ни о чём не спрашивая: это
-  /// деньги заказчика, и держать их у себя у сервиса нет причин.
-  Future<BookingResult> _settleEdit(
-    Shift before,
-    Shift after,
-    PaymentCard? card,
-  ) async {
-    final payment = await _heldPayment(before.id);
-    if (payment == null) return BookingResult.ok;
-
-    final cost = ShiftCost.of(after);
-    final diff = cost.total - (payment.amount + payment.fee);
-
-    if (diff > 0) {
-      if (card == null) return BookingResult.paymentRequired;
-      await payments.charge(
-        amount: diff,
-        card: card,
-        description: 'Доплата за смену «${after.title}»',
-      );
-      await _record(
-        userId: payment.payerId,
-        shiftId: before.id,
-        kind: WalletEntryKind.charge,
-        amount: -diff,
-        title: 'Доплата за смену «${after.title}» · ${card.masked}',
-      );
-    } else if (diff < 0) {
-      await payments.refund(operation: payment.operation, amount: -diff);
-      await _record(
-        userId: payment.payerId,
-        shiftId: before.id,
-        kind: WalletEntryKind.refund,
-        amount: -diff,
-        title: 'Возврат разницы: смена «${after.title}» подешевела',
-      );
-    }
-
-    if (diff != 0) {
-      await (db.update(db.paymentRows)..where((p) => p.id.equals(payment.id)))
-          .write(PaymentRowsCompanion(
-        amount: Value(cost.pay),
-        fee: Value(cost.fee),
-      ));
-    }
-    return BookingResult.ok;
-  }
-
   /// Учебная смена считается оплаченной — её «оплатил» сам сервис.
   /// Иначе на демо-данных нечего было бы показать ни в кошельке, ни
   /// на карточке с пометкой «оплата гарантирована».
-  Future<void> _fundDemo(int shiftId, Shift demo) {
+  Future<void> _fundDemo(int shiftId, Shift demo) async {
     final cost = ShiftCost.of(demo);
-    return db.into(db.paymentRows).insert(PaymentRowsCompanion.insert(
+    await db.into(db.chargeRows).insert(ChargeRowsCompanion.insert(
+          shiftId: shiftId,
+          payerId: 0,
+          kind: _ChargeKind.shift,
+          method: PaymentMethod.card.id,
+          amount: cost.total,
+          status: CheckoutStatus.paid,
+          provider: 'demo',
+          operation: const Value('demo'),
+          createdAt: DateTime.now(),
+          paidAt: Value(DateTime.now()),
+        ));
+    await db.into(db.paymentRows).insert(PaymentRowsCompanion.insert(
           shiftId: shiftId,
           payerId: 0,
           amount: cost.pay,
@@ -1665,4 +2091,88 @@ class DbShiftRepository implements ShiftRepository {
       }
     }
   }
+}
+
+/// Виды списаний по смене.
+class _ChargeKind {
+  _ChargeKind._();
+
+  /// Оплата смены при публикации.
+  static const shift = 'shift';
+
+  /// Доплата, когда правка сделала смену дороже.
+  static const topup = 'topup';
+}
+
+/// Новые условия смены — то, что заказчик прислал в правке.
+///
+/// Нужны отдельным объектом: если смена подорожала, правка ждёт доплаты,
+/// и всё это время условия лежат в строке оплаты текстом. Применяются
+/// они, когда провайдер подтвердит деньги, — возможно, через несколько
+/// минут и в другом запросе.
+class _ShiftEdit {
+  final DateTime workDate;
+  final String title;
+  final String address;
+  final int startMinutes;
+  final int endMinutes;
+  final int hourlyRate;
+  final int workersNeeded;
+  final String? category;
+  final List<String> duties;
+  final String? dressCode;
+
+  const _ShiftEdit({
+    required this.workDate,
+    required this.title,
+    required this.address,
+    required this.startMinutes,
+    required this.endMinutes,
+    required this.hourlyRate,
+    required this.workersNeeded,
+    required this.category,
+    required this.duties,
+    required this.dressCode,
+  });
+
+  /// Смена с новыми условиями — чтобы посчитать, сколько она стоит.
+  Shift applyTo(Shift before) => Shift(
+        id: before.id,
+        workDate: workDate,
+        title: title,
+        company: before.company,
+        address: address,
+        startMinutes: startMinutes,
+        endMinutes: endMinutes,
+        breakMinutes: before.breakMinutes,
+        hourlyRate: hourlyRate,
+        workersNeeded: workersNeeded,
+        workersHired: before.workersHired,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'workDate': workDate.toIso8601String(),
+        'title': title,
+        'address': address,
+        'startMinutes': startMinutes,
+        'endMinutes': endMinutes,
+        'hourlyRate': hourlyRate,
+        'workersNeeded': workersNeeded,
+        'category': category,
+        'duties': duties,
+        'dressCode': dressCode,
+      };
+
+  static _ShiftEdit fromJson(Map<String, dynamic> json) => _ShiftEdit(
+        workDate: DateTime.parse(json['workDate'] as String),
+        title: json['title'] as String,
+        address: json['address'] as String,
+        startMinutes: json['startMinutes'] as int,
+        endMinutes: json['endMinutes'] as int,
+        hourlyRate: json['hourlyRate'] as int,
+        workersNeeded: json['workersNeeded'] as int,
+        category: json['category'] as String?,
+        duties: (json['duties'] as List<dynamic>? ?? []).cast<String>(),
+        dressCode: json['dressCode'] as String?,
+      );
 }

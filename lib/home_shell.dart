@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'data/app_preferences.dart';
 import 'data/repositories.dart';
 import 'data/session.dart';
 import 'manager/create_shift_page.dart';
@@ -18,8 +19,14 @@ import 'theme/glass.dart';
 class HomeShell extends StatefulWidget {
   final AppSession session;
   final AppRepositories repos;
+  final AppPreferences preferences;
 
-  const HomeShell({super.key, required this.session, required this.repos});
+  const HomeShell({
+    super.key,
+    required this.session,
+    required this.repos,
+    required this.preferences,
+  });
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -67,7 +74,11 @@ class _HomeShellState extends State<HomeShell> {
       page = switch (index) {
         0 => ManagerShiftsPage(
             session: widget.session,
-            repository: widget.repos.shifts,
+            repos: widget.repos,
+            preferences: widget.preferences,
+            // Истории и пустой список зовут «Создать смену» и «Оценить» —
+            // а переключать вкладки умеет только каркас.
+            onOpenTab: _openTab,
           ),
         1 => CreateShiftPage(
             session: widget.session,
@@ -78,19 +89,31 @@ class _HomeShellState extends State<HomeShell> {
             session: widget.session,
             repository: widget.repos.shifts,
           ),
-        _ => ProfilePage(session: widget.session, repos: widget.repos),
+        _ => ProfilePage(
+            session: widget.session,
+            repos: widget.repos,
+            preferences: widget.preferences,
+            onOpenTab: _openTab,
+          ),
       };
     } else {
       page = switch (index) {
         0 => ShiftsPage(
-            repository: widget.repos.shifts,
+            repos: widget.repos,
             session: widget.session,
+            preferences: widget.preferences,
           ),
         1 => MyShiftsPage(
             repository: widget.repos.shifts,
             session: widget.session,
+            onFindShifts: () => _openTab(0),
           ),
-        _ => ProfilePage(session: widget.session, repos: widget.repos),
+        _ => ProfilePage(
+            session: widget.session,
+            repos: widget.repos,
+            preferences: widget.preferences,
+            onOpenTab: _openTab,
+          ),
       };
     }
 

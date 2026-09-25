@@ -11,6 +11,8 @@ import 'package:fastwork_core/user.dart';
 import 'package:fastwork_core/payment.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/publish.dart';
+
 /// Тестовая карта: проходит всегда.
 final testCard = tokenizeSandboxCard(kSandboxCardNumber);
 
@@ -63,7 +65,8 @@ void main() {
       acceptedTermsVersion: kTermsVersion,
     );
 
-    final shiftId = await shifts.createShift(
+    session.setUser(manager); // смену создаёт и оплачивает заказчик
+    final shiftId = await shifts.publishShift(
       workDate: daysAgo(daysBack),
       title: 'Услуги фасовщика',
       company: 'Magnum',
@@ -111,7 +114,7 @@ void main() {
     );
 
     session.setUser(manager);
-    final shiftId = await shifts.createShift(
+    final shiftId = await shifts.publishShift(
       workDate: daysAgo(0),
       title: 'Услуги грузчика',
       company: 'Magnum',
@@ -196,7 +199,7 @@ void main() {
     );
 
     // Ещё одна смена того же заказчика, на ней тот же исполнитель.
-    final secondShift = await shifts.createShift(
+    final secondShift = await shifts.publishShift(
       workDate: daysAgo(1),
       title: 'Услуги фасовщика',
       company: 'Magnum',
@@ -295,7 +298,8 @@ void main() {
       ('Смена в Алматы', 'Алматы'),
       ('Смена в Астане', 'Астана'),
     ]) {
-      await shifts.createShift(
+      session.setUser(manager); // смену создаёт и оплачивает заказчик
+      await shifts.publishShift(
         workDate: today,
         title: title,
         company: 'Magnum',
@@ -342,7 +346,8 @@ void main() {
 
     // Смена идёт прямо сейчас — иначе отметка была бы закрыта по времени.
     final now = DateTime.now();
-    final shiftId = await shifts.createShift(
+    session.setUser(manager); // смену создаёт и оплачивает заказчик
+    final shiftId = await shifts.publishShift(
       workDate: daysAgo(0),
       title: 'Услуги фасовщика',
       company: 'Magnum',
@@ -509,7 +514,7 @@ void main() {
     session.setUser(manager);
     await shifts.confirmAttendance(shiftId: firstShift, workerId: worker.id);
 
-    final secondShift = await shifts.createShift(
+    final secondShift = await shifts.publishShift(
       workDate: daysAgo(0),
       title: 'Ещё смена',
       company: 'Magnum',
@@ -631,9 +636,14 @@ void main() {
         endMinutes: base.endMinutes,
         hourlyRate: hourlyRate ?? base.hourlyRate,
         workersNeeded: workersNeeded ?? base.workersNeeded,
-        // Правка может удорожить смену — тогда доплата с этой карты.
-        card: testCard,
-      );
+      ).then((edit) async {
+        // Правка удорожила смену — доплачиваем тестовой картой, и тогда
+        // она вступает в силу.
+        final topup = edit.checkout;
+        if (topup == null) return edit.result;
+        final paid = await shifts.completeSandboxPayment(topup.id, card: testCard);
+        return paid.isPaid ? BookingResult.ok : edit.result;
+      });
 
   test('заказчик правит свою смену', () async {
     final (shiftId, _, manager) = await upcomingShift();

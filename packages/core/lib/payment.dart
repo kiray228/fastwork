@@ -42,7 +42,11 @@ class ShiftCost {
   factory ShiftCost.of(Shift shift) =>
       ShiftCost(slotPay: shift.totalPay, slots: shift.workersNeeded);
 
-  int get slotFee => platformFee(slotPay);
+  /// Комиссия за одно место. Итог за место округляем вверх до целого
+  /// тенге: Kaspi выставляет счёт только в целых тенге, а тиыны сверху
+  /// пусть лучше достанутся комиссии, чем потеряются между системами.
+  int get slotFee => ((slotPay + platformFee(slotPay) + 99) ~/ 100) * 100 -
+      slotPay;
 
   /// Вознаграждение всем исполнителям.
   int get pay => slotPay * slots;
@@ -147,7 +151,52 @@ bool expiryValid(String input, DateTime now) {
 }
 
 // ---------------------------------------------------------------------------
-// ПЛАТЁЖНЫЙ ШЛЮЗ
+// СПОСОБЫ ОПЛАТЫ
+// ---------------------------------------------------------------------------
+
+/// Чем платит заказчик.
+///
+/// Два способа, и оба обязательны: карту принимает любой банк, а Kaspi —
+/// это то, чем в Казахстане платит большинство людей. Устроены они по-разному:
+/// карту вводят на странице провайдера, а за Kaspi приходит счёт прямо в
+/// приложение Kaspi.kz, и человек подтверждает его там.
+enum PaymentMethod {
+  card('card', 'Банковская карта'),
+  kaspi('kaspi', 'Kaspi.kz');
+
+  /// Ключ — хранится в базе и ходит по сети.
+  final String id;
+  final String title;
+
+  const PaymentMethod(this.id, this.title);
+
+  /// Незнакомый ключ — карта: старые записи сделаны до появления Kaspi.
+  static PaymentMethod fromId(String? id) =>
+      values.firstWhere((m) => m.id == id, orElse: () => card);
+}
+
+/// Номер телефона для счёта в Kaspi: 11 цифр, начинается с 7.
+///
+/// Люди пишут номер как привыкли: «+7 701 …», «8 701 …», «701 …». Kaspi
+/// нужен один вид. null — номер не похож на казахстанский мобильный.
+String? normalizeKzPhone(String input) {
+  var digits = input.replaceAll(RegExp(r'\D'), '');
+  if (digits.length == 10) digits = '7$digits';
+  if (digits.length == 11 && digits.startsWith('8')) {
+    digits = '7${digits.substring(1)}';
+  }
+  if (digits.length != 11 || !digits.startsWith('77')) return null;
+  return digits;
+}
+
+/// 77011234567 -> «+7 701 123 45 67».
+String formatKzPhone(String digits) => digits.length != 11
+    ? '+$digits'
+    : '+${digits[0]} ${digits.substring(1, 4)} ${digits.substring(4, 7)} '
+        '${digits.substring(7, 9)} ${digits.substring(9)}';
+
+// ---------------------------------------------------------------------------
+// ПРОВАЙДЕРЫ
 // ---------------------------------------------------------------------------
 
 /// Отказ в оплате — его текст можно показать человеку.
@@ -155,29 +204,120 @@ class PaymentDeclined extends UserError {
   const PaymentDeclined(super.message);
 }
 
-/// Что сервису нужно от платёжного провайдера.
+/// Провайдер начал оплату: вот номер операции и куда отправить человека.
+class ProviderCheckout {
+  /// Номер операции у провайдера. По нему спрашивают, заплатили ли, и
+  /// по нему же потом возвращают деньги.
+  final String operation;
+
+  /// Страница провайдера, где человек платит. null — никуда идти не
+  /// нужно: счёт уже пришёл в Kaspi.kz или это тестовый режим.
+  final String? url;
+
+  const ProviderCheckout({required this.operation, this.url});
+}
+
+/// Чем закончилась операция у провайдера.
+enum ProviderState { pending, paid, failed }
+
+class ProviderResult {
+  final ProviderState state;
+
+  /// Почему не прошло — «банк отклонил», «счёт отменён».
+  final String? message;
+
+  /// Чем заплатили — чтобы написать в истории «Visa •• 4242».
+  final String? paidWith;
+
+  const ProviderResult(this.state, {this.message, this.paidWith});
+
+  static const pending = ProviderResult(ProviderState.pending);
+}
+
+/// Приём денег одним способом.
 ///
-/// Тот же приём, что с хранилищами: экраны и правила знают только это
-/// описание. Сегодня под ним тестовый шлюз, завтра — настоящий провайдер,
-/// и ни одно правило про удержание и возврат переписывать не придётся.
-abstract class PaymentGateway {
-  /// Тестовый ли это шлюз. Экран честно предупреждает, что деньги
-  /// ненастоящие.
+/// Оплата устроена одинаково у всех провайдеров, и у карт, и у Kaspi:
+///
+///   1. «Начать» — провайдер заводит операцию и говорит, куда отправить
+///      человека (или сам шлёт ему счёт).
+///   2. Человек платит — у провайдера, не у нас.
+///   3. «Как дела» — спрашиваем, прошла ли оплата. Провайдер ещё и сам
+///      сообщает об этом (вебхук), но верим мы только ответу на свой
+///      вопрос: вебхук может подделать кто угодно, а ответ на наш запрос
+///      по защищённому соединению — нет.
+///
+/// Номер карты и деньги до нас не доходят вообще: их принимает провайдер.
+/// Поэтому не нужен сертификат PCI DSS.
+abstract class PaymentProvider {
+  /// Короткое имя: `sandbox`, `ioka`, `apipay`.
+  String get name;
+
+  /// Тестовый ли режим — деньги ненастоящие.
   bool get isSandbox;
 
-  /// Списать деньги с карты. Возвращает номер операции у провайдера —
-  /// по нему потом делают возврат.
-  Future<String> charge({
+  Future<ProviderCheckout> startCheckout({
     required int amount,
-    required PaymentCard card,
+    required String reference,
+    required String description,
+    String? phone,
+  });
+
+  Future<ProviderResult> checkStatus(String operation);
+
+  /// Вернуть часть или всё по операции.
+  Future<void> refund({required String operation, required int amount});
+}
+
+/// Вывод денег исполнителю на карту.
+///
+/// Тоже через страницу провайдера: карту человек вводит там, а не у нас.
+/// Карта Kaspi Gold — обычная карта Visa, на неё вывод идёт так же.
+abstract class PayoutProvider {
+  String get name;
+  bool get isSandbox;
+
+  Future<ProviderCheckout> startPayout({
+    required int amount,
+    required String reference,
     required String description,
   });
 
-  /// Вернуть часть или всё списанное по операции.
-  Future<void> refund({required String operation, required int amount});
+  Future<ProviderResult> checkPayout(String operation);
+}
 
-  /// Перевести деньги на карту — вывод заработанного.
-  Future<String> payout({required int amount, required PaymentCard card});
+/// Все деньги сервиса: чем принимаем и чем выплачиваем.
+///
+/// Правила удержания и возврата в хранилищах знают только этот класс.
+/// Какие за ним провайдеры — настоящие или тестовые — решает тот, кто его
+/// собирает: сервер по переменным окружения, приложение без сервера —
+/// всегда тестовые.
+class PaymentGateway {
+  final PaymentProvider card;
+  final PaymentProvider kaspi;
+  final PayoutProvider payouts;
+
+  PaymentGateway({
+    required this.card,
+    required this.kaspi,
+    required this.payouts,
+  });
+
+  PaymentProvider provider(PaymentMethod method) =>
+      method == PaymentMethod.kaspi ? kaspi : card;
+
+  /// Хоть где-то деньги ненастоящие — экран честно об этом скажет.
+  bool get isSandbox => card.isSandbox || kaspi.isSandbox;
+
+  /// Тестовый провайдер этого способа — чтобы «заплатить» без провайдера.
+  SandboxProvider? sandboxFor(PaymentMethod method) {
+    final p = provider(method);
+    return p is SandboxProvider ? p : null;
+  }
+
+  SandboxProvider? get sandboxPayouts {
+    final p = payouts;
+    return p is SandboxProvider ? p : null;
+  }
 }
 
 /// Тестовая карта: проходит всегда.
@@ -186,53 +326,130 @@ const kSandboxCardNumber = '4242 4242 4242 4242';
 /// Тестовая карта: банк отказывает.
 const kSandboxDeclinedCardNumber = '4000 0000 0000 0002';
 
-/// Тестовый шлюз: деньги не настоящие, но правила — настоящие.
+/// Тестовый номер Kaspi, по которому счёт отклоняют.
+const kSandboxDeclinedKaspiPhone = '77000000002';
+
+/// Тестовый провайдер: деньги ненастоящие, но путь — настоящий.
 ///
-/// Ведёт себя как провайдер в тестовом режиме: принимает только свои
-/// тестовые токены, по карте на …0002 отвечает отказом. Все операции
-/// записывает в список — тесты по нему проверяют, что и сколько списали.
-class SandboxPaymentGateway implements PaymentGateway {
-  final operations = <String>[];
-  var _next = 1;
+/// Операция так же начинается, ждёт оплаты и заканчивается — только
+/// вместо страницы провайдера человек «платит» в самом приложении:
+/// вводит тестовую карту или нажимает «Оплатить в Kaspi». Все движения
+/// записываются в `log` — тесты по нему проверяют, что и сколько прошло.
+class SandboxProvider implements PaymentProvider, PayoutProvider {
+  final PaymentMethod method;
+  final List<String> log;
+  final _ops = <String, _SandboxOp>{};
+  static var _next = 1;
+
+  SandboxProvider(this.method, {List<String>? log}) : log = log ?? [];
+
+  @override
+  String get name => 'sandbox';
 
   @override
   bool get isSandbox => true;
 
-  String _op(String kind, int amount) {
+  String _open(String kind, int amount, {String? phone}) {
     final id = 'sandbox-$kind-${_next++}';
-    operations.add('$kind:$amount');
+    _ops[id] = _SandboxOp(kind, amount, phone);
     return id;
   }
 
-  void _check(PaymentCard card) {
-    if (!card.token.startsWith('sandbox_')) {
-      throw const PaymentDeclined('Карта не принята тестовым шлюзом');
-    }
-    if (card.last4 == '0002') {
-      throw const PaymentDeclined('Банк отклонил операцию. Попробуйте '
-          'другую карту');
-    }
-  }
+  @override
+  Future<ProviderCheckout> startCheckout({
+    required int amount,
+    required String reference,
+    required String description,
+    String? phone,
+  }) async =>
+      ProviderCheckout(operation: _open('pay', amount, phone: phone));
 
   @override
-  Future<String> charge({
-    required int amount,
-    required PaymentCard card,
-    required String description,
-  }) async {
-    _check(card);
-    return _op('charge', amount);
-  }
+  Future<ProviderResult> checkStatus(String operation) async =>
+      _ops[operation]?.result ?? ProviderResult.pending;
 
   @override
   Future<void> refund({required String operation, required int amount}) async {
-    _op('refund', amount);
+    log.add('refund:$amount');
   }
 
   @override
-  Future<String> payout({required int amount, required PaymentCard card}) async {
-    _check(card);
-    return _op('payout', amount);
+  Future<ProviderCheckout> startPayout({
+    required int amount,
+    required String reference,
+    required String description,
+  }) async =>
+      ProviderCheckout(operation: _open('payout', amount));
+
+  @override
+  Future<ProviderResult> checkPayout(String operation) =>
+      checkStatus(operation);
+
+  /// «Заплатить» по тестовой операции — то, что у настоящего провайдера
+  /// человек делает на его странице или в Kaspi.kz.
+  ///
+  /// Карта нужна для карточной оплаты и для вывода; по карте на …0002 и
+  /// по номеру Kaspi на …0002 приходит отказ — как от банка.
+  ProviderResult complete(String operation, {PaymentCard? card}) {
+    final op = _ops[operation];
+    if (op == null) {
+      return const ProviderResult(ProviderState.failed,
+          message: 'Операция не найдена');
+    }
+    if (op.result.state != ProviderState.pending) return op.result;
+
+    final String paidWith;
+    if (method == PaymentMethod.kaspi && op.kind == 'pay') {
+      if (op.phone == kSandboxDeclinedKaspiPhone) {
+        return op.result = const ProviderResult(ProviderState.failed,
+            message: 'Счёт отклонён в Kaspi.kz');
+      }
+      paidWith = 'Kaspi.kz';
+    } else {
+      if (card == null || !card.token.startsWith('sandbox_')) {
+        return op.result = const ProviderResult(ProviderState.failed,
+            message: 'Карта не принята тестовым шлюзом');
+      }
+      if (card.last4 == '0002') {
+        return op.result = const ProviderResult(ProviderState.failed,
+            message: 'Банк отклонил операцию. Попробуйте другую карту');
+      }
+      paidWith = card.masked;
+    }
+
+    log.add('${op.kind == 'pay' ? 'charge' : 'payout'}:${op.amount}');
+    return op.result = ProviderResult(ProviderState.paid, paidWith: paidWith);
+  }
+}
+
+class _SandboxOp {
+  final String kind;
+  final int amount;
+  final String? phone;
+  ProviderResult result = ProviderResult.pending;
+
+  _SandboxOp(this.kind, this.amount, this.phone);
+}
+
+/// Всё тестовое: и карта, и Kaspi, и выплаты. Так работает приложение
+/// без сервера и так работают тесты.
+class SandboxPaymentGateway extends PaymentGateway {
+  /// Общий журнал всех тестовых операций.
+  final List<String> operations;
+
+  SandboxPaymentGateway._(this.operations, SandboxProvider card)
+      : super(
+          card: card,
+          kaspi: SandboxProvider(PaymentMethod.kaspi, log: operations),
+          payouts: card,
+        );
+
+  factory SandboxPaymentGateway() {
+    final log = <String>[];
+    return SandboxPaymentGateway._(
+      log,
+      SandboxProvider(PaymentMethod.card, log: log),
+    );
   }
 }
 
@@ -249,6 +466,87 @@ PaymentCard tokenizeSandboxCard(String number) {
     last4: last4,
     brand: cardBrand(digits),
   );
+}
+
+// ---------------------------------------------------------------------------
+// ОПЛАТА ГЛАЗАМИ ЭКРАНА
+// ---------------------------------------------------------------------------
+
+/// Состояние одной оплаты: ждём, прошла, не прошла.
+class CheckoutStatus {
+  CheckoutStatus._();
+
+  static const pending = 'pending';
+  static const paid = 'paid';
+  static const failed = 'failed';
+}
+
+/// Начатая оплата — то, что экран показывает, пока человек платит.
+///
+/// Одна и та же для оплаты смены, доплаты при правке и вывода денег:
+/// номер, сумма, способ, куда идти и чем всё кончилось.
+class PaymentCheckout {
+  /// Номер оплаты у нас — по нему экран спрашивает, как дела.
+  final int id;
+
+  /// Смена, за которую платят. null — это вывод денег.
+  final int? shiftId;
+  final PaymentMethod method;
+  final int amount;
+  final String status;
+
+  /// Страница провайдера. null — открывать нечего.
+  final String? url;
+
+  /// Телефон, на который ушёл счёт Kaspi.
+  final String? phone;
+
+  /// Тестовый режим: платить в самом приложении.
+  final bool sandbox;
+
+  /// Почему не прошло.
+  final String? message;
+
+  const PaymentCheckout({
+    required this.id,
+    required this.method,
+    required this.amount,
+    required this.status,
+    this.shiftId,
+    this.url,
+    this.phone,
+    this.sandbox = false,
+    this.message,
+  });
+
+  bool get isPaid => status == CheckoutStatus.paid;
+  bool get isPending => status == CheckoutStatus.pending;
+  bool get isFailed => status == CheckoutStatus.failed;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'shiftId': shiftId,
+        'method': method.id,
+        'amount': amount,
+        'status': status,
+        'url': url,
+        'phone': phone,
+        'sandbox': sandbox,
+        'message': message,
+      };
+
+  static PaymentCheckout fromJson(Map<String, dynamic> json) =>
+      PaymentCheckout(
+        id: json['id'] as int,
+        shiftId: json['shiftId'] as int?,
+        method: PaymentMethod.fromId(json['method'] as String?),
+        amount: json['amount'] as int,
+        status: json['status'] as String,
+        url: json['url'] as String?,
+        phone: json['phone'] as String?,
+        sandbox: json['sandbox'] as bool? ?? false,
+        message: json['message'] as String?,
+      );
 }
 
 // ---------------------------------------------------------------------------
@@ -270,6 +568,10 @@ class WalletEntryKind {
 
   /// Заказчику вернули деньги на карту (+).
   static const refund = 'refund';
+
+  /// Провайдер сообщил, что перевод дошёл. Сумма ноль: деньги ушли с
+  /// баланса ещё при заявке на вывод, эта строка только о том, куда.
+  static const payoutDone = 'payout_done';
 }
 
 /// Одна строка истории денег.

@@ -10,6 +10,8 @@ import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_core/payment.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/publish.dart';
+
 /// Тестовая карта: проходит всегда.
 final testCard = tokenizeSandboxCard(kSandboxCardNumber);
 
@@ -125,7 +127,7 @@ void main() {
 
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
-      Future<int> create(String title) => shifts.createShift(
+      Future<int> create(String title) => shifts.publishShift(
             workDate: today,
             title: title,
             company: 'Magnum',

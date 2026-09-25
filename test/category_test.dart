@@ -11,6 +11,8 @@ import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_core/payment.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/publish.dart';
+
 /// Тестовая карта: проходит всегда.
 final testCard = tokenizeSandboxCard(kSandboxCardNumber);
 
@@ -123,7 +125,7 @@ void main() {
     tearDown(() => db.close());
 
     test('категория сохраняется и меняется правкой', () async {
-      final id = await shifts.createShift(
+      final id = await shifts.publishShift(
         workDate: DateTime.now(),
         title: 'Замена смесителя',
         company: 'Magnum',

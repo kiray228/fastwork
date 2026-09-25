@@ -7,7 +7,7 @@
     "display": "standalone",
     "orientation": "portrait-primary",
     "lang": "ru",
-    "background_color": "#F4F6F9",
+    "background_color": "#EFF6F3",
     "theme_color": "#0FA36B",
     "prefer_related_applications": false,
     "icons": [

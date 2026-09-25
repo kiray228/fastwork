@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth/register_page.dart';
+import 'data/app_preferences.dart';
 import 'auth/terms_page.dart';
 import 'data/api_auth_repository.dart';
 import 'data/api_client.dart';
@@ -42,7 +44,11 @@ Future<void> main() async {
   // Кто входил в прошлый раз — если кто-то входил, сразу пускаем внутрь.
   session.setUser(await repos.auth.restoreSession());
 
-  runApp(FastworkApp(session: session, repos: repos));
+  runApp(FastworkApp(
+    session: session,
+    repos: repos,
+    preferences: await AppPreferences.open(),
+  ));
 }
 
 /// Всё хранится на самом устройстве.
@@ -109,24 +115,51 @@ Future<AppRepositories> _serverRepositories(String url) async {
   );
 }
 
-class FastworkApp extends StatelessWidget {
+class FastworkApp extends StatefulWidget {
   final AppSession session;
   final AppRepositories repos;
+
+  /// Настройки телефона. Не передали — живут в памяти, пока открыто
+  /// приложение: так в тестах.
+  final AppPreferences? preferences;
 
   const FastworkApp({
     super.key,
     required this.session,
     required this.repos,
+    this.preferences,
   });
 
   @override
+  State<FastworkApp> createState() => _FastworkAppState();
+}
+
+class _FastworkAppState extends State<FastworkApp> {
+  late final AppPreferences preferences =
+      widget.preferences ?? AppPreferences();
+
+  @override
   Widget build(BuildContext context) {
+    // Тему человек выбирает сам в профиле: «как в системе», светлая или
+    // тёмная. Выбрал — приложение перекрасилось сразу, без перезапуска.
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: preferences.themeListenable,
+      builder: (context, themeMode, _) => _app(themeMode),
+    );
+  }
+
+  Widget _app(ThemeMode themeMode) {
     return MaterialApp(
       title: 'fastwork',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
-      themeMode: ThemeMode.system,
+      themeMode: themeMode,
+      // Приложение по-русски целиком, включая то, что рисует Flutter:
+      // календарь в форме смены, выбор времени, «Назад», «Вставить».
+      locale: const Locale('ru'),
+      supportedLocales: const [Locale('ru')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       // Ограничиваем ширину, чтобы на компьютере приложение выглядело как
       // телефон, а не растягивалось на весь монитор.
       // Фон на всю ширину окна — на компьютере по бокам от «телефона»
@@ -140,7 +173,11 @@ class FastworkApp extends StatelessWidget {
         ),
       ),
       home: LiquidBackground(
-        child: _AuthGate(session: session, repos: repos),
+        child: _AuthGate(
+          session: widget.session,
+          repos: widget.repos,
+          preferences: preferences,
+        ),
       ),
     );
   }
@@ -154,8 +191,13 @@ class FastworkApp extends StatelessWidget {
 class _AuthGate extends StatelessWidget {
   final AppSession session;
   final AppRepositories repos;
+  final AppPreferences preferences;
 
-  const _AuthGate({required this.session, required this.repos});
+  const _AuthGate({
+    required this.session,
+    required this.repos,
+    required this.preferences,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -170,7 +212,11 @@ class _AuthGate extends StatelessWidget {
         if (!user.hasAcceptedTerms) {
           return TermsGatePage(session: session, auth: repos.auth);
         }
-        return HomeShell(session: session, repos: repos);
+        return HomeShell(
+          session: session,
+          repos: repos,
+          preferences: preferences,
+        );
       },
     );
   }
