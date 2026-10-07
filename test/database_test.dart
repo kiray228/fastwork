@@ -902,4 +902,95 @@ void main() {
     clock.setHour(11); // смена началась
     expect(await shifts.daysWithShifts(), isNot(contains(daysAgo(0))));
   });
+
+  // ---------------------------------------------------------------------
+  // ЛЮБИМЫЕ ИСПОЛНИТЕЛИ
+  // ---------------------------------------------------------------------
+
+  test('в любимые — только того, кто у заказчика отработал', () async {
+    final (shiftId, worker, manager) = await upcomingShift();
+    session.setUser(manager);
+
+    // Записан, но выход не подтверждён — рано.
+    expect(
+      await shifts.setFavorite(workerId: worker.id, favorite: true),
+      BookingResult.notMine,
+    );
+
+    clock.setHour(21);
+    await shifts.confirmAttendance(shiftId: shiftId, workerId: worker.id);
+    expect(
+      await shifts.setFavorite(workerId: worker.id, favorite: true),
+      BookingResult.ok,
+    );
+    // Второе нажатие не ломает ничего.
+    expect(
+      await shifts.setFavorite(workerId: worker.id, favorite: true),
+      BookingResult.ok,
+    );
+
+    final people = await shifts.applicantsFor(shiftId);
+    expect(people.single.isFavorite, isTrue);
+    final favorites = await shifts.favoriteWorkers();
+    expect(favorites.single.id, worker.id);
+    expect(favorites.single.completedShifts, 1, reason: 'смен у этого заказчика');
+
+    await shifts.setFavorite(workerId: worker.id, favorite: false);
+    expect(await shifts.favoriteWorkers(), isEmpty);
+  });
+
+  test('новая смена приходит приглашением любимым из того же города',
+      () async {
+    final (_, workerId, managerId) = await workedShift();
+    final manager = (await auth.refresh(managerId))!;
+    session.setUser(manager);
+    expect(
+      await shifts.setFavorite(workerId: workerId, favorite: true),
+      BookingResult.ok,
+    );
+
+    final shiftId = await shifts.publishShift(
+      workDate: daysAgo(-2),
+      title: 'Услуги фасовщика',
+      company: 'Magnum',
+      address: 'г. Алматы, ул. Абая, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 2,
+      createdBy: managerId,
+      city: 'Алматы',
+      card: testCard,
+    );
+
+    session.setUser((await auth.refresh(workerId))!);
+    final invites = (await shifts.notifications())
+        .where((n) => n.kind == NotificationKind.invited)
+        .toList();
+    expect(invites, hasLength(1));
+    expect(invites.single.shiftId, shiftId);
+    expect(invites.single.title, contains('Magnum'));
+
+    // Смена в другом городе — приглашения нет.
+    session.setUser(manager);
+    await shifts.publishShift(
+      workDate: daysAgo(-2),
+      title: 'Услуги фасовщика',
+      company: 'Magnum',
+      address: 'г. Астана, ул. Кенесары, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 2,
+      createdBy: managerId,
+      city: 'Астана',
+      card: testCard,
+    );
+    session.setUser((await auth.refresh(workerId))!);
+    expect(
+      (await shifts.notifications())
+          .where((n) => n.kind == NotificationKind.invited),
+      hasLength(1),
+    );
+  });
 }

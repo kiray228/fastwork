@@ -569,6 +569,36 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
     await _load();
   }
 
+  /// Добавить в любимые или убрать оттуда.
+  ///
+  /// Любимым приходит приглашение, как только заказчик опубликует новую
+  /// смену, — так хорошие люди возвращаются, а смены набираются быстрее.
+  Future<void> _toggleFavorite(ShiftApplicant applicant) async {
+    final favorite = !applicant.isFavorite;
+    final result = await guarded(
+      context,
+      () => widget.repository.setFavorite(
+        workerId: applicant.user.id,
+        favorite: favorite,
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(switch (result) {
+          BookingResult.ok when favorite =>
+            '${applicant.user.fullName} — в любимых. Позовём на ваши '
+                'следующие смены',
+          BookingResult.ok => '${applicant.user.fullName} убран из любимых',
+          _ => 'В любимые — только тех, кто у вас уже отработал',
+        }),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    await _load();
+  }
+
   Future<void> _confirm(ShiftApplicant applicant) async {
     final result = await guarded(
       context,
@@ -638,6 +668,8 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
                     onNoShow: canMark && item.isUnmarked
                         ? () => _markNoShow(item)
                         : null,
+                    onFavorite:
+                        item.isConfirmed ? () => _toggleFavorite(item) : null,
                   ),
                 );
               },
@@ -688,10 +720,14 @@ class _ApplicantTile extends StatelessWidget {
   final VoidCallback? onConfirm;
   final VoidCallback? onNoShow;
 
+  /// В любимые — только тех, кто отработал. null — сердечка нет.
+  final VoidCallback? onFavorite;
+
   const _ApplicantTile({
     required this.applicant,
     this.onConfirm,
     this.onNoShow,
+    this.onFavorite,
   });
 
   @override
@@ -772,6 +808,19 @@ class _ApplicantTile extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (onFavorite != null)
+                  IconButton(
+                    onPressed: onFavorite,
+                    tooltip: applicant.isFavorite
+                        ? 'Убрать из любимых'
+                        : 'В любимые исполнители',
+                    icon: Icon(
+                      applicant.isFavorite
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                      color: AppColors.accent,
+                    ),
+                  ),
                 if (applicant.isConfirmed)
                   const TagChip(
                     text: 'Отработал',

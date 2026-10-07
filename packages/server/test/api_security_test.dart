@@ -192,6 +192,22 @@ void main() {
       expect(code, 400);
     });
 
+    test('любимые исполнители — только у заказчика и только свои', () async {
+      final shiftId = await bookedShift();
+      // Исполнителю этот адрес не положен.
+      final (worker, _) = await call('GET', '/api/favorites', token: workerToken);
+      expect(worker, 403);
+      // Человек ещё не отработал у заказчика — в любимые рано.
+      final (_, early) = await call('POST', '/api/favorites/$workerId',
+          token: managerToken, body: {'favorite': true});
+      expect(early['result'], 'notMine');
+      // А чужой заказчик и подавно.
+      final (_, stranger) = await call('POST', '/api/favorites/$workerId',
+          token: strangerToken, body: {'favorite': true});
+      expect(stranger['result'], 'notMine');
+      expect(shiftId, isPositive);
+    });
+
     test('отзыв о компании — только от того, кто у неё работал', () async {
       final shiftId = await bookedShift();
       final (code, _) = await call('POST', '/api/shifts/$shiftId/review',

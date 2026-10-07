@@ -5,6 +5,7 @@ import 'data/app_preferences.dart';
 import 'data/repositories.dart';
 import 'data/session.dart';
 import 'documents_page.dart';
+import 'manager/favorites_page.dart';
 import 'my_reviews_page.dart';
 import 'stories/story_actions.dart';
 import 'support_ui/support_page.dart';
@@ -200,6 +201,15 @@ class ProfilePage extends StatelessWidget {
                     )),
                   ),
                 ),
+                if (user.isManager)
+                  _MenuRow(
+                    icon: Icons.favorite_border_rounded,
+                    title: 'Любимые исполнители',
+                    trailing: 'Позвать снова',
+                    onTap: () => Navigator.of(context).push(
+                      appRoute(FavoritesPage(repository: repos.shifts)),
+                    ),
+                  ),
                 if (!user.isManager)
                   _MenuRow(
                     icon: Icons.badge_outlined,

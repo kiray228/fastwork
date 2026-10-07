@@ -130,6 +130,7 @@ class _NotificationTile extends StatelessWidget {
         NotificationKind.shiftCancelled => (Icons.event_busy, AppColors.danger),
         NotificationKind.shiftChanged => (Icons.edit_calendar, AppColors.warning),
         NotificationKind.noShow => (Icons.person_off, AppColors.danger),
+        NotificationKind.invited => (Icons.favorite_rounded, AppColors.accent),
       };
 
   @override

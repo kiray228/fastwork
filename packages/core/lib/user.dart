@@ -165,10 +165,14 @@ class ShiftApplicant {
   final String status;
   final DateTime? checkedInAt;
 
+  /// Заказчик отметил этого человека как любимого исполнителя.
+  final bool isFavorite;
+
   const ShiftApplicant({
     required this.user,
     required this.status,
     required this.checkedInAt,
+    this.isFavorite = false,
   });
 
   bool get isCheckedIn => checkedInAt != null;
@@ -218,6 +222,7 @@ extension ShiftApplicantJson on ShiftApplicant {
         'user': user.toJson(),
         'status': status,
         'checkedInAt': checkedInAt?.toIso8601String(),
+        'isFavorite': isFavorite,
       };
 }
 
@@ -227,4 +232,6 @@ ShiftApplicant applicantFromJson(Map<String, dynamic> json) => ShiftApplicant(
       checkedInAt: json['checkedInAt'] == null
           ? null
           : DateTime.parse(json['checkedInAt'] as String),
+      // Старый сервер этого поля не знает — значит, не отмечен.
+      isFavorite: json['isFavorite'] as bool? ?? false,
     );

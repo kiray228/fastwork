@@ -718,6 +718,33 @@ class Api {
       });
     });
 
+    // Любимые исполнители заказчика. Адрес — номер исполнителя: «этого
+    // человека — в любимые» или «из любимых».
+    router.get('/api/favorites', (Request request) async {
+      return _authorized(request, (user) async {
+        if (!user.isManager) {
+          return _error('Только для заказчиков', status: 403);
+        }
+        final people = await _shiftsFor(user).favoriteWorkers();
+        return _json(people.map((p) => p.toJson()).toList());
+      });
+    });
+
+    router.post('/api/favorites/<id|[0-9]+>',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        if (!user.isManager) {
+          return _error('Только для заказчиков', status: 403);
+        }
+        final body = await _body(request);
+        final result = await _shiftsFor(user).setFavorite(
+          workerId: int.parse(id),
+          favorite: body['favorite'] as bool? ?? true,
+        );
+        return _json({'result': result.name});
+      });
+    });
+
     router.post('/api/shifts/<id|[0-9]+>/rate',
         (Request request, String id) async {
       return _authorized(request, (user) async {

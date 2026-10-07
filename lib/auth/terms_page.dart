@@ -159,10 +159,34 @@ class TermsCheckbox extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
 
-  const TermsCheckbox({super.key, required this.value, required this.onChanged});
+  /// Заказчик: про лимит дохода исполнителя ему говорить незачем.
+  final bool forEmployer;
+
+  const TermsCheckbox({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.forEmployer = false,
+  });
+
+  static const _style = TextStyle(fontSize: 13.5, height: 1.35);
 
   @override
   Widget build(BuildContext context) {
+    final tail = forEmployer
+        ? 'и обработку персональных данных'
+        : 'включая лимит дохода 300 МРП в месяц и обработку персональных '
+            'данных';
+
+    // Подпись собрана из отдельных слов, а не из трёх кусков текста.
+    // Кусками она переносилась целиком: хвост с запятой уезжал на новую
+    // строку, и строка начиналась с «, включая…». Слова же переносятся
+    // по одному — как в обычном абзаце, — а ссылка остаётся ссылкой.
+    Widget word(String text) => GestureDetector(
+          onTap: () => onChanged(!value),
+          child: Text('$text ', style: _style),
+        );
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -178,37 +202,33 @@ class TermsCheckbox extends StatelessWidget {
             child: Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                GestureDetector(
-                  onTap: () => onChanged(!value),
-                  child: const Text(
-                    'Я принимаю ',
-                    style: TextStyle(fontSize: 13.5, height: 1.35),
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () => Navigator.of(context).push(
-                    appRoute(const TermsPage()),
-                  ),
-                  child: const Text(
-                    'правила сервиса',
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      height: 1.35,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.brand,
-                      decoration: TextDecoration.underline,
-                      decorationColor: AppColors.brand,
+                word('Я'),
+                word('принимаю'),
+                // Ссылка и знак после неё — одно целое: запятая не
+                // должна оказаться в начале следующей строки.
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).push(
+                        appRoute(const TermsPage()),
+                      ),
+                      child: const Text(
+                        'правила сервиса',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          height: 1.35,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.brand,
+                          decoration: TextDecoration.underline,
+                          decorationColor: AppColors.brand,
+                        ),
+                      ),
                     ),
-                  ),
+                    Text(forEmployer ? ' ' : ', ', style: _style),
+                  ],
                 ),
-                GestureDetector(
-                  onTap: () => onChanged(!value),
-                  child: const Text(
-                    ', включая лимит дохода 300 МРП в месяц и '
-                    'обработку персональных данных',
-                    style: TextStyle(fontSize: 13.5, height: 1.35),
-                  ),
-                ),
+                for (final w in tail.split(' ')) word(w),
               ],
             ),
           ),

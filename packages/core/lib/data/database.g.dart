@@ -8639,6 +8639,316 @@ class PayoutRowsCompanion extends UpdateCompanion<PayoutRow> {
   }
 }
 
+class $FavoriteRowsTable extends FavoriteRows
+    with TableInfo<$FavoriteRowsTable, FavoriteRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FavoriteRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _employerIdMeta = const VerificationMeta(
+    'employerId',
+  );
+  @override
+  late final GeneratedColumn<int> employerId = GeneratedColumn<int>(
+    'employer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _workerIdMeta = const VerificationMeta(
+    'workerId',
+  );
+  @override
+  late final GeneratedColumn<int> workerId = GeneratedColumn<int>(
+    'worker_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, employerId, workerId, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'favorite_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FavoriteRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('employer_id')) {
+      context.handle(
+        _employerIdMeta,
+        employerId.isAcceptableOrUnknown(data['employer_id']!, _employerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_employerIdMeta);
+    }
+    if (data.containsKey('worker_id')) {
+      context.handle(
+        _workerIdMeta,
+        workerId.isAcceptableOrUnknown(data['worker_id']!, _workerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_workerIdMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {employerId, workerId},
+  ];
+  @override
+  FavoriteRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FavoriteRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      employerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}employer_id'],
+      )!,
+      workerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}worker_id'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $FavoriteRowsTable createAlias(String alias) {
+    return $FavoriteRowsTable(attachedDatabase, alias);
+  }
+}
+
+class FavoriteRow extends DataClass implements Insertable<FavoriteRow> {
+  final int id;
+
+  /// Кто отметил — заказчик.
+  final int employerId;
+
+  /// Кого отметили — исполнитель.
+  final int workerId;
+  final DateTime createdAt;
+  const FavoriteRow({
+    required this.id,
+    required this.employerId,
+    required this.workerId,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['employer_id'] = Variable<int>(employerId);
+    map['worker_id'] = Variable<int>(workerId);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  FavoriteRowsCompanion toCompanion(bool nullToAbsent) {
+    return FavoriteRowsCompanion(
+      id: Value(id),
+      employerId: Value(employerId),
+      workerId: Value(workerId),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory FavoriteRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FavoriteRow(
+      id: serializer.fromJson<int>(json['id']),
+      employerId: serializer.fromJson<int>(json['employerId']),
+      workerId: serializer.fromJson<int>(json['workerId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'employerId': serializer.toJson<int>(employerId),
+      'workerId': serializer.toJson<int>(workerId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  FavoriteRow copyWith({
+    int? id,
+    int? employerId,
+    int? workerId,
+    DateTime? createdAt,
+  }) => FavoriteRow(
+    id: id ?? this.id,
+    employerId: employerId ?? this.employerId,
+    workerId: workerId ?? this.workerId,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  FavoriteRow copyWithCompanion(FavoriteRowsCompanion data) {
+    return FavoriteRow(
+      id: data.id.present ? data.id.value : this.id,
+      employerId: data.employerId.present
+          ? data.employerId.value
+          : this.employerId,
+      workerId: data.workerId.present ? data.workerId.value : this.workerId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FavoriteRow(')
+          ..write('id: $id, ')
+          ..write('employerId: $employerId, ')
+          ..write('workerId: $workerId, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, employerId, workerId, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FavoriteRow &&
+          other.id == this.id &&
+          other.employerId == this.employerId &&
+          other.workerId == this.workerId &&
+          other.createdAt == this.createdAt);
+}
+
+class FavoriteRowsCompanion extends UpdateCompanion<FavoriteRow> {
+  final Value<int> id;
+  final Value<int> employerId;
+  final Value<int> workerId;
+  final Value<DateTime> createdAt;
+  const FavoriteRowsCompanion({
+    this.id = const Value.absent(),
+    this.employerId = const Value.absent(),
+    this.workerId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  FavoriteRowsCompanion.insert({
+    this.id = const Value.absent(),
+    required int employerId,
+    required int workerId,
+    required DateTime createdAt,
+  }) : employerId = Value(employerId),
+       workerId = Value(workerId),
+       createdAt = Value(createdAt);
+  static Insertable<FavoriteRow> custom({
+    Expression<int>? id,
+    Expression<int>? employerId,
+    Expression<int>? workerId,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (employerId != null) 'employer_id': employerId,
+      if (workerId != null) 'worker_id': workerId,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  FavoriteRowsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? employerId,
+    Value<int>? workerId,
+    Value<DateTime>? createdAt,
+  }) {
+    return FavoriteRowsCompanion(
+      id: id ?? this.id,
+      employerId: employerId ?? this.employerId,
+      workerId: workerId ?? this.workerId,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (employerId.present) {
+      map['employer_id'] = Variable<int>(employerId.value);
+    }
+    if (workerId.present) {
+      map['worker_id'] = Variable<int>(workerId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FavoriteRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('employerId: $employerId, ')
+          ..write('workerId: $workerId, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -8669,6 +8979,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $ChargeRowsTable chargeRows = $ChargeRowsTable(this);
   late final $PayoutRowsTable payoutRows = $PayoutRowsTable(this);
+  late final $FavoriteRowsTable favoriteRows = $FavoriteRowsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -8691,6 +9002,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     walletEntryRows,
     chargeRows,
     payoutRows,
+    favoriteRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -14436,6 +14748,192 @@ typedef $$PayoutRowsTableProcessedTableManager =
       PayoutRow,
       PrefetchHooks Function()
     >;
+typedef $$FavoriteRowsTableCreateCompanionBuilder =
+    FavoriteRowsCompanion Function({
+      Value<int> id,
+      required int employerId,
+      required int workerId,
+      required DateTime createdAt,
+    });
+typedef $$FavoriteRowsTableUpdateCompanionBuilder =
+    FavoriteRowsCompanion Function({
+      Value<int> id,
+      Value<int> employerId,
+      Value<int> workerId,
+      Value<DateTime> createdAt,
+    });
+
+class $$FavoriteRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $FavoriteRowsTable> {
+  $$FavoriteRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get employerId => $composableBuilder(
+    column: $table.employerId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get workerId => $composableBuilder(
+    column: $table.workerId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$FavoriteRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $FavoriteRowsTable> {
+  $$FavoriteRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get employerId => $composableBuilder(
+    column: $table.employerId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get workerId => $composableBuilder(
+    column: $table.workerId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$FavoriteRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FavoriteRowsTable> {
+  $$FavoriteRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get employerId => $composableBuilder(
+    column: $table.employerId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get workerId =>
+      $composableBuilder(column: $table.workerId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$FavoriteRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FavoriteRowsTable,
+          FavoriteRow,
+          $$FavoriteRowsTableFilterComposer,
+          $$FavoriteRowsTableOrderingComposer,
+          $$FavoriteRowsTableAnnotationComposer,
+          $$FavoriteRowsTableCreateCompanionBuilder,
+          $$FavoriteRowsTableUpdateCompanionBuilder,
+          (
+            FavoriteRow,
+            BaseReferences<_$AppDatabase, $FavoriteRowsTable, FavoriteRow>,
+          ),
+          FavoriteRow,
+          PrefetchHooks Function()
+        > {
+  $$FavoriteRowsTableTableManager(_$AppDatabase db, $FavoriteRowsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FavoriteRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FavoriteRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FavoriteRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> employerId = const Value.absent(),
+                Value<int> workerId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => FavoriteRowsCompanion(
+                id: id,
+                employerId: employerId,
+                workerId: workerId,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int employerId,
+                required int workerId,
+                required DateTime createdAt,
+              }) => FavoriteRowsCompanion.insert(
+                id: id,
+                employerId: employerId,
+                workerId: workerId,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$FavoriteRowsTable, FavoriteRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $FavoriteRowsTable,
+                    FavoriteRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$FavoriteRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FavoriteRowsTable,
+      FavoriteRow,
+      $$FavoriteRowsTableFilterComposer,
+      $$FavoriteRowsTableOrderingComposer,
+      $$FavoriteRowsTableAnnotationComposer,
+      $$FavoriteRowsTableCreateCompanionBuilder,
+      $$FavoriteRowsTableUpdateCompanionBuilder,
+      (
+        FavoriteRow,
+        BaseReferences<_$AppDatabase, $FavoriteRowsTable, FavoriteRow>,
+      ),
+      FavoriteRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -14474,4 +14972,6 @@ class $AppDatabaseManager {
       $$ChargeRowsTableTableManager(_db, _db.chargeRows);
   $$PayoutRowsTableTableManager get payoutRows =>
       $$PayoutRowsTableTableManager(_db, _db.payoutRows);
+  $$FavoriteRowsTableTableManager get favoriteRows =>
+      $$FavoriteRowsTableTableManager(_db, _db.favoriteRows);
 }

@@ -1415,6 +1415,37 @@ void main() {
       expect(isSameDay(copy.workDate, tomorrow), isTrue);
     });
 
+    testWidgets('отработавшего можно добавить в любимые', (tester) async {
+      final repo = await managerRepo(); // выход уже подтверждён
+      await openApp(
+        tester,
+        role: UserRole.manager,
+        repos: buildRepos(
+          shifts: repo,
+          signedIn: testUser(role: UserRole.manager),
+        ),
+      );
+
+      await tester.tap(find.text('Услуги фасовщика'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('В любимые исполнители'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('в любимых'), findsOneWidget);
+      expect(find.byTooltip('Убрать из любимых'), findsOneWidget);
+      expect((await repo.favoriteWorkers()).single.fullName,
+          'Ернар Калдыбеков');
+
+      // И он виден в профиле, в «Любимых исполнителях».
+      await tester.tap(find.byTooltip('Назад'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Любимые исполнители'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ернар Калдыбеков'), findsOneWidget);
+    });
+
     testWidgets('отменённая смена исчезает из ленты исполнителя',
         (tester) async {
       final repo = FakeShiftRepository(clock: morning(), shifts: [tomorrowShift()]);

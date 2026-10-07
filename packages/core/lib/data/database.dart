@@ -238,6 +238,33 @@ class WorkerReviewRows extends Table {
       ];
 }
 
+/// Любимые исполнители заказчика.
+///
+/// Заказчик отмечает тех, с кем хочет работать снова, — и когда он
+/// публикует новую смену, они узнают о ней первыми. У конкурентов это
+/// называют «пулом» или «избранными»: смены с такими людьми набираются
+/// быстрее, а исполнитель видит, что хорошую работу заметили.
+///
+/// Отметить можно только того, кто у этого заказчика уже отработал, —
+/// это проверяет хранилище. Иначе «избранное» превратилось бы в рассылку
+/// приглашений кому попало.
+class FavoriteRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+
+  /// Кто отметил — заказчик.
+  IntColumn get employerId => integer()();
+
+  /// Кого отметили — исполнитель.
+  IntColumn get workerId => integer()();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {employerId, workerId},
+      ];
+}
+
 /// Одноразовые коды для входа.
 ///
 /// Обрати внимание: хранится не сам код, а его **отпечаток** — результат
@@ -562,6 +589,7 @@ class NotificationRows extends Table {
     WalletEntryRows,
     ChargeRows,
     PayoutRows,
+    FavoriteRows,
   ],
 )
 /// Описание базы: какие таблицы и какой версии схема.
@@ -670,7 +698,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -753,6 +781,9 @@ class AppDatabase extends _$AppDatabase {
               WHERE NOT EXISTS (
                 SELECT 1 FROM charge_rows c WHERE c.shift_id = p.shift_id)
             ''');
+          }
+          if (from < 15) {
+            await m.createTable(favoriteRows);
           }
         },
         beforeOpen: (details) async {

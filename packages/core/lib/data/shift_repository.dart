@@ -230,6 +230,19 @@ abstract class ShiftRepository {
   /// Отзывы, которые получил исполнитель.
   Future<List<WorkerReview>> reviewsAbout(int workerId);
 
+  /// Заказчик добавляет исполнителя в любимые или убирает оттуда.
+  ///
+  /// Добавить можно только того, кто у этого заказчика уже отработал
+  /// смену (выход подтверждён), — иначе `notMine`.
+  Future<BookingResult> setFavorite({
+    required int workerId,
+    required bool favorite,
+  });
+
+  /// Любимые исполнители текущего заказчика. Когда он публикует смену,
+  /// им приходит приглашение.
+  Future<List<AppUser>> favoriteWorkers();
+
   /// Уведомления текущего пользователя — новые сверху.
   Future<List<AppNotification>> notifications();
 
@@ -1323,7 +1336,10 @@ class DbShiftRepository implements ShiftRepository {
              ), 0) AS INTEGER) AS done_count,
              CAST(COALESCE((SELECT COUNT(*) FROM application_rows n
                WHERE n.worker_id = u.id AND n.status = 'no_show'
-             ), 0) AS INTEGER) AS missed_count
+             ), 0) AS INTEGER) AS missed_count,
+             CASE WHEN EXISTS (SELECT 1 FROM favorite_rows f
+               WHERE f.employer_id = $_workerId AND f.worker_id = u.id)
+             THEN 1 ELSE 0 END AS is_favorite
       FROM application_rows a
       JOIN user_rows u ON u.id = a.worker_id
       WHERE a.shift_id = ?
@@ -1331,7 +1347,12 @@ class DbShiftRepository implements ShiftRepository {
       ORDER BY live_rating DESC
       ''',
       variables: [Variable.withInt(shiftId)],
-      readsFrom: {db.applicationRows, db.userRows, db.workerReviewRows},
+      readsFrom: {
+        db.applicationRows,
+        db.userRows,
+        db.workerReviewRows,
+        db.favoriteRows,
+      },
     ).get();
 
     return rows
@@ -1349,8 +1370,128 @@ class DbShiftRepository implements ShiftRepository {
               ),
               status: r.read<String>('application_status'),
               checkedInAt: r.readNullable<DateTime>('checked_in_at'),
+              isFavorite: r.read<int>('is_favorite') > 0,
             ))
         .toList();
+  }
+
+  @override
+  Future<BookingResult> setFavorite({
+    required int workerId,
+    required bool favorite,
+  }) async {
+    if (!favorite) {
+      await (db.delete(db.favoriteRows)
+            ..where((f) =>
+                f.employerId.equals(_workerId) & f.workerId.equals(workerId)))
+          .go();
+      return BookingResult.ok;
+    }
+
+    // Любимым может быть только тот, кто у этого заказчика уже работал:
+    // выход подтверждён хотя бы на одной его смене.
+    final worked = await db.query(
+      '''
+      SELECT 1 AS one FROM application_rows a
+      JOIN shift_rows s ON s.id = a.shift_id
+      WHERE s.created_by = ? AND a.worker_id = ? AND a.status = 'completed'
+      LIMIT 1
+      ''',
+      variables: [Variable.withInt(_workerId), Variable.withInt(workerId)],
+      readsFrom: {db.applicationRows, db.shiftRows},
+    ).get();
+    if (worked.isEmpty) return BookingResult.notMine;
+
+    await db.into(db.favoriteRows).insert(
+          FavoriteRowsCompanion.insert(
+            employerId: _workerId,
+            workerId: workerId,
+            createdAt: clock(),
+          ),
+          // Второе нажатие ничего не ломает: пара уже есть — и ладно.
+          onConflict: DoNothing(
+            target: [db.favoriteRows.employerId, db.favoriteRows.workerId],
+          ),
+        );
+    return BookingResult.ok;
+  }
+
+  @override
+  Future<List<AppUser>> favoriteWorkers() async {
+    final rows = await db.query(
+      '''
+      SELECT u.*,
+             CAST(COALESCE(
+               (SELECT AVG(w.rating) FROM worker_review_rows w
+                 WHERE w.worker_id = u.id),
+               u.rating
+             ) AS DOUBLE PRECISION) AS live_rating,
+             CAST(COALESCE((SELECT COUNT(*) FROM application_rows d
+               JOIN shift_rows ds ON ds.id = d.shift_id
+               WHERE d.worker_id = u.id AND d.status = 'completed'
+                 AND ds.created_by = f.employer_id
+             ), 0) AS INTEGER) AS together_count
+      FROM favorite_rows f
+      JOIN user_rows u ON u.id = f.worker_id
+      WHERE f.employer_id = ?
+      ORDER BY u.full_name
+      ''',
+      variables: [Variable.withInt(_workerId)],
+      readsFrom: {
+        db.favoriteRows,
+        db.userRows,
+        db.applicationRows,
+        db.shiftRows,
+        db.workerReviewRows,
+      },
+    ).get();
+
+    // `completedShifts` здесь — сколько смен человек отработал именно у
+    // этого заказчика: в списке любимых важна общая история, а не
+    // весь опыт человека.
+    return rows
+        .map((r) => AppUser(
+              id: r.read<int>('id'),
+              phone: r.read<String>('phone'),
+              fullName: r.read<String>('full_name'),
+              city: r.read<String>('city'),
+              rating: r.read<double>('live_rating'),
+              isVerified: r.read<bool>('is_verified'),
+              role: r.read<String>('role'),
+              completedShifts: r.read<int>('together_count'),
+            ))
+        .toList();
+  }
+
+  /// Позвать любимых исполнителей на только что опубликованную смену.
+  ///
+  /// Только тех, кто живёт в городе смены: приглашение в другой город
+  /// было бы рассылкой, а не заботой.
+  Future<void> _inviteFavorites(Shift shift) async {
+    final employer = shift.createdBy;
+    if (employer == null) return;
+    final rows = await db.query(
+      '''
+      SELECT f.worker_id FROM favorite_rows f
+      JOIN user_rows u ON u.id = f.worker_id
+      WHERE f.employer_id = ? AND u.city = ?
+      ''',
+      variables: [Variable.withInt(employer), Variable.withString(shift.city)],
+      readsFrom: {db.favoriteRows, db.userRows},
+    ).get();
+
+    for (final r in rows) {
+      await _notify(
+        userId: r.read<int>('worker_id'),
+        kind: NotificationKind.invited,
+        title: '${shift.company} зовёт вас снова',
+        body: 'Вы в списке любимых исполнителей. Новая смена: '
+            '«${shift.title}» ${_dayText(shift.workDate)}, '
+            '${formatTime(shift.startMinutes)}–${formatTime(shift.endMinutes)}, '
+            '${formatMoney(shift.totalPay)}. Записывайтесь, пока есть места.',
+        shiftId: shift.id,
+      );
+    }
   }
 
   @override
@@ -1960,6 +2101,9 @@ class DbShiftRepository implements ShiftRepository {
         operation: Value(charge.operation),
         method: Value(charge.method),
       ));
+      // Смена опубликована — самое время позвать тех, с кем заказчику
+      // уже понравилось работать.
+      await _inviteFavorites(shift);
       return;
     }
 

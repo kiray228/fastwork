@@ -269,6 +269,22 @@ class ApiShiftRepository implements ShiftRepository {
   }
 
   @override
+  Future<BookingResult> setFavorite({
+    required int workerId,
+    required bool favorite,
+  }) async =>
+      _result(await client
+          .post('/api/favorites/$workerId', {'favorite': favorite}));
+
+  @override
+  Future<List<AppUser>> favoriteWorkers() async {
+    final data = await client.get('/api/favorites') as List<dynamic>;
+    return data
+        .map((e) => userFromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
   Future<List<PendingRating>> workersToRate(int managerId) async {
     final data = await client.get('/api/manager/to-rate') as List<dynamic>;
     return data

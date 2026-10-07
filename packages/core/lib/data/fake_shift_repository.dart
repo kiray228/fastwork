@@ -462,20 +462,47 @@ class FakeShiftRepository implements ShiftRepository {
 
     return [
       ShiftApplicant(
-        user: AppUser(
-          id: 1,
-          phone: '77001234567',
-          fullName: 'Ернар Калдыбеков',
-          city: 'Алматы',
-          rating: userRating,
-          isVerified: false,
-          noShows: status == ApplicationStatus.noShow ? 1 : 0,
-        ),
+        user: _me(noShows: status == ApplicationStatus.noShow ? 1 : 0),
         status: status!,
         checkedInAt: _checkIns[shiftId],
+        isFavorite: _favorites.contains(1),
       ),
     ];
   }
+
+  /// Единственный исполнитель в памяти — он же «текущий пользователь».
+  AppUser _me({int noShows = 0}) => AppUser(
+        id: 1,
+        phone: '77001234567',
+        fullName: 'Ернар Калдыбеков',
+        city: 'Алматы',
+        rating: userRating,
+        isVerified: false,
+        noShows: noShows,
+      );
+
+  /// Номера любимых исполнителей.
+  final Set<int> _favorites = {};
+
+  @override
+  Future<BookingResult> setFavorite({
+    required int workerId,
+    required bool favorite,
+  }) async {
+    if (!favorite) {
+      _favorites.remove(workerId);
+      return BookingResult.ok;
+    }
+    final worked =
+        _myStatuses.values.any((s) => s == ApplicationStatus.completed);
+    if (!worked) return BookingResult.notMine;
+    _favorites.add(workerId);
+    return BookingResult.ok;
+  }
+
+  @override
+  Future<List<AppUser>> favoriteWorkers() async =>
+      [if (_favorites.contains(1)) _me()];
 
   /// Оценки исполнителей, поставленные заказчиком.
   final List<WorkerReview> _workerReviews = [];
