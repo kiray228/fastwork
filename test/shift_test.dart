@@ -86,4 +86,34 @@ void main() {
     );
     expect(s.hasFreeSlots, isFalse);
   });
+
+  test('окончание согласуется с числом', () {
+    expect(shiftsLabel(1), '1 смена');
+    expect(shiftsLabel(2), '2 смены');
+    expect(shiftsLabel(5), '5 смен');
+    expect(shiftsLabel(11), '11 смен');
+    expect(shiftsLabel(21), '21 смена');
+    expect(shiftsLabel(112), '112 смен');
+    expect(daysLabel(3), '3 дня');
+  });
+
+  test('смены пересекаются по времени, края — нет', () {
+    Shift at(int day, int start, int end) => Shift(
+          id: day * 10000 + start,
+          workDate: DateTime(2026, 10, day),
+          title: 'Смена',
+          company: 'Magnum',
+          address: 'ул. Абая, 1',
+          startMinutes: start,
+          endMinutes: end,
+          hourlyRate: 100000,
+          workersNeeded: 1,
+          workersHired: 0,
+        );
+    final night = at(12, 1320, 360); // 22:00–06:00
+    expect(night.overlaps(at(13, 300, 600)), isTrue, reason: 'утро после ночи');
+    expect(night.overlaps(at(13, 360, 600)), isFalse, reason: 'стык');
+    expect(at(12, 600, 840).overlaps(at(12, 840, 1200)), isFalse);
+    expect(at(12, 600, 900).overlaps(at(12, 840, 1200)), isTrue);
+  });
 }

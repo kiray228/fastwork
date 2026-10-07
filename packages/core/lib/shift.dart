@@ -351,15 +351,25 @@ String formatDate(DateTime date) =>
     '${date.day.toString().padLeft(2, '0')}.'
     '${date.month.toString().padLeft(2, '0')}.${date.year}';
 
-/// 1 -> «1 день», 3 -> «3 дня», 11 -> «11 дней».
-String daysLabel(int days) {
-  final last = days % 10;
-  final lastTwo = days % 100;
-  if (lastTwo >= 11 && lastTwo <= 14) return '$days дней';
-  if (last == 1) return '$days день';
-  if (last >= 2 && last <= 4) return '$days дня';
-  return '$days дней';
+/// Русское окончание после числа: 1 смена, 2 смены, 5 смен, 11 смен.
+///
+/// Одно правило на всё приложение. Раньше оно было переписано в трёх
+/// местах — а в профиле его не было вовсе, и там стояло «2 смен».
+String plural(int n, String one, String few, String many) {
+  final last = n % 10;
+  final lastTwo = n % 100;
+  if (lastTwo >= 11 && lastTwo <= 14) return many;
+  if (last == 1) return one;
+  if (last >= 2 && last <= 4) return few;
+  return many;
 }
+
+/// 1 -> «1 день», 3 -> «3 дня», 11 -> «11 дней».
+String daysLabel(int days) => '$days ${plural(days, 'день', 'дня', 'дней')}';
+
+/// 1 -> «1 смена», 3 -> «3 смены», 11 -> «11 смен».
+String shiftsLabel(int count) =>
+    '$count ${plural(count, 'смена', 'смены', 'смен')}';
 
 /// Смена одним сообщением — чтобы переслать другу в мессенджер.
 ///

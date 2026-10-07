@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../category.dart';
+import '../demo.dart';
 import '../errors.dart';
 import '../mrp.dart';
 import '../notification.dart';
@@ -453,16 +454,24 @@ class DbShiftRepository implements ShiftRepository {
   @override
   Future<Set<DateTime>> daysWithShifts() async {
     final rows = await db.query(
-      'SELECT DISTINCT s.work_date FROM shift_rows s '
+      'SELECT DISTINCT s.work_date, s.start_minutes FROM shift_rows s '
       'WHERE s.city = ? AND s.cancelled_at IS NULL AND $_publishedSql',
       variables: [Variable.withString(session.city)],
       readsFrom: {db.shiftRows},
     ).get();
 
-    return rows.map((r) {
+    // Точка под днём — обещание «здесь есть на что записаться». Смена,
+    // которая уже началась, его не выполняет: в ленте её нет, и точка
+    // над пустым списком только сбивала бы с толку.
+    final now = clock();
+    final days = <DateTime>{};
+    for (final r in rows) {
       final d = r.read<DateTime>('work_date');
-      return DateTime(d.year, d.month, d.day);
-    }).toSet();
+      final day = DateTime(d.year, d.month, d.day);
+      final starts = day.add(Duration(minutes: r.read<int>('start_minutes')));
+      if (now.isBefore(starts)) days.add(day);
+    }
+    return days;
   }
 
   @override
@@ -2212,42 +2221,99 @@ class DbShiftRepository implements ShiftRepository {
     if (count > 0) return;
 
     for (final demo in buildDemoShifts()) {
-      final id = await db.into(db.shiftRows).insert(
-            ShiftRowsCompanion.insert(
-              workDate: demo.workDate,
-              title: demo.title,
-              category: Value(demo.category),
-              company: demo.company,
-              address: demo.address,
-              city: Value(demo.city),
-              startMinutes: demo.startMinutes,
-              endMinutes: demo.endMinutes,
-              breakMinutes: Value(demo.breakMinutes),
-              hourlyRate: demo.hourlyRate,
-              workersNeeded: demo.workersNeeded,
-              duties: Value(demo.duties.join('\n')),
-              dressCode: Value(demo.dressCode),
-              employerComment: Value(demo.employerComment),
-              payoutDelayDays: Value(demo.payoutDelayDays),
-              cancelDeadlineHours: Value(demo.cancelDeadlineHours),
-              minRating: Value(demo.minRating),
+      await _insertDemo(demo, hiredFrom: 100);
+    }
+  }
+
+  /// Держать демо-смены на неделю вперёд — в каждом городе.
+  ///
+  /// Заводит смены только на те дни и в тех городах, где демо-смен ещё
+  /// нет, поэтому вызывать можно сколько угодно: при каждом запуске,
+  /// раз в час, — дубликатов не появится. Демо-смена — смена без
+  /// заказчика (`created_by` пустой): настоящие смены этим не задеты.
+  ///
+  /// Возвращает, сколько смен заведено.
+  Future<int> keepDemoFresh() async {
+    final now = clock();
+    final today = DateTime(now.year, now.month, now.day);
+    final rows = await db.query(
+      'SELECT s.work_date, s.city, s.start_minutes FROM shift_rows s '
+      'WHERE s.created_by IS NULL AND s.work_date >= ?',
+      variables: [Variable.withDateTime(today)],
+      readsFrom: {db.shiftRows},
+    ).get();
+    // День «занят», если на нём есть демо-смена, которая ещё не началась.
+    // Утренние смены к обеду начались — и сегодня дозаводятся вечерние,
+    // чтобы лента на сегодня не пустела к середине дня.
+    final present = <String>{};
+    for (final r in rows) {
+      final d = r.read<DateTime>('work_date');
+      final starts = DateTime(d.year, d.month, d.day)
+          .add(Duration(minutes: r.read<int>('start_minutes')));
+      if (now.isBefore(starts)) {
+        present.add('${r.read<String>('city')}|${_dayKey(d)}');
+      }
+    }
+
+    var added = 0;
+    for (var d = 0; d < kDemoDays; d++) {
+      final day = DateTime(today.year, today.month, today.day + d);
+      for (final city in kCities) {
+        if (present.contains('$city|${_dayKey(day)}')) continue;
+        for (final demo in demoShiftsFor(city, day, now)) {
+          await _insertDemo(demo);
+          added++;
+        }
+      }
+    }
+    return added;
+  }
+
+  static String _dayKey(DateTime d) => '${d.year}-${d.month}-${d.day}';
+
+  /// Записать демо-смену: сама смена, её «оплата» сервисом и занятые
+  /// другими людьми места.
+  ///
+  /// Чужие места — отклики от несуществующих людей. Номера у них
+  /// отрицательные: настоящие пользователи нумеруются с единицы, и никто
+  /// из них не увидит демо-отклик как свой. (Старые демо-смены брали
+  /// номера с сотого — на живом сервере сотый человек однажды обнаружил
+  /// бы себя записанным на смену, на которую не записывался.)
+  Future<void> _insertDemo(Shift demo, {int? hiredFrom}) async {
+    final id = await db.into(db.shiftRows).insert(
+          ShiftRowsCompanion.insert(
+            workDate: demo.workDate,
+            title: demo.title,
+            category: Value(demo.category),
+            company: demo.company,
+            address: demo.address,
+            city: Value(demo.city),
+            startMinutes: demo.startMinutes,
+            endMinutes: demo.endMinutes,
+            breakMinutes: Value(demo.breakMinutes),
+            hourlyRate: demo.hourlyRate,
+            workersNeeded: demo.workersNeeded,
+            duties: Value(demo.duties.join('\n')),
+            dressCode: Value(demo.dressCode),
+            employerComment: Value(demo.employerComment),
+            payoutDelayDays: Value(demo.payoutDelayDays),
+            cancelDeadlineHours: Value(demo.cancelDeadlineHours),
+            minRating: Value(demo.minRating),
+          ),
+        );
+
+    await _fundDemo(id, demo);
+
+    // Часть мест уже занята другими работниками — заводим их отклики.
+    for (var i = 0; i < demo.workersHired; i++) {
+      await db.into(db.applicationRows).insert(
+            ApplicationRowsCompanion.insert(
+              shiftId: id,
+              workerId: hiredFrom == null ? -1 - i : hiredFrom + i,
+              status: ApplicationStatus.active,
+              createdAt: clock(),
             ),
           );
-
-      await _fundDemo(id, demo);
-
-      // Часть мест уже занята другими работниками — заводим их отклики.
-      // Номера с 100-го, чтобы не пересекаться с настоящими пользователями.
-      for (var i = 0; i < demo.workersHired; i++) {
-        await db.into(db.applicationRows).insert(
-              ApplicationRowsCompanion.insert(
-                shiftId: id,
-                workerId: 100 + i,
-                status: ApplicationStatus.active,
-                createdAt: clock(),
-              ),
-            );
-      }
     }
   }
 }

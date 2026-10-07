@@ -847,4 +847,59 @@ void main() {
     final theirIds = theirs.map((n) => n.id).toSet();
     expect(myIds.intersection(theirIds), isEmpty);
   });
+
+  // ---------------------------------------------------------------------
+  // ДЕМО-СМЕНЫ
+  // ---------------------------------------------------------------------
+
+  test('демо-смены есть на неделю вперёд в каждом городе', () async {
+    clock.setHour(13);
+    final added = await shifts.keepDemoFresh();
+    expect(added, greaterThan(0));
+
+    final tomorrow = daysAgo(-1);
+    for (final city in kCities) {
+      session.setUser(AppUser(
+        id: 1,
+        phone: '77000000000',
+        fullName: 'Гость',
+        city: city,
+        rating: 5,
+        isVerified: false,
+      ));
+      expect(await shifts.shiftsOn(tomorrow), isNotEmpty, reason: city);
+      expect(await shifts.shiftsOn(daysAgo(-6)), isNotEmpty, reason: city);
+    }
+
+    // Повторный вызов ничего не дублирует — можно звать хоть каждый час.
+    expect(await shifts.keepDemoFresh(), 0);
+  });
+
+  test('сегодняшние демо-смены — только те, что ещё впереди', () async {
+    clock.setHour(13);
+    await shifts.keepDemoFresh();
+    session.setUser(AppUser(
+      id: 1,
+      phone: '77000000000',
+      fullName: 'Гость',
+      city: 'Алматы',
+      rating: 5,
+      isVerified: false,
+    ));
+    for (final s in await shifts.shiftsOn(daysAgo(0))) {
+      expect(s.startsAt.isAfter(clock.now), isTrue, reason: s.title);
+      // Чужие места заняты «никем»: настоящий человек себя там не найдёт.
+      expect(s.isApplied, isFalse);
+    }
+  });
+
+  test('точка под днём — только если на что-то ещё можно записаться',
+      () async {
+    final (shiftId, _, _) = await upcomingShift(); // сегодня в 10:00
+    expect(shiftId, isPositive);
+    expect(await shifts.daysWithShifts(), contains(daysAgo(0)));
+
+    clock.setHour(11); // смена началась
+    expect(await shifts.daysWithShifts(), isNot(contains(daysAgo(0))));
+  });
 }

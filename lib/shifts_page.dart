@@ -559,13 +559,7 @@ class _ListHeader extends StatelessWidget {
   String get _countLabel {
     final c = count;
     if (c == null) return '';
-    // Русские окончания: 1 смена, 2 смены, 5 смен.
-    final last = c % 10;
-    final lastTwo = c % 100;
-    if (lastTwo >= 11 && lastTwo <= 14) return '$c смен';
-    if (last == 1) return '$c смена';
-    if (last >= 2 && last <= 4) return '$c смены';
-    return '$c смен';
+    return shiftsLabel(c);
   }
 
   @override

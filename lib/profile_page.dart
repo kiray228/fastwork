@@ -10,6 +10,7 @@ import 'stories/story_actions.dart';
 import 'support_ui/support_page.dart';
 import 'theme/app_colors.dart';
 import 'theme/glass.dart';
+import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
 import 'wallet_page.dart';
 import 'widgets/common.dart';
@@ -402,7 +403,8 @@ class _Stats extends StatelessWidget {
           child: _StatTile(
             icon: Icons.work_history_rounded,
             value: '${user.completedShifts}',
-            label: 'Смен',
+            // «2 смены», а не «2 смен»: подпись согласуется с числом.
+            label: plural(user.completedShifts, 'Смена', 'Смены', 'Смен'),
             color: AppColors.brand,
           ),
         ),

@@ -45,6 +45,12 @@ Future<void> main(List<String> args) async {
   // Первый запуск: кладём демонстрационные смены, иначе лента пустая.
   await DbShiftRepository(db, const StaticUser(null)).seedIfEmpty();
 
+  // И держим их на неделю вперёд во всех городах — иначе через неделю
+  // после первого запуска лента опустела бы навсегда. DEMO_SHIFTS=off
+  // выключает это, когда появятся настоящие заказчики.
+  final demo = Platform.environment['DEMO_SHIFTS'] != 'off';
+  if (demo) await _refreshDemo(db);
+
   final handler = const Pipeline()
       .addMiddleware(logRequests())
       .addMiddleware(_cors)
@@ -57,6 +63,10 @@ Future<void> main(List<String> args) async {
       ).router.call);
 
   _settleEveryMinute(db, payments);
+  if (demo) {
+    // Раз в час: в полночь появляется новый седьмой день недели.
+    Timer.periodic(const Duration(hours: 1), (_) => _refreshDemo(db));
+  }
 
   // InternetAddress.anyIPv4 — «слушать все сетевые интерфейсы».
   // На localhost хватило бы и loopback, но в облаке запрос приходит
@@ -124,4 +134,16 @@ void _settleEveryMinute(AppDatabase db, PaymentGateway payments) {
       busy = false;
     }
   });
+}
+
+/// Дозавести демо-смены на дни, где их нет. Сбой не роняет сервер: без
+/// демо-смен он по-прежнему работает, просто лента беднее.
+Future<void> _refreshDemo(AppDatabase db) async {
+  try {
+    final added =
+        await DbShiftRepository(db, const StaticUser(null)).keepDemoFresh();
+    if (added > 0) stdout.writeln('демо-смены: добавлено $added');
+  } catch (error) {
+    stderr.writeln('демо-смены не обновились: $error');
+  }
 }

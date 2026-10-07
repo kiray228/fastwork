@@ -73,7 +73,8 @@ class FakeShiftRepository implements ShiftRepository {
 
   @override
   Future<Set<DateTime>> daysWithShifts() async => _shifts
-      .where((s) => s.city == city && _published(s))
+      .where((s) =>
+          s.city == city && _published(s) && !s.hasStartedAt(clock()))
       .map((s) => DateTime(s.workDate.year, s.workDate.month, s.workDate.day))
       .toSet();
 
