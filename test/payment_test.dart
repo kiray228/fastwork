@@ -73,6 +73,37 @@ void main() {
     });
   });
 
+  test('заработок раскладывается по неделям с понедельника', () {
+    WalletEntry earning(DateTime at, int amount) => WalletEntry(
+          id: 0,
+          kind: WalletEntryKind.earning,
+          amount: amount,
+          title: 'Смена',
+          createdAt: at,
+        );
+    final now = DateTime(2026, 10, 7, 13); // среда
+    final weeks = weeklyEarnings([
+      earning(DateTime(2026, 10, 5, 22), 1000000), // понедельник этой недели
+      earning(DateTime(2026, 10, 7, 9), 500000),
+      earning(DateTime(2026, 10, 4, 23), 700000), // воскресенье прошлой
+      earning(DateTime(2026, 6, 1), 999), // давно — не в графике
+      WalletEntry(
+        id: 0,
+        kind: WalletEntryKind.withdrawal,
+        amount: -1500000,
+        title: 'Вывод',
+        createdAt: DateTime(2026, 10, 6),
+      ),
+    ], now);
+
+    expect(weeks, hasLength(8));
+    expect(weeks.last.start, DateTime(2026, 10, 5));
+    expect(weeks.last.amount, 1500000);
+    expect(weeks.last.shifts, 2);
+    expect(weeks[6].amount, 700000);
+    expect(weeks.first.start, DateTime(2026, 8, 17));
+  });
+
   group('гарантия оплаты', () {
     late AppDatabase db;
     late AppSession session;

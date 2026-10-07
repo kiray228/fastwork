@@ -1127,6 +1127,10 @@ class DbShiftRepository implements ShiftRepository {
         kind: WalletEntryKind.earning,
         amount: demo.totalPay,
         title: '«$title», ${_dayText(date)}',
+        // Начислено вечером в день смены, а не в день, когда заводили
+        // учебную историю: иначе в истории и на графике заработка обе
+        // прошлые смены оказывались «сегодняшними».
+        at: demo.endsAt,
       );
       await db.into(db.applicationRows).insert(
             ApplicationRowsCompanion.insert(
@@ -1957,6 +1961,7 @@ class DbShiftRepository implements ShiftRepository {
     required String kind,
     required int amount,
     required String title,
+    DateTime? at,
   }) async {
     // Учебные смены «оплатил» сам сервис — у него кошелька нет.
     if (userId == 0) return;
@@ -1966,7 +1971,7 @@ class DbShiftRepository implements ShiftRepository {
           kind: kind,
           amount: amount,
           title: title,
-          createdAt: clock(),
+          createdAt: at ?? clock(),
         ));
   }
 

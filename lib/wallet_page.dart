@@ -10,6 +10,7 @@ import 'stories/story_actions.dart';
 import 'theme/app_colors.dart';
 import 'widgets/async_state.dart';
 import 'widgets/common.dart';
+import 'widgets/earnings_chart.dart';
 import 'widgets/payment_sheet.dart';
 import 'widgets/skeleton.dart';
 
@@ -151,6 +152,14 @@ class _WalletPageState extends State<WalletPage> {
                 if (summary.sandbox) ...[
                   const SizedBox(height: 14),
                   const _SandboxNotice(),
+                ],
+                // График — когда есть что показать: восемь пустых недель
+                // у новичка только напоминали бы, что он ещё не работал.
+                if (!widget.isManager && summary.earnedTotal > 0) ...[
+                  const SizedBox(height: 14),
+                  EarningsChart(
+                    weeks: weeklyEarnings(summary.entries, DateTime.now()),
+                  ),
                 ],
                 if (limit != null) ...[
                   const SizedBox(height: 14),
