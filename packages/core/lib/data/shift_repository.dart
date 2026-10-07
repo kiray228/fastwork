@@ -32,6 +32,10 @@ enum BookingResult {
   earningsLimit, // с этой сменой доход за месяц превысит 300 МРП
   paymentRequired, // правка удорожает смену — нужна доплата
   awaitingPayment, // смена ещё не оплачена — сначала оплата
+  alreadyStarted, // смена уже началась: записаться, править и отменять поздно
+  notStarted, // отмечать выход рано — смена ещё не началась
+  timeConflict, // в это время человек уже записан на другую смену
+  alreadyFinished, // запись уже закрыта: выход подтверждён или отмечен невыход
   notFound,
 }
 
@@ -308,6 +312,22 @@ List<String> sortCategories(Iterable<String> ids) {
   ];
 }
 
+/// Что показывать в ленте: смены, на которые ещё можно записаться.
+///
+/// Началась — записаться уже нельзя, и кнопка «Записаться» на ней только
+/// обманывала бы. Свою смену оставляем: человек должен видеть, куда
+/// он сегодня идёт.
+List<Shift> bookable(Iterable<Shift> shifts, DateTime now) =>
+    shifts.where((s) => s.isMine || !s.hasStartedAt(now)).toList();
+
+/// Пересекается ли смена хоть с одной из тех, на которые человек уже
+/// записан.
+///
+/// Правило общее для всех хранилищ, поэтому живёт рядом с фильтром, а не
+/// внутри одной реализации: две копии однажды разошлись бы.
+bool hasTimeConflict(Shift shift, Iterable<Shift> booked) => booked.any(
+    (other) => other.id != shift.id && other.isApplied && shift.overlaps(other));
+
 // ---------------------------------------------------------------------------
 // РЕАЛИЗАЦИЯ НА SQLite
 // ---------------------------------------------------------------------------
@@ -320,8 +340,20 @@ class DbShiftRepository implements ShiftRepository {
   /// без сервера настоящему провайдеру взяться неоткуда.
   final PaymentGateway payments;
 
-  DbShiftRepository(this.db, this.session, {PaymentGateway? payments})
-      : payments = payments ?? SandboxPaymentGateway();
+  /// Который сейчас час. Обычно это просто `DateTime.now`, но правила
+  /// хранилища зависят от времени: записаться можно до начала смены,
+  /// отметить выход — только после. Тест, который полагается на настоящие
+  /// часы, проходит утром и падает вечером. Поэтому время приходит
+  /// снаружи — тот же приём, что у `canCancelAt(now)` в модели смены.
+  final DateTime Function() clock;
+
+  DbShiftRepository(
+    this.db,
+    this.session, {
+    PaymentGateway? payments,
+    DateTime Function()? clock,
+  })  : payments = payments ?? SandboxPaymentGateway(),
+        clock = clock ?? DateTime.now;
 
   int get _workerId => session.workerId;
 
@@ -415,7 +447,7 @@ class DbShiftRepository implements ShiftRepository {
       readsFrom: {db.shiftRows, db.applicationRows},
     ).get();
 
-    return applyFilter(rows.map(_toShift).toList(), filter);
+    return applyFilter(bookable(rows.map(_toShift), clock()), filter);
   }
 
   @override
@@ -491,10 +523,26 @@ class DbShiftRepository implements ShiftRepository {
       // открытым с прошлого раза — и кнопка на нём ещё живая.
       if (shift.isCancelled) return BookingResult.alreadyCancelled;
       if (shift.isApplied) return BookingResult.alreadyBooked;
+      // Запись на эту смену уже закрыта: выход подтверждён (и оплачен)
+      // или отмечен невыход. Раньше здесь запись молча возвращалась в
+      // `active` — и выход можно было подтвердить и оплатить второй раз,
+      // а невыход так же молча стереть из истории.
+      if (shift.myStatus != null &&
+          shift.myStatus != ApplicationStatus.cancelled) {
+        return BookingResult.alreadyFinished;
+      }
+      // Началась — записываться поздно. Лента показывает и сегодняшние
+      // смены, и открытый с утра экран мог дожить до вечера.
+      if (shift.hasStartedAt(clock())) {
+        return BookingResult.alreadyStarted;
+      }
       if (!shift.ratingAllows(session.rating)) {
         return BookingResult.ratingTooLow;
       }
       if (!shift.hasFreeSlots) return BookingResult.noSlots;
+      if (hasTimeConflict(shift, await _activeShifts())) {
+        return BookingResult.timeConflict;
+      }
 
       // Лимит дохода проверяем здесь же, внутри транзакции записи: иначе
       // две записи подряд обе увидели бы «лимит ещё не достигнут».
@@ -522,7 +570,7 @@ class DbShiftRepository implements ShiftRepository {
               shiftId: shiftId,
               workerId: _workerId,
               status: ApplicationStatus.active,
-              createdAt: DateTime.now(),
+              createdAt: clock(),
             ),
           );
       await _notifyApplied(shift);
@@ -549,15 +597,35 @@ class DbShiftRepository implements ShiftRepository {
     return '${date.day} ${months[date.month - 1]}';
   }
 
+  /// Смены, на которые я сейчас записан, — чтобы не записаться на две
+  /// в одно время.
+  Future<List<Shift>> _activeShifts() async {
+    final rows = await db.query(
+      '''
+      SELECT s.*, $_hiredSql, $_mineSql, $_fundedSql
+      FROM application_rows a
+      JOIN shift_rows s ON s.id = a.shift_id
+      WHERE a.worker_id = $_workerId AND a.status = 'active'
+        AND s.cancelled_at IS NULL
+      ''',
+      readsFrom: {db.shiftRows, db.applicationRows},
+    ).get();
+    return rows.map(_toShift).toList();
+  }
+
   @override
   Future<BookingResult> cancelApplication(int shiftId) async {
     final shift = await shiftById(shiftId);
     if (shift == null) return BookingResult.notFound;
+    // Снять можно только живую запись. Без этой проверки «отмена» стирала
+    // подтверждённый выход или невыход, а заказчику уходило уведомление
+    // «человек снял запись» — даже от того, кто и не записывался.
+    if (!shift.isApplied) return BookingResult.notMine;
 
     // Правило: отменить можно только до крайнего срока.
     // Проверка стоит здесь, а не на экране: экранов может стать несколько,
     // а правило должно быть одно.
-    if (!shift.canCancelAt(DateTime.now())) {
+    if (!shift.canCancelAt(clock())) {
       return BookingResult.tooLateToCancel;
     }
 
@@ -581,7 +649,7 @@ class DbShiftRepository implements ShiftRepository {
 
   @override
   Future<List<Shift>> myShifts({required bool archived}) async {
-    final now = DateTime.now();
+    final now = clock();
     final today = DateTime(now.year, now.month, now.day);
 
     // «Архив» — не отдельная таблица, а другое условие в том же запросе.
@@ -670,7 +738,7 @@ class DbShiftRepository implements ShiftRepository {
 
     // Правило «отметиться можно только в день смены» живёт в модели,
     // рядом с остальными правилами про время. Здесь его только спрашивают.
-    if (!shift.canCheckInAt(DateTime.now())) {
+    if (!shift.canCheckInAt(clock())) {
       return BookingResult.tooEarlyToCheckIn;
     }
 
@@ -678,7 +746,7 @@ class DbShiftRepository implements ShiftRepository {
           ..where((a) =>
               a.shiftId.equals(shiftId) & a.workerId.equals(_workerId)))
         .write(ApplicationRowsCompanion(
-      checkedInAt: Value(DateTime.now()),
+      checkedInAt: Value(clock()),
     ));
     return BookingResult.ok;
   }
@@ -700,14 +768,23 @@ class DbShiftRepository implements ShiftRepository {
     // Передумать можно только через поддержку: иначе одна кнопка
     // двигала бы деньги туда-обратно.
     if (status != ApplicationStatus.active) return BookingResult.alreadyBooked;
+    // До начала смены подтверждать нечего: человек ещё не работал.
+    if (!shift.hasStartedAt(clock())) return BookingResult.notStarted;
 
-    await db.transaction(() async {
-      await (db.update(db.applicationRows)
+    final changed = await db.transaction(() async {
+      // Условие `status = active` прямо в UPDATE, а не только проверкой
+      // выше. Двойное нажатие шлёт два запроса почти одновременно: оба
+      // успели бы увидеть `active`, и деньги ушли бы дважды. А так второй
+      // запрос не найдёт подходящей строки — и ничего не начислит.
+      final updated = await (db.update(db.applicationRows)
             ..where((a) =>
-                a.shiftId.equals(shiftId) & a.workerId.equals(workerId)))
+                a.shiftId.equals(shiftId) &
+                a.workerId.equals(workerId) &
+                a.status.equals(ApplicationStatus.active)))
           .write(const ApplicationRowsCompanion(
         status: Value(ApplicationStatus.completed),
       ));
+      if (updated == 0) return false;
 
       // Вот он, момент гарантии: деньги, которые сервис держал, уходят
       // исполнителю. У старых смен без оплаты начислять нечего.
@@ -720,7 +797,11 @@ class DbShiftRepository implements ShiftRepository {
           title: '«${shift.title}», ${_dayText(shift.workDate)}',
         );
       }
+      return true;
     });
+    // Опередил параллельный запрос — он и начислил, и уведомил.
+    if (!changed) return BookingResult.ok;
+    await _settleIfDone(shift);
 
     await _notify(
       userId: workerId,
@@ -760,13 +841,21 @@ class DbShiftRepository implements ShiftRepository {
     if (status == null) return BookingResult.notFound;
     if (status == ApplicationStatus.noShow) return BookingResult.ok;
     if (status != ApplicationStatus.active) return BookingResult.alreadyBooked;
+    // Не вышел — значит, смена началась без него. До начала это ещё
+    // не невыход, а деньги за место заказчик забрал бы раньше времени.
+    if (!shift.hasStartedAt(clock())) return BookingResult.notStarted;
 
-    await (db.update(db.applicationRows)
+    // Тот же приём, что при подтверждении: только одна из двух
+    // одновременных отметок вернёт деньги.
+    final updated = await (db.update(db.applicationRows)
           ..where((a) =>
-              a.shiftId.equals(shiftId) & a.workerId.equals(workerId)))
+              a.shiftId.equals(shiftId) &
+              a.workerId.equals(workerId) &
+              a.status.equals(ApplicationStatus.active)))
         .write(const ApplicationRowsCompanion(
       status: Value(ApplicationStatus.noShow),
     ));
+    if (updated == 0) return BookingResult.ok;
 
     // Человек не вышел — заказчик не должен за него платить. Возвращаем
     // деньги за одно место вместе с комиссией за него.
@@ -780,6 +869,7 @@ class DbShiftRepository implements ShiftRepository {
         'Возврат за невыход: «${shift.title}»',
       );
     }
+    await _settleIfDone(shift);
 
     // Человек обязан узнать: отметка влияет на его надёжность, и если
     // заказчик ошибся, у него должен быть повод написать в поддержку.
@@ -857,13 +947,21 @@ class DbShiftRepository implements ShiftRepository {
     required int rating,
     String? comment,
   }) async {
+    // Отзыв о месте работы — от того, кто там работал. Без этой проверки
+    // кто угодно мог бы написать отзыв к любой смене и подвинуть оценку
+    // компании в любую сторону.
+    if (await _statusOf(shiftId, _workerId) != ApplicationStatus.completed) {
+      throw const UserError(
+          'Отзыв можно оставить только о смене, которую вы отработали');
+    }
+
     await db.into(db.reviewRows).insert(
           ReviewRowsCompanion.insert(
             shiftId: shiftId,
             authorId: _workerId,
             rating: rating,
             comment: Value(comment),
-            createdAt: DateTime.now(),
+            createdAt: clock(),
           ),
           // «Вставь, а если такая строка уже есть — обнови её».
           //
@@ -875,7 +973,7 @@ class DbShiftRepository implements ShiftRepository {
             (_) => ReviewRowsCompanion(
               rating: Value(rating),
               comment: Value(comment),
-              createdAt: Value(DateTime.now()),
+              createdAt: Value(clock()),
             ),
             target: [db.reviewRows.shiftId, db.reviewRows.authorId],
           ),
@@ -896,7 +994,7 @@ class DbShiftRepository implements ShiftRepository {
     ).getSingle();
     if (existing.read<int>('c') > 0) return;
 
-    final now = DateTime.now();
+    final now = clock();
     DateTime day(int minus) =>
         DateTime(now.year, now.month, now.day - minus);
 
@@ -1024,7 +1122,7 @@ class DbShiftRepository implements ShiftRepository {
             cardBrand: '',
             operation: '',
             method: Value(method.id),
-            createdAt: DateTime.now(),
+            createdAt: clock(),
           ));
       return _insertCharge(
         shiftId: id,
@@ -1096,7 +1194,7 @@ class DbShiftRepository implements ShiftRepository {
   Future<void> settlePending({
     Duration within = const Duration(days: 3),
   }) async {
-    final since = DateTime.now().subtract(within);
+    final since = clock().subtract(within);
     final pending = await (db.select(db.chargeRows)
           ..where((c) =>
               c.status.equals(CheckoutStatus.pending) &
@@ -1161,6 +1259,21 @@ class DbShiftRepository implements ShiftRepository {
 
   @override
   Future<List<Shift>> shiftsCreatedBy(int managerId) async {
+    final shifts = await _createdBy(managerId);
+
+    // Смены, на которые никто не записался, закрыть некому: последней
+    // отметки не будет. Их остаток возвращаем, когда заказчик открывает
+    // свои смены, — то есть до того, как он успеет удивиться, где деньги.
+    final settled = shifts.where((s) =>
+        s.isFunded && s.workersHired == 0 && s.hasStartedAt(clock()));
+    if (settled.isEmpty) return shifts;
+    for (final shift in settled) {
+      await _settleIfDone(shift);
+    }
+    return _createdBy(managerId);
+  }
+
+  Future<List<Shift>> _createdBy(int managerId) async {
     final rows = await db.query(
       '''
       SELECT s.*, $_hiredSql, $_mineSql, $_fundedSql
@@ -1177,6 +1290,12 @@ class DbShiftRepository implements ShiftRepository {
 
   @override
   Future<List<ShiftApplicant>> applicantsFor(int shiftId) async {
+    // Список записавшихся — это телефоны и имена живых людей. Видит его
+    // только тот, кто смену создал: раньше любой вошедший мог перебрать
+    // номера смен и выгрузить чужие контакты.
+    final shift = await _loadShift(shiftId);
+    if (shift == null || shift.createdBy != _workerId) return const [];
+
     // JOIN соединяет отклики с пользователями: в откликах лежит только
     // номер работника, а имя и рейтинг — в таблице пользователей.
     // Из отклика заодно берём состояние и время отметки.
@@ -1227,7 +1346,7 @@ class DbShiftRepository implements ShiftRepository {
 
   @override
   Future<List<PendingRating>> workersToRate(int managerId) async {
-    final now = DateTime.now();
+    final now = clock();
     final today = DateTime(now.year, now.month, now.day);
 
     // Запрос из трёх таблиц сразу:
@@ -1293,6 +1412,18 @@ class DbShiftRepository implements ShiftRepository {
     required int rating,
     String? comment,
   }) async {
+    // Оценка двигает рейтинг, а рейтинг — допуск к сменам. Поэтому
+    // ставить её может только заказчик этой смены и только тому, чей
+    // выход он подтвердил. Иначе любой заказчик мог бы «утопить»
+    // человека оценками за смены, где тот у него и не работал.
+    final shift = await _loadShift(shiftId);
+    if (shift == null || shift.createdBy != _workerId) {
+      throw const UserError('Оценить можно только исполнителя своей смены');
+    }
+    if (await _statusOf(shiftId, workerId) != ApplicationStatus.completed) {
+      throw const UserError('Оценить можно только того, чей выход подтверждён');
+    }
+
     await db.into(db.workerReviewRows).insert(
           WorkerReviewRowsCompanion.insert(
             shiftId: shiftId,
@@ -1300,7 +1431,7 @@ class DbShiftRepository implements ShiftRepository {
             authorId: _workerId,
             rating: rating,
             comment: Value(comment),
-            createdAt: DateTime.now(),
+            createdAt: clock(),
           ),
           // Передумал — оценка меняется, но не добавляется второй.
           // Цель конфликта — тот самый тройной уникальный ключ.
@@ -1308,7 +1439,7 @@ class DbShiftRepository implements ShiftRepository {
             (_) => WorkerReviewRowsCompanion(
               rating: Value(rating),
               comment: Value(comment),
-              createdAt: Value(DateTime.now()),
+              createdAt: Value(clock()),
             ),
             target: [
               db.workerReviewRows.shiftId,
@@ -1318,15 +1449,12 @@ class DbShiftRepository implements ShiftRepository {
           ),
         );
 
-    final shift = await shiftById(shiftId);
     await _notify(
       userId: workerId,
       kind: NotificationKind.rated,
       title: 'Новая оценка: $rating из 5',
-      body: shift == null
-          ? 'Заказчик оценил вашу работу.'
-          : 'Заказчик оценил работу на «${shift.title}» '
-              '${_dayText(shift.workDate)}.',
+      body: 'Заказчик оценил работу на «${shift.title}» '
+          '${_dayText(shift.workDate)}.',
       shiftId: shiftId,
     );
   }
@@ -1375,7 +1503,10 @@ class DbShiftRepository implements ShiftRepository {
       if (shift.createdBy != _workerId) return BookingResult.notMine;
       if (shift.isCancelled) return BookingResult.alreadyCancelled;
 
-      final now = DateTime.now();
+      final now = clock();
+      // Люди уже на месте и работают. Отмена сейчас сняла бы их записи
+      // и вернула заказчику всё — то есть работу никто бы не оплатил.
+      if (shift.hasStartedAt(now)) return BookingResult.alreadyStarted;
 
       await (db.update(db.shiftRows)..where((s) => s.id.equals(shiftId)))
           .write(ShiftRowsCompanion(cancelledAt: Value(now)));
@@ -1414,7 +1545,6 @@ class DbShiftRepository implements ShiftRepository {
   }
 
   @override
-  @override
   Future<ShiftEditResult> updateShift({
     required int shiftId,
     required DateTime workDate,
@@ -1437,6 +1567,11 @@ class DbShiftRepository implements ShiftRepository {
     }
     if (before.isCancelled) {
       return const ShiftEditResult(BookingResult.alreadyCancelled);
+    }
+    // Началась — условия заморожены. Иначе заказчик мог бы урезать ставку
+    // посреди смены, когда отказаться исполнителю уже нельзя.
+    if (before.hasStartedAt(clock())) {
+      return const ShiftEditResult(BookingResult.alreadyStarted);
     }
     // Неоплаченную смену не правят: за неё уже могут платить по старой
     // цене. Проще отменить и создать заново.
@@ -1609,7 +1744,7 @@ class DbShiftRepository implements ShiftRepository {
           kind: kind,
           amount: amount,
           title: title,
-          createdAt: DateTime.now(),
+          createdAt: clock(),
         ));
   }
 
@@ -1672,7 +1807,7 @@ class DbShiftRepository implements ShiftRepository {
             provider: payments.provider(method).name,
             phone: Value(phone),
             payload: Value(payload),
-            createdAt: DateTime.now(),
+            createdAt: clock(),
           ));
 
   Future<ChargeRow> _charge(int id) =>
@@ -1778,7 +1913,7 @@ class DbShiftRepository implements ShiftRepository {
               c.status.equals(CheckoutStatus.pending)))
         .write(ChargeRowsCompanion(
       status: const Value(CheckoutStatus.paid),
-      paidAt: Value(DateTime.now()),
+      paidAt: Value(clock()),
       message: Value(paidWith),
     ));
     if (won == 0) return;
@@ -1893,13 +2028,37 @@ class DbShiftRepository implements ShiftRepository {
     );
   }
 
+  /// Смена закрыта — вернуть заказчику то, что не ушло людям.
+  ///
+  /// Закрыта — значит, началась (записаться уже никто не может) и
+  /// отмечать больше некого: у каждого записавшегося стоит «вышел» или
+  /// «не вышел». Раньше остаток возвращался только при отмене смены, а
+  /// смена, прошедшая как обычно, оставляла у сервиса деньги за места,
+  /// на которые никто не записался, — навсегда.
+  ///
+  /// Возврат по операциям, поэтому повторный вызов ничего не вернёт
+  /// второй раз: после первого оплата смены помечена возвращённой.
+  Future<void> _settleIfDone(Shift shift) async {
+    if (!shift.hasStartedAt(clock()) || shift.isCancelled) return;
+    final open = await (db.select(db.applicationRows)
+          ..where((a) =>
+              a.shiftId.equals(shift.id) &
+              a.status.equals(ApplicationStatus.active)))
+        .get();
+    if (open.isNotEmpty) return;
+    await _refundRest(
+      shift,
+      title: 'Возврат остатка: смена «${shift.title}» прошла',
+    );
+  }
+
   /// Вернуть заказчику всё, что сервис ещё держит по смене.
   ///
   /// Остаток не хранится — он считается по операциям: внесено, минус уже
   /// возвращено, минус начислено исполнителям вместе с комиссией за их
   /// места. Храни мы его отдельной колонкой, её пришлось бы править при
   /// каждом движении — и однажды забыли бы.
-  Future<void> _refundRest(Shift shift) async {
+  Future<void> _refundRest(Shift shift, {String? title}) async {
     final payment = await _heldPayment(shift.id);
     if (payment == null) return;
 
@@ -1926,7 +2085,7 @@ class DbShiftRepository implements ShiftRepository {
         shift.id,
         payment.payerId,
         rest,
-        'Возврат: смена «${shift.title}» отменена',
+        title ?? 'Возврат: смена «${shift.title}» отменена',
       );
     }
     await (db.update(db.paymentRows)..where((p) => p.id.equals(payment.id)))
@@ -1949,8 +2108,8 @@ class DbShiftRepository implements ShiftRepository {
           status: CheckoutStatus.paid,
           provider: 'demo',
           operation: const Value('demo'),
-          createdAt: DateTime.now(),
-          paidAt: Value(DateTime.now()),
+          createdAt: clock(),
+          paidAt: Value(clock()),
         ));
     await db.into(db.paymentRows).insert(PaymentRowsCompanion.insert(
           shiftId: shiftId,
@@ -1961,7 +2120,7 @@ class DbShiftRepository implements ShiftRepository {
           cardLast4: '0000',
           cardBrand: 'Демо',
           operation: 'demo',
-          createdAt: DateTime.now(),
+          createdAt: clock(),
         ));
   }
 
@@ -1998,7 +2157,7 @@ class DbShiftRepository implements ShiftRepository {
             title: title,
             body: body,
             shiftId: Value(shiftId),
-            createdAt: DateTime.now(),
+            createdAt: clock(),
           ),
         );
   }
@@ -2045,7 +2204,7 @@ class DbShiftRepository implements ShiftRepository {
   Future<void> markNotificationsRead() async {
     await (db.update(db.notificationRows)
           ..where((n) => n.userId.equals(_workerId) & n.readAt.isNull()))
-        .write(NotificationRowsCompanion(readAt: Value(DateTime.now())));
+        .write(NotificationRowsCompanion(readAt: Value(clock())));
   }
 
   Future<void> seedIfEmpty() async {
@@ -2085,7 +2244,7 @@ class DbShiftRepository implements ShiftRepository {
                 shiftId: id,
                 workerId: 100 + i,
                 status: ApplicationStatus.active,
-                createdAt: DateTime.now(),
+                createdAt: clock(),
               ),
             );
       }

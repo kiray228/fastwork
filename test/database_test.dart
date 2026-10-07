@@ -11,6 +11,7 @@ import 'package:fastwork_core/user.dart';
 import 'package:fastwork_core/payment.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/clock.dart';
 import 'support/publish.dart';
 
 /// Тестовая карта: проходит всегда.
@@ -30,11 +31,15 @@ void main() {
   late AppSession session;
   late DbShiftRepository shifts;
   late DbAuthRepository auth;
+  late TestClock clock;
 
   setUp(() {
     db = AppDatabase(NativeDatabase.memory());
     session = AppSession();
-    shifts = DbShiftRepository(db, session);
+    // Шесть утра: сегодняшние смены (10:00) ещё впереди. Тест, которому
+    // нужно «после смены», переводит часы сам.
+    clock = TestClock.today();
+    shifts = DbShiftRepository(db, session, clock: clock.call);
     auth = DbAuthRepository(db);
   });
 
@@ -81,8 +86,12 @@ void main() {
     );
 
     // Записывается исполнитель — значит, в сессии должен быть он.
+    // Записывался он, конечно, до смены — за день до неё.
     session.setUser(worker);
+    clock.now = daysAgo(daysBack + 1);
     expect(await shifts.apply(shiftId), BookingResult.ok);
+    clock.now = DateTime(clock.now.year, clock.now.month,
+        clock.now.day + daysBack + 1, 6);
 
     // Смена уже прошла, и заказчик подтвердил выход. Без подтверждения
     // она не считается отработанной — ни для оценки, ни для заработка.
@@ -214,7 +223,10 @@ void main() {
     );
 
     session.setUser(await auth.refresh(workerId));
+    final today = clock.now;
+    clock.now = daysAgo(2);
     expect(await shifts.apply(secondShift), BookingResult.ok);
+    clock.now = today;
 
     session.setUser(await auth.refresh(managerId));
     await shifts.confirmAttendance(shiftId: secondShift, workerId: workerId);
@@ -363,6 +375,7 @@ void main() {
 
     session.setUser(worker);
     await shifts.apply(shiftId);
+    clock.reset(); // смена началась — пора отмечаться
     expect(await shifts.checkIn(shiftId), BookingResult.ok);
 
     final shift = (await shifts.shiftById(shiftId))!;
@@ -371,7 +384,11 @@ void main() {
     // Дважды отметиться нельзя.
     expect(await shifts.checkIn(shiftId), BookingResult.alreadyBooked);
 
+    // Список записавшихся — с телефонами — исполнителю не показывают.
+    expect(await shifts.applicantsFor(shiftId), isEmpty);
+
     // Заказчик видит отметку в списке записавшихся.
+    session.setUser(manager);
     final people = await shifts.applicantsFor(shiftId);
     expect(people.first.isCheckedIn, isTrue);
     expect(people.first.isConfirmed, isFalse);
@@ -494,6 +511,12 @@ void main() {
     final (shiftId, worker, manager) = await upcomingShift();
 
     session.setUser(manager);
+    // До начала смены невыход не отметить — человек ещё не опоздал.
+    expect(
+      await shifts.markNoShow(shiftId: shiftId, workerId: worker.id),
+      BookingResult.notStarted,
+    );
+    clock.setHour(23);
     expect(
       await shifts.markNoShow(shiftId: shiftId, workerId: worker.id),
       BookingResult.ok,
@@ -512,15 +535,17 @@ void main() {
 
     // Одна смена отработана, вторая — нет.
     session.setUser(manager);
+    clock.setHour(21);
     await shifts.confirmAttendance(shiftId: firstShift, workerId: worker.id);
 
+    // Вечером, после первой: две смены в одно время не взять.
     final secondShift = await shifts.publishShift(
       workDate: daysAgo(0),
       title: 'Ещё смена',
       company: 'Magnum',
       address: 'г. Алматы, ул. Абая, 2',
-      startMinutes: 600,
-      endMinutes: 1200,
+      startMinutes: 1320,
+      endMinutes: 1410,
       hourlyRate: 100000,
       workersNeeded: 1,
       createdBy: manager.id,
@@ -528,8 +553,9 @@ void main() {
       card: testCard,
     );
     session.setUser(worker);
-    await shifts.apply(secondShift);
+    expect(await shifts.apply(secondShift), BookingResult.ok);
     session.setUser(manager);
+    clock.setHour(23);
     await shifts.markNoShow(shiftId: secondShift, workerId: worker.id);
 
     final after = (await auth.refresh(worker.id))!;
@@ -544,6 +570,7 @@ void main() {
   test('о невыходе сообщают самому человеку', () async {
     final (shiftId, worker, manager) = await upcomingShift();
     session.setUser(manager);
+    clock.setHour(23);
     await shifts.markNoShow(shiftId: shiftId, workerId: worker.id);
 
     session.setUser(worker);
@@ -599,6 +626,7 @@ void main() {
   test('заказчик видит надёжность записавшегося', () async {
     final (shiftId, worker, manager) = await upcomingShift();
     session.setUser(manager);
+    clock.setHour(23);
     await shifts.markNoShow(shiftId: shiftId, workerId: worker.id);
 
     final people = await shifts.applicantsFor(shiftId);

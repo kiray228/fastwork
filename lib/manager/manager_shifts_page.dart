@@ -100,6 +100,8 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
           BookingResult.ok => 'Смена отменена',
           BookingResult.notMine => 'Это не ваша смена',
           BookingResult.alreadyCancelled => 'Смена уже отменена',
+          BookingResult.alreadyStarted =>
+            'Смена уже началась — отменить её нельзя',
           _ => 'Смену не удалось отменить',
         }),
         behavior: SnackBarBehavior.floating,
@@ -264,9 +266,12 @@ class _ManagerShiftCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isPast = shift.workDate.isBefore(
-      DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day),
-    );
+    final now = DateTime.now();
+    final isPast = shift.isPastOn(now);
+    // Началась — условия заморожены: ни правки, ни отмены. То же правило
+    // проверяет и хранилище; здесь оно только прячет кнопки, которые всё
+    // равно ответили бы отказом.
+    final started = shift.hasStartedAt(now);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -392,9 +397,9 @@ class _ManagerShiftCard extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                // Отменить можно только смену, которая ещё впереди:
-                // прошедшую отменять поздно, отменённую — незачем.
-                if (!isPast && !shift.isCancelled) ...[
+                // Отменить можно только смену, которая ещё не началась:
+                // начавшуюся отменять поздно, отменённую — незачем.
+                if (!started && !shift.isCancelled) ...[
                   // Неоплаченную не правим: за неё могут платить по
                   // старой цене прямо сейчас.
                   if (!shift.awaitingPayment)
@@ -505,9 +510,12 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(result == BookingResult.ok
-            ? 'Отмечено: ${applicant.user.fullName} не вышел'
-            : 'Не получилось отметить'),
+        content: Text(switch (result) {
+          BookingResult.ok => 'Отмечено: ${applicant.user.fullName} не вышел',
+          BookingResult.notStarted =>
+            'Смена ещё не началась — отмечать невыход рано',
+          _ => 'Не получилось отметить',
+        }),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -526,9 +534,13 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(result == BookingResult.ok
-            ? 'Смена засчитана: ${applicant.user.fullName}'
-            : 'Это не ваша смена'),
+        content: Text(switch (result) {
+          BookingResult.ok => 'Смена засчитана: ${applicant.user.fullName}',
+          BookingResult.notStarted =>
+            'Смена ещё не началась — засчитать её можно после начала',
+          BookingResult.notMine => 'Это не ваша смена',
+          _ => 'Не получилось засчитать',
+        }),
         behavior: SnackBarBehavior.floating,
       ),
     );

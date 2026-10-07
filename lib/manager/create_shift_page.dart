@@ -362,6 +362,8 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
         BookingResult.alreadyCancelled => 'Смена отменена',
         BookingResult.awaitingPayment =>
           'Смена ещё не оплачена — сначала оплатите её',
+        BookingResult.alreadyStarted =>
+          'Смена уже началась — менять условия поздно',
         _ => 'Не получилось сохранить',
       };
 

@@ -11,6 +11,7 @@ import 'package:fastwork_core/payment.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/publish.dart';
+import 'support/clock.dart';
 
 /// Тестовая карта: проходит всегда.
 final testCard = tokenizeSandboxCard(kSandboxCardNumber);
@@ -78,7 +79,7 @@ void main() {
     setUp(() {
       db = AppDatabase(NativeDatabase.memory());
       session = AppSession();
-      shifts = DbShiftRepository(db, session);
+      shifts = DbShiftRepository(db, session, clock: TestClock.today().call);
       auth = DbAuthRepository(db);
     });
 
@@ -127,14 +128,20 @@ void main() {
 
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
-      Future<int> create(String title) => shifts.publishShift(
+      Future<int> create(
+        String title, {
+        int start = 600,
+        int end = 1320,
+        int rate = 110000, // 12 100 ₸ за смену
+      }) =>
+          shifts.publishShift(
             workDate: today,
             title: title,
             company: 'Magnum',
             address: 'ул. Абая, 1',
-            startMinutes: 600,
-            endMinutes: 1320,
-            hourlyRate: 110000, // 12 100 ₸ за смену
+            startMinutes: start,
+            endMinutes: end,
+            hourlyRate: rate,
             workersNeeded: 3,
             createdBy: manager.id,
             city: 'Алматы',
@@ -142,7 +149,10 @@ void main() {
           );
       session.setUser(manager);
       final first = await create('Первая');
-      final second = await create('Вторая');
+      // Вечером, после первой, — иначе запись отклонили бы за пересечение
+      // по времени, а не за лимит. 22:00–23:50 по 3000 ₸ — это 5 500 ₸.
+      final second =
+          await create('Вторая', start: 1320, end: 1430, rate: 300000);
 
       session.setUser(worker);
       expect(await shifts.apply(first), BookingResult.ok);

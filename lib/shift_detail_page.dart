@@ -74,6 +74,12 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
         BookingResult.alreadyBooked => 'Вы уже записаны на эту смену',
         BookingResult.ratingTooLow =>
           'Ваш рейтинг ниже требуемого для этой смены',
+        BookingResult.alreadyStarted =>
+          'Смена уже началась — записаться на неё нельзя',
+        BookingResult.timeConflict =>
+          'В это время у вас уже есть смена — две сразу не успеть',
+        BookingResult.alreadyFinished =>
+          'Эта смена для вас уже закрыта — выход отмечен заказчиком',
         BookingResult.earningsLimit =>
           'С этой сменой доход за месяц превысит 300 МРП — '
               'это предел для платформенной занятости',

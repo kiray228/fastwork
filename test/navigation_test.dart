@@ -20,6 +20,7 @@ import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_core/user.dart';
 import 'package:fastwork/widgets/skeleton.dart';
+import 'support/clock.dart';
 
 /// Проверяем экраны целиком — как будто пользователь тыкает пальцем,
 /// только очень быстро.
@@ -27,6 +28,23 @@ import 'package:fastwork/widgets/skeleton.dart';
 /// Вместо настоящей базы подставляем данные в памяти. Экраны разницы не
 /// замечают: они работают с интерфейсами хранилищ, а не с SQLite.
 void main() {
+  // Часы хранилища — шесть утра сегодня: демо-смены на 10:00 ещё впереди,
+  // и записаться на них можно, когда бы тесты ни запускали.
+  DateTime Function() morning() => TestClock.today().call;
+
+  /// Хранилище, где смена №6 (три дня назад) уже отработана: человек
+  /// записался накануне, а заказчик подтвердил выход. Записаться на
+  /// прошедшую смену сегодня нельзя — поэтому часы сначала отводим назад.
+  Future<FakeShiftRepository> workedRepo({bool confirmed = true}) async {
+    final clock = TestClock.today();
+    final repo = FakeShiftRepository(userRating: 5.0, clock: clock.call);
+    clock.now = clock.now.subtract(const Duration(days: 4));
+    await repo.apply(6);
+    clock.now = clock.now.add(const Duration(days: 4));
+    if (confirmed) await repo.confirmAttendance(shiftId: 6, workerId: 1);
+    return repo;
+  }
+
   AppUser testUser({double rating = 4.0, String role = UserRole.worker}) =>
       AppUser(
         id: 1,
@@ -44,7 +62,7 @@ void main() {
     FakeShiftRepository? shifts,
     AppUser? signedIn,
   }) {
-    final store = shifts ?? FakeShiftRepository();
+    final store = shifts ?? FakeShiftRepository(clock: morning());
     return AppRepositories(
       shifts: store,
       auth: FakeAuthRepository(signedIn: signedIn),
@@ -79,7 +97,7 @@ void main() {
       session: session,
       repos: repos ??
           buildRepos(
-            shifts: shifts ?? FakeShiftRepository(userRating: rating),
+            shifts: shifts ?? FakeShiftRepository(clock: morning(), userRating: rating),
             signedIn: user,
           ),
     ));
@@ -451,23 +469,30 @@ void main() {
       // Обе смены сегодня: так они наверняка в одном месяце, в какой бы
       // день ни запустили тест. Каждая — 12 100 ₸.
       final now = DateTime.now();
-      Shift today(int id, String title) => Shift(
+      Shift today(int id, String title,
+              {int start = 600, int end = 1320, int rate = 110000}) =>
+          Shift(
             id: id,
             workDate: DateTime(now.year, now.month, now.day),
             title: title,
             company: 'Magnum',
             address: 'ул. Абая, 1',
-            startMinutes: 600,
-            endMinutes: 1320,
-            hourlyRate: 110000,
+            startMinutes: start,
+            endMinutes: end,
+            hourlyRate: rate,
             workersNeeded: 5,
             workersHired: 0,
           );
 
       // МРП в 50 ₸ — лимит 15 000 ₸: одна смена помещается, вторая нет.
-      final repo = FakeShiftRepository(
+      final repo = FakeShiftRepository(clock: morning(), 
         userRating: 5.0,
-        shifts: [today(1, 'Первая смена'), today(2, 'Вторая смена')],
+        // Вторая — вечером, после первой: иначе отказ был бы за
+        // пересечение по времени, а не за лимит. 5 500 ₸.
+        shifts: [
+          today(1, 'Первая смена'),
+          today(2, 'Вторая смена', start: 1320, end: 1430, rate: 300000),
+        ],
       )..mrpRates = [MrpRate(validFrom: DateTime(2020), amount: 5000)];
       expect(await repo.apply(1), BookingResult.ok);
 
@@ -518,11 +543,9 @@ void main() {
   group('кошелёк и отзывы', () {
     testWidgets('кошелёк показывает заработок и предупреждение',
         (tester) async {
-      final repo = FakeShiftRepository(userRating: 5.0);
       // Смена три дня назад: записался, и заказчик подтвердил выход.
       // Без подтверждения деньги не начисляются.
-      await repo.apply(6);
-      await repo.confirmAttendance(shiftId: 6, workerId: 1);
+      final repo = await workedRepo();
       await openApp(tester, rating: 5.0, shifts: repo);
 
       await tester.tap(find.text('Профиль'));
@@ -537,8 +560,7 @@ void main() {
     });
 
     testWidgets('без подтверждения смены выводить нечего', (tester) async {
-      final repo = FakeShiftRepository(userRating: 5.0);
-      await repo.apply(6);
+      final repo = await workedRepo(confirmed: false);
       await openApp(tester, rating: 5.0, shifts: repo);
 
       await tester.tap(find.text('Профиль'));
@@ -553,9 +575,7 @@ void main() {
     });
 
     testWidgets('заработанное выводится на карту', (tester) async {
-      final repo = FakeShiftRepository(userRating: 5.0);
-      await repo.apply(6);
-      await repo.confirmAttendance(shiftId: 6, workerId: 1);
+      final repo = await workedRepo();
       await openApp(tester, rating: 5.0, shifts: repo);
 
       await tester.tap(find.text('Профиль'));
@@ -579,9 +599,7 @@ void main() {
     });
 
     testWidgets('отказ банка оставляет окно открытым', (tester) async {
-      final repo = FakeShiftRepository(userRating: 5.0);
-      await repo.apply(6);
-      await repo.confirmAttendance(shiftId: 6, workerId: 1);
+      final repo = await workedRepo();
       await openApp(tester, rating: 5.0, shifts: repo);
 
       await tester.tap(find.text('Профиль'));
@@ -609,9 +627,7 @@ void main() {
     });
 
     testWidgets('отзыв о прошедшей смене сохраняется', (tester) async {
-      final repo = FakeShiftRepository(userRating: 5.0);
-      await repo.apply(6);
-      await repo.confirmAttendance(shiftId: 6, workerId: 1);
+      final repo = await workedRepo();
       await openApp(tester, rating: 5.0, shifts: repo);
 
       await tester.tap(find.text('Мои'));
@@ -639,9 +655,7 @@ void main() {
     });
 
     testWidgets('без звёзд отзыв отправить нельзя', (tester) async {
-      final repo = FakeShiftRepository(userRating: 5.0);
-      await repo.apply(6);
-      await repo.confirmAttendance(shiftId: 6, workerId: 1);
+      final repo = await workedRepo();
       await openApp(tester, rating: 5.0, shifts: repo);
 
       await tester.tap(find.text('Мои'));
@@ -685,7 +699,7 @@ void main() {
 
     /// Заполнить форму смены и дойти до окна оплаты.
     Future<FakeShiftRepository> fillShiftForm(WidgetTester tester) async {
-      final shifts = FakeShiftRepository();
+      final shifts = FakeShiftRepository(clock: morning());
       await openApp(
         tester,
         role: UserRole.manager,
@@ -761,7 +775,7 @@ void main() {
     });
 
     testWidgets('заказчик создаёт смену и видит её у себя', (tester) async {
-      final shifts = FakeShiftRepository();
+      final shifts = FakeShiftRepository(clock: morning());
       await openApp(
         tester,
         role: UserRole.manager,
@@ -921,7 +935,7 @@ void main() {
   /// записался и выход подтверждён. Только такую и можно оценить.
   Future<FakeShiftRepository> managerRepo() async {
     final now = DateTime.now();
-    final repo = FakeShiftRepository(
+    final repo = FakeShiftRepository(clock: morning(), 
       shifts: [
         Shift(
           id: 1,
@@ -938,7 +952,7 @@ void main() {
         ),
       ],
     );
-    await repo.apply(1);
+    await applyBeforeStart(repo, 1);
     await repo.confirmAttendance(shiftId: 1, workerId: 1);
     return repo;
   }
@@ -970,7 +984,7 @@ void main() {
     testWidgets('в день смены появляется отметка «Я на месте»',
         (tester) async {
       final repo = shiftRunningNow();
-      await repo.apply(1);
+      await applyBeforeStart(repo, 1);
       await openApp(tester, rating: 5.0, shifts: repo);
 
       await tester.tap(find.text('Подробнее').first);
@@ -986,7 +1000,7 @@ void main() {
 
     testWidgets('до дня смены отметки нет', (tester) async {
       // Смена №5 — через три дня, отметиться нельзя.
-      final repo = FakeShiftRepository(userRating: 5.0);
+      final repo = FakeShiftRepository(clock: morning(), userRating: 5.0);
       await repo.apply(5);
       await openApp(tester, rating: 5.0, shifts: repo);
 
@@ -1017,7 +1031,7 @@ void main() {
           ),
         ],
       );
-      await repo.apply(1);
+      await applyBeforeStart(repo, 1);
       await repo.checkIn(1);
 
       await openApp(
@@ -1061,7 +1075,7 @@ void main() {
           ),
         ],
       );
-      await repo.apply(1);
+      await applyBeforeStart(repo, 1);
 
       await openApp(
         tester,
@@ -1118,7 +1132,7 @@ void main() {
           ),
         ],
       );
-      await repo.apply(1);
+      await applyBeforeStart(repo, 1);
 
       await openApp(
         tester,
@@ -1141,7 +1155,7 @@ void main() {
     testWidgets('лента показывает только смены своего города',
         (tester) async {
       final now = DateTime.now();
-      final repo = FakeShiftRepository(
+      final repo = FakeShiftRepository(clock: morning(), 
         city: 'Астана',
         shifts: [
           Shift(
@@ -1197,7 +1211,7 @@ void main() {
             workersHired: 0,
           );
 
-      return FakeShiftRepository(shifts: [
+      return FakeShiftRepository(clock: morning(), shifts: [
         make(1, 'Услуги грузчика', 'Magnum', 'г. Алматы, ул. Абая, 1'),
         make(2, 'Услуги повара', 'Small', 'г. Алматы, ул. Сатпаева, 9'),
       ]);
@@ -1258,11 +1272,13 @@ void main() {
   });
 
   group('смены заказчика: правка и отмена', () {
-    Shift todayShift({int hired = 0}) {
+    // Завтрашняя: сегодняшнюю в 10:00 после десяти утра уже не правят
+    // и не отменяют — она началась.
+    Shift tomorrowShift({int hired = 0}) {
       final now = DateTime.now();
       return Shift(
         id: 1,
-        workDate: DateTime(now.year, now.month, now.day),
+        workDate: DateTime(now.year, now.month, now.day + 1),
         title: 'Услуги грузчика',
         company: 'Magnum',
         address: 'г. Алматы, ул. Абая, 1',
@@ -1277,14 +1293,14 @@ void main() {
     }
 
     testWidgets('у своей смены есть кнопка «Отменить»', (tester) async {
-      final repo = FakeShiftRepository(shifts: [todayShift()]);
+      final repo = FakeShiftRepository(clock: morning(), shifts: [tomorrowShift()]);
       await openApp(tester, role: UserRole.manager, shifts: repo);
 
       expect(find.text('Отменить'), findsOneWidget);
     });
 
     testWidgets('перед отменой спрашивают подтверждение', (tester) async {
-      final repo = FakeShiftRepository(shifts: [todayShift()]);
+      final repo = FakeShiftRepository(clock: morning(), shifts: [tomorrowShift()]);
       await openApp(tester, role: UserRole.manager, shifts: repo);
 
       await tester.tap(find.text('Отменить'));
@@ -1301,7 +1317,7 @@ void main() {
 
     testWidgets('после подтверждения смена помечается отменённой',
         (tester) async {
-      final repo = FakeShiftRepository(shifts: [todayShift()]);
+      final repo = FakeShiftRepository(clock: morning(), shifts: [tomorrowShift()]);
       await openApp(tester, role: UserRole.manager, shifts: repo);
 
       await tester.tap(find.text('Отменить'));
@@ -1315,7 +1331,7 @@ void main() {
 
     testWidgets('«Изменить» открывает форму с заполненными полями',
         (tester) async {
-      final repo = FakeShiftRepository(shifts: [todayShift()]);
+      final repo = FakeShiftRepository(clock: morning(), shifts: [tomorrowShift()]);
       await openApp(tester, role: UserRole.manager, shifts: repo);
 
       await tester.tap(find.text('Изменить'));
@@ -1328,7 +1344,7 @@ void main() {
     });
 
     testWidgets('правка сохраняется', (tester) async {
-      final repo = FakeShiftRepository(shifts: [todayShift()]);
+      final repo = FakeShiftRepository(clock: morning(), shifts: [tomorrowShift()]);
       await openApp(tester, role: UserRole.manager, shifts: repo);
 
       await tester.tap(find.text('Изменить'));
@@ -1343,7 +1359,7 @@ void main() {
 
     testWidgets('нельзя оставить мест меньше, чем набрано', (tester) async {
       // На смену уже набрали двоих.
-      final repo = FakeShiftRepository(shifts: [todayShift(hired: 2)]);
+      final repo = FakeShiftRepository(clock: morning(), shifts: [tomorrowShift(hired: 2)]);
 
       await openApp(tester, role: UserRole.manager, shifts: repo);
       await tester.tap(find.text('Изменить'));
@@ -1361,7 +1377,7 @@ void main() {
 
     testWidgets('отменённая смена исчезает из ленты исполнителя',
         (tester) async {
-      final repo = FakeShiftRepository(shifts: [todayShift()]);
+      final repo = FakeShiftRepository(clock: morning(), shifts: [tomorrowShift()]);
       await repo.cancelShift(1);
 
       await openApp(tester, shifts: repo);
@@ -1403,7 +1419,7 @@ void main() {
     });
 
     testWidgets('непрочитанные показываются числом', (tester) async {
-      final repo = FakeShiftRepository()
+      final repo = FakeShiftRepository(clock: morning())
         ..pushNotification(note(id: 1))
         ..pushNotification(note(id: 2, kind: NotificationKind.rated));
 
@@ -1413,7 +1429,7 @@ void main() {
     });
 
     testWidgets('колокольчик открывает список', (tester) async {
-      final repo = FakeShiftRepository()..pushNotification(note());
+      final repo = FakeShiftRepository(clock: morning())..pushNotification(note());
 
       await openApp(tester, shifts: repo);
       await tester.tap(find.byTooltip('Уведомления'));
@@ -1424,7 +1440,7 @@ void main() {
     });
 
     testWidgets('после просмотра число пропадает', (tester) async {
-      final repo = FakeShiftRepository()..pushNotification(note());
+      final repo = FakeShiftRepository(clock: morning())..pushNotification(note());
 
       await openApp(tester, shifts: repo);
       expect(badge('1'), findsOneWidget);
@@ -1638,6 +1654,9 @@ void main() {
 class BrokenShiftRepository extends FakeShiftRepository {
   bool working = false;
 
+  // Утро: демо-смены на 10:00 ещё в ленте, когда бы ни шёл тест.
+  BrokenShiftRepository() : super(clock: TestClock.today().call);
+
   @override
   Future<List<Shift>> shiftsOn(
     DateTime date, {
@@ -1657,6 +1676,8 @@ class BrokenShiftRepository extends FakeShiftRepository {
 /// разрешит его отдать.
 class SlowShiftRepository extends FakeShiftRepository {
   final _gate = Completer<void>();
+
+  SlowShiftRepository() : super(clock: TestClock.today().call);
 
   void release() => _gate.complete();
 

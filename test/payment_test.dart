@@ -9,6 +9,7 @@ import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_core/user.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'support/clock.dart';
 
 /// Деньги: карта, комиссия и гарантия оплаты на настоящей SQLite.
 void main() {
@@ -77,6 +78,7 @@ void main() {
     late AppSession session;
     late SandboxPaymentGateway gateway;
     late DbShiftRepository shifts;
+    late TestClock clock;
     late DbWalletRepository wallet;
     late DbAuthRepository auth;
     late AppUser manager;
@@ -86,7 +88,9 @@ void main() {
       db = AppDatabase(NativeDatabase.memory());
       session = AppSession();
       gateway = SandboxPaymentGateway();
-      shifts = DbShiftRepository(db, session, payments: gateway);
+      clock = TestClock.today(); // смены сегодня в 10:00 — ещё впереди
+      shifts = DbShiftRepository(db, session,
+          payments: gateway, clock: clock.call);
       wallet = DbWalletRepository(db, session, payments: gateway);
       auth = DbAuthRepository(db);
       manager = await auth.register(
@@ -281,6 +285,7 @@ void main() {
         await book(id);
 
         session.setUser(manager);
+        clock.setHour(23); // смена прошла
         await shifts.confirmAttendance(shiftId: id, workerId: worker.id);
         await shifts.confirmAttendance(shiftId: id, workerId: worker.id);
 
@@ -295,9 +300,13 @@ void main() {
       await book(id);
 
       session.setUser(manager);
+      clock.setHour(23); // смена прошла
       await shifts.markNoShow(shiftId: id, workerId: worker.id);
 
-      expect(gateway.operations.last, 'refund:1258400');
+      // Вернулось место невышедшего — и второе, на которое никто не
+      // записался: смена прошла, отмечать больше некого.
+      expect(gateway.operations.sublist(gateway.operations.length - 2),
+          ['refund:1258400', 'refund:1258400']);
       expect((await summaryOf(worker)).balance, 0);
 
       // Передумать кнопкой нельзя: деньги уже вернулись.
@@ -308,13 +317,19 @@ void main() {
       );
     });
 
-    test('при отмене заказчику возвращается всё, что не ушло людям', () async {
+    test('после смены заказчику возвращается всё, что не ушло людям',
+        () async {
       final id = await publish();
       await book(id);
 
       session.setUser(manager);
+      clock.setHour(23); // смена прошла
+      // Отменять поздно: смена уже была.
+      expect(await shifts.cancelShift(id), BookingResult.alreadyStarted);
+      // Последняя отметка закрывает смену — остаток уходит заказчику сам,
+      // без кнопок. Раньше он оставался у сервиса навсегда, если смену
+      // не отменяли.
       await shifts.confirmAttendance(shiftId: id, workerId: worker.id);
-      await shifts.cancelShift(id);
 
       // Внесено за двоих, один отработал — вернули второе место.
       expect(gateway.operations.last, 'refund:1258400');
@@ -418,6 +433,7 @@ void main() {
       final id = await publish();
       await book(id);
       session.setUser(manager);
+      clock.setHour(23);
       await shifts.confirmAttendance(shiftId: id, workerId: worker.id);
 
       session.setUser(worker);
@@ -448,6 +464,7 @@ void main() {
       final id = await publish();
       await book(id);
       session.setUser(manager);
+      clock.setHour(23);
       await shifts.confirmAttendance(shiftId: id, workerId: worker.id);
 
       session.setUser(worker);
