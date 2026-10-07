@@ -128,6 +128,15 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: fieldFill,
+        // Подсказка в пустом поле — бледная. Раньше она была того же
+        // цвета, что и введённый текст, и «Magnum» в поле компании
+        // выглядело заполненным: человек жал «Создать» и получал
+        // «Укажите название компании».
+        hintStyle: TextStyle(
+          color: (isDark ? AppColors.darkMuted : AppColors.muted)
+              .withValues(alpha: 0.8),
+          fontWeight: FontWeight.w400,
+        ),
         border: field(fieldEdge),
         enabledBorder: field(fieldEdge),
         focusedBorder: field(AppColors.brand, 1.6),
