@@ -134,8 +134,34 @@ class Api {
   ) async {
     final user = await _currentUser(request);
     if (user == null) return _error('Нужен вход', status: 401);
-    return handler(user);
+    try {
+      return await handler(user);
+    } on UserError catch (e) {
+      // Отказ по правилам — его текст и есть объяснение.
+      return _error(e.message);
+    } on FormatException {
+      // Кривой JSON или дата, которую не разобрать. Раньше это было
+      // «сервер упал» (500), хотя ошибся тот, кто прислал запрос.
+      return _error('Не получилось разобрать запрос');
+    } on TypeError {
+      // Число пришло строкой, поля нет вовсе — тоже ошибка запроса.
+      return _error('В запросе не хватает данных или они не того вида');
+    }
   }
+
+  /// Проверить условия смены из запроса — теми же правилами, что и форма
+  /// в приложении. null — всё в порядке.
+  static String? _shiftInputError(Map<String, dynamic> body) =>
+      shiftFormError(
+        title: body['title'] as String,
+        address: body['address'] as String,
+        workDate: DateTime.parse(body['workDate'] as String),
+        startMinutes: body['startMinutes'] as int,
+        endMinutes: body['endMinutes'] as int,
+        hourlyRate: body['hourlyRate'] as int,
+        workersNeeded: body['workersNeeded'] as int,
+        now: DateTime.now(),
+      );
 
   // -------------------------------------------------------------------------
   // Маршруты
@@ -547,6 +573,8 @@ class Api {
           return _error('Обновите приложение: изменился способ оплаты',
               status: 426);
         }
+        final problem = _shiftInputError(body);
+        if (problem != null) return _error(problem);
         final PaymentCheckout checkout;
         try {
           checkout = await _shiftsFor(user).createShift(
@@ -554,14 +582,17 @@ class Api {
             phone: body['phone'] as String?,
             workDate: DateTime.parse(body['workDate'] as String),
             title: body['title'] as String,
-            company: body['company'] as String,
+            // Компания и город — из профиля заказчика, а не из запроса.
+            // Иначе кто угодно мог бы выставить смену от имени «Magnum»
+            // и собрать отзывы, которые достанутся настоящему Magnum.
+            company: user.company ?? body['company'] as String,
             address: body['address'] as String,
             startMinutes: body['startMinutes'] as int,
             endMinutes: body['endMinutes'] as int,
             hourlyRate: body['hourlyRate'] as int,
             workersNeeded: body['workersNeeded'] as int,
             createdBy: user.id,
-            city: body['city'] as String? ?? user.city,
+            city: user.city,
             category: category,
             duties: (body['duties'] as List<dynamic>? ?? []).cast<String>(),
             dressCode: body['dressCode'] as String?,
@@ -607,6 +638,8 @@ class Api {
         if (category != null && !isKnownCategory(category)) {
           return _error('Неизвестная категория работ');
         }
+        final problem = _shiftInputError(body);
+        if (problem != null) return _error(problem);
         final ShiftEditResult result;
         try {
           result = await _shiftsFor(user).updateShift(

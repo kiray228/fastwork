@@ -46,7 +46,7 @@ FROM debian:stable-slim
 #
 # Именно на этом падала отправка писем через Brevo.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates \
+ && apt-get install -y --no-install-recommends ca-certificates tzdata \
  && rm -rf /var/lib/apt/lists/*
 
 # Папка для базы. Если хостинг даёт постоянный диск — подключай его
@@ -57,6 +57,12 @@ COPY --from=build /app/packages/server/build/cli/linux_x64/bundle /app
 
 ENV DB_PATH=/app/data/fastwork.sqlite
 ENV PORT=8080
+# Часы сервера — по Казахстану. Правила смены считают время «по стене»:
+# начало в 10:00, отмена за 10 часов, отметка за час до начала. На
+# хостинге часы идут по UTC, и без этой строки отметка открывалась бы на
+# пять часов позже, а срок отмены сжимался бы до пяти часов. tzdata выше —
+# справочник поясов, без него TZ ничего не значит.
+ENV TZ=Asia/Almaty
 
 EXPOSE 8080
 CMD ["/app/bin/server"]

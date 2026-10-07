@@ -52,6 +52,10 @@ class AuthService {
   static String _hash(String email, String code) =>
       sha256.convert(utf8.encode('$email:$code')).toString();
 
+  /// Отпечаток для тестов: сам код уходит письмом, и тест его не видит —
+  /// зато может положить в базу отпечаток кода, который знает.
+  String hashForTest(String email, String code) => _hash(email, code);
+
   String _generateCode() =>
       List.generate(6, (_) => _random.nextInt(10)).join();
 
@@ -151,26 +155,49 @@ class AuthService {
       throw AuthError('Код устарел, запросите новый');
     }
 
+    // Попытку засчитываем ДО сравнения и одной командой: «прибавь, если
+    // ещё можно». Раньше счётчик читали, а потом записывали — и сто
+    // запросов, пришедших одновременно, все видели «ноль попыток». Предел
+    // в три попытки не держал перебора шестизначного кода.
+    final counted = await db.customUpdate(
+      db.portableSql('UPDATE auth_code_rows SET attempts = attempts + 1 '
+          'WHERE id = ? AND attempts < ? AND expires_at > ?'),
+      variables: [
+        Variable.withInt(row.id),
+        Variable.withInt(maxAttempts),
+        Variable.withDateTime(DateTime.now()),
+      ],
+      updates: {db.authCodeRows},
+    );
+    if (counted == 0) {
+      throw AuthError('Попытки кончились, запросите новый код');
+    }
+    final used = row.attempts + 1;
+
     if (row.codeHash != _hash(email, code)) {
-      final used = row.attempts + 1;
       if (used >= maxAttempts) {
         // Гасим срок вместо удаления — по той же причине, что и выше:
         // иначе сжиганием кодов можно было бы обнулять счётчик запросов.
         await (db.update(db.authCodeRows)..where((c) => c.id.equals(row.id)))
-            .write(AuthCodeRowsCompanion(
-          attempts: Value(used),
-          expiresAt: Value(DateTime.now()),
-        ));
+            .write(AuthCodeRowsCompanion(expiresAt: Value(DateTime.now())));
         throw AuthError('Код неверный. Попытки кончились, запросите новый');
       }
-      await (db.update(db.authCodeRows)..where((c) => c.id.equals(row.id)))
-          .write(AuthCodeRowsCompanion(attempts: Value(used)));
       throw AuthError('Код неверный. Осталось попыток: ${maxAttempts - used}');
     }
 
-    // Код одноразовый: подошёл — и больше не действует.
-    await (db.update(db.authCodeRows)..where((c) => c.id.equals(row.id)))
-        .write(AuthCodeRowsCompanion(expiresAt: Value(DateTime.now())));
+    // Код одноразовый: подошёл — и больше не действует. Гасим тоже
+    // условием, чтобы два одновременных входа одним кодом не прошли оба.
+    final spent = await db.customUpdate(
+      db.portableSql('UPDATE auth_code_rows SET expires_at = ? '
+          'WHERE id = ? AND expires_at > ?'),
+      variables: [
+        Variable.withDateTime(DateTime.now()),
+        Variable.withInt(row.id),
+        Variable.withDateTime(DateTime.now()),
+      ],
+      updates: {db.authCodeRows},
+    );
+    if (spent == 0) throw AuthError('Код уже использован, запросите новый');
     return email;
   }
 

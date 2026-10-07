@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 
+import '../errors.dart';
 import '../support.dart';
 import 'database.dart';
 import 'current_user.dart';
@@ -81,12 +82,17 @@ class DbDocumentRepository implements DocumentRepository {
 
   @override
   Future<void> review(int documentId, {required bool approved}) async {
-    await (db.update(db.documentRows)..where((d) => d.id.equals(documentId)))
+    // Только свой документ. Раньше номер документа можно было подставить
+    // любой — и одобрить или отклонить чужое удостоверение.
+    final changed = await (db.update(db.documentRows)
+          ..where((d) =>
+              d.id.equals(documentId) & d.userId.equals(session.workerId)))
         .write(DocumentRowsCompanion(
       status: Value(
         approved ? DocumentStatus.approved : DocumentStatus.rejected,
       ),
     ));
+    if (changed == 0) throw const UserError('Документ не найден');
 
     // Пользователь считается проверенным, когда одобрено удостоверение.
     final idCard = await (db.select(db.documentRows)
@@ -153,8 +159,22 @@ class DbSupportRepository implements SupportRepository {
     return id;
   }
 
+  /// Обращение принадлежит тому, кто спрашивает?
+  ///
+  /// Номера обращений идут подряд, и без этой проверки любой мог бы
+  /// перебрать их и читать чужую переписку с поддержкой — а в ней
+  /// пишут про деньги, документы и телефоны.
+  Future<void> _checkOwner(int ticketId) async {
+    final ticket = await (db.select(db.supportTicketRows)
+          ..where((t) =>
+              t.id.equals(ticketId) & t.userId.equals(session.workerId)))
+        .getSingleOrNull();
+    if (ticket == null) throw const UserError('Обращение не найдено');
+  }
+
   @override
   Future<List<SupportMessage>> messages(int ticketId) async {
+    await _checkOwner(ticketId);
     final rows = await (db.select(db.supportMessageRows)
           ..where((m) => m.ticketId.equals(ticketId))
           ..orderBy([(m) => OrderingTerm.asc(m.createdAt)]))
@@ -172,6 +192,7 @@ class DbSupportRepository implements SupportRepository {
 
   @override
   Future<void> sendMessage(int ticketId, String text) async {
+    await _checkOwner(ticketId);
     await db.into(db.supportMessageRows).insert(
           SupportMessageRowsCompanion.insert(
             ticketId: ticketId,

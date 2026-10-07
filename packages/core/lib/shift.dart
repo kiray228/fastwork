@@ -246,6 +246,65 @@ class Shift {
   }
 }
 
+/// Сколько человек можно позвать на одну смену. Больше — уже не смена,
+/// а мероприятие, и вести его стоит через поддержку.
+const kMaxWorkersPerShift = 100;
+
+/// Ставка не меньше 100 ₸ и не больше 100 000 ₸ в час, в тиынах.
+const kMinHourlyRate = 10000;
+const kMaxHourlyRate = 10000000;
+
+/// Что не так с условиями новой (или правленой) смены. null — всё в порядке.
+///
+/// Правила одни для формы на телефоне и для сервера. Форма проверяет,
+/// чтобы сразу подсказать человеку; сервер — потому что запрос можно
+/// прислать и без формы. Раньше сервер не проверял ничего: смена с
+/// отрицательной ставкой или нулём мест принималась и превращалась в
+/// отрицательный платёж.
+String? shiftFormError({
+  required String title,
+  required String address,
+  required DateTime workDate,
+  required int startMinutes,
+  required int endMinutes,
+  required int hourlyRate,
+  required int workersNeeded,
+  required DateTime now,
+}) {
+  if (title.trim().length < 5) return 'Опишите, какие услуги нужны';
+  if (address.trim().isEmpty) return 'Укажите адрес';
+  if (hourlyRate < kMinHourlyRate) {
+    return 'Ставка должна быть не меньше ${formatMoney(kMinHourlyRate)} в час';
+  }
+  if (hourlyRate > kMaxHourlyRate) {
+    return 'Ставка не может быть больше ${formatMoney(kMaxHourlyRate)} в час';
+  }
+  if (workersNeeded < 1) return 'Нужен хотя бы один человек';
+  if (workersNeeded > kMaxWorkersPerShift) {
+    return 'На одну смену — не больше $kMaxWorkersPerShift человек';
+  }
+  bool inDay(int m) => m >= 0 && m < 1440;
+  if (!inDay(startMinutes) || !inDay(endMinutes)) {
+    return 'Время смены указано неверно';
+  }
+  final draft = Shift(
+    id: 0,
+    workDate: workDate,
+    title: title,
+    company: '',
+    address: address,
+    startMinutes: startMinutes,
+    endMinutes: endMinutes,
+    hourlyRate: hourlyRate,
+    workersNeeded: workersNeeded,
+    workersHired: 0,
+  );
+  if (draft.durationMinutes < 60) return 'Смена должна длиться хотя бы час';
+  // Смену в прошлом никто не возьмёт: записаться можно только до начала.
+  if (draft.hasStartedAt(now)) return 'Время начала уже прошло';
+  return null;
+}
+
 /// Один ли это день? Время суток нас не интересует, только дата.
 bool isSameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
