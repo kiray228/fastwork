@@ -337,17 +337,21 @@ void main() {
       expect(find.text('Записаться на смену'), findsOneWidget);
     });
 
-    testWidgets('кнопка «Мест нет» не открывает экран смены', (tester) async {
+    testWidgets('заполненная смена открывается — там лист ожидания',
+        (tester) async {
       await openApp(tester);
 
-      final soldOut = find.widgetWithText(FilledButton, 'Мест нет');
+      // Раньше кнопка «Мест нет» была мёртвой. Теперь за ней — очередь:
+      // кто-нибудь отменит запись, и место освободится.
+      final soldOut =
+          find.widgetWithText(FilledButton, 'Мест нет · Ждать места');
       expect(soldOut, findsOneWidget);
 
-      // warnIfMissed: false — мы специально жмём по выключенной кнопке.
-      await tester.tap(soldOut, warnIfMissed: false);
+      await tester.tap(soldOut);
       await tester.pumpAndSettle();
 
-      expect(find.text('Вознаграждение'), findsNothing);
+      expect(find.text('Вознаграждение'), findsOneWidget);
+      expect(find.text('Записаться на смену'), findsNothing);
     });
 
     testWidgets('день без смен показывает пустое состояние', (tester) async {
@@ -508,6 +512,50 @@ void main() {
 
       expect(find.textContaining('превысит 300 МРП'), findsOneWidget);
       expect((await repo.shiftById(2))!.isApplied, isFalse);
+    });
+  });
+
+  group('лист ожидания', () {
+    testWidgets('на заполненную смену можно встать в очередь',
+        (tester) async {
+      final tomorrow = DateTime.now().add(const Duration(days: 1));
+      final repo = FakeShiftRepository(
+        clock: morning(),
+        userRating: 5.0,
+        shifts: [
+          Shift(
+            id: 1,
+            workDate: DateTime(tomorrow.year, tomorrow.month, tomorrow.day),
+            title: 'Услуги бариста',
+            company: 'Small',
+            address: 'ул. Абая, 1',
+            startMinutes: 600,
+            endMinutes: 1200,
+            hourlyRate: 100000,
+            workersNeeded: 2,
+            workersHired: 2, // мест нет
+          ),
+        ],
+      );
+      await openApp(tester, rating: 5.0, shifts: repo);
+      await tester.tap(find.text('${tomorrow.day}').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Мест нет · Ждать места'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Мест нет · Сообщить, когда освободится'));
+      await tester.pumpAndSettle();
+      expect(find.text('Сообщим, как только освободится место'),
+          findsOneWidget);
+      expect((await repo.shiftById(1))!.onWaitlist, isTrue);
+
+      // Передумал — из очереди можно выйти той же кнопкой. Сначала ждём,
+      // пока уйдёт подсказка внизу: она лежит поверх кнопки.
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Вы в листе ожидания · Выйти'));
+      await tester.pumpAndSettle();
+      expect((await repo.shiftById(1))!.onWaitlist, isFalse);
     });
   });
 

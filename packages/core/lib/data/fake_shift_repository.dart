@@ -54,7 +54,26 @@ class FakeShiftRepository implements ShiftRepository {
       // Демо-смены «оплатил» сервис, новые оплачены, когда прошла оплата.
       isFunded: !_refunded.contains(s.id) && !_awaiting.contains(s.id),
       awaitingPayment: _awaiting.contains(s.id),
+      onWaitlist: _waitlist.contains(s.id),
     );
+  }
+
+  /// Смены, где «я» стою в листе ожидания.
+  final Set<int> _waitlist = {};
+
+  @override
+  Future<BookingResult> setWaitlist(int shiftId, {required bool join}) async {
+    if (!join) {
+      _waitlist.remove(shiftId);
+      return BookingResult.ok;
+    }
+    final shift = await shiftById(shiftId);
+    if (shift == null) return BookingResult.notFound;
+    if (shift.isCancelled) return BookingResult.alreadyCancelled;
+    if (shift.isMine) return BookingResult.alreadyBooked;
+    if (shift.hasStartedAt(clock())) return BookingResult.alreadyStarted;
+    _waitlist.add(shiftId);
+    return BookingResult.ok;
   }
 
   @override
@@ -123,6 +142,7 @@ class FakeShiftRepository implements ShiftRepository {
     if (!limit.allows(shift.totalPay)) return BookingResult.earningsLimit;
 
     _myStatuses[shiftId] = ApplicationStatus.active;
+    _waitlist.remove(shiftId);
     return BookingResult.ok;
   }
 

@@ -265,6 +265,32 @@ class FavoriteRows extends Table {
       ];
 }
 
+/// Лист ожидания: кто ждёт, когда на заполненной смене освободится место.
+///
+/// Популярные смены набираются за минуты, а потом кто-нибудь отменяет
+/// запись — и место снова свободно, но об этом никто не знает. Здесь
+/// лежат те, кто попросил сказать. Когда место освобождается, им всем
+/// приходит уведомление — записывается тот, кто успел первым.
+///
+/// Записывать автоматически первого в очереди мы не стали: за это время
+/// у человека могла появиться другая смена в то же время или кончиться
+/// лимит дохода. Пусть решит сам — кнопкой «Записаться».
+class WaitlistRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+
+  /// Смена удалена — и очередь на неё ни к чему.
+  IntColumn get shiftId =>
+      integer().references(ShiftRows, #id, onDelete: KeyAction.cascade)();
+
+  IntColumn get workerId => integer()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {shiftId, workerId},
+      ];
+}
+
 /// Одноразовые коды для входа.
 ///
 /// Обрати внимание: хранится не сам код, а его **отпечаток** — результат
@@ -590,6 +616,7 @@ class NotificationRows extends Table {
     ChargeRows,
     PayoutRows,
     FavoriteRows,
+    WaitlistRows,
   ],
 )
 /// Описание базы: какие таблицы и какой версии схема.
@@ -698,7 +725,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -784,6 +811,9 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 15) {
             await m.createTable(favoriteRows);
+          }
+          if (from < 16) {
+            await m.createTable(waitlistRows);
           }
         },
         beforeOpen: (details) async {

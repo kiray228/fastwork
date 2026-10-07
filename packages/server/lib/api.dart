@@ -466,6 +466,19 @@ class Api {
       });
     });
 
+    // Лист ожидания: «скажите, когда освободится место» и обратно.
+    router.post('/api/shifts/<id|[0-9]+>/waitlist',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        final body = await _body(request);
+        final result = await _shiftsFor(user).setWaitlist(
+          int.parse(id),
+          join: body['join'] as bool? ?? true,
+        );
+        return _json({'result': result.name});
+      });
+    });
+
     router.post('/api/shifts/<id|[0-9]+>/checkin',
         (Request request, String id) async {
       return _authorized(request, (user) async {

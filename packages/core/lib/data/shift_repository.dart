@@ -195,6 +195,10 @@ abstract class ShiftRepository {
     String? phone,
   });
 
+  /// Встать в лист ожидания заполненной смены (`join: true`) или выйти
+  /// из него. Когда место освободится, придёт уведомление.
+  Future<BookingResult> setWaitlist(int shiftId, {required bool join});
+
   /// Отметиться на смене: «я на месте».
   Future<BookingResult> checkIn(int shiftId);
 
@@ -401,7 +405,10 @@ class DbShiftRepository implements ShiftRepository {
       AS my_status,
     (SELECT a3.checked_in_at FROM application_rows a3
       WHERE a3.shift_id = s.id AND a3.worker_id = $_workerId)
-      AS my_checked_in_at''';
+      AS my_checked_in_at,
+    CASE WHEN EXISTS (SELECT 1 FROM waitlist_rows wl
+      WHERE wl.shift_id = s.id AND wl.worker_id = $_workerId)
+      THEN 1 ELSE 0 END AS my_waitlisted''';
 
   /// Превращаем строку из базы в объект `Shift`, с которым работают экраны.
   Shift _toShift(QueryRow row) => Shift(
@@ -431,6 +438,7 @@ class DbShiftRepository implements ShiftRepository {
         cancelledAt: row.readNullable<DateTime>('cancelled_at'),
         isFunded: row.read<int>('funded') > 0,
         awaitingPayment: row.read<int>('awaiting') > 0,
+        onWaitlist: row.read<int>('my_waitlisted') > 0,
       );
 
   static List<String> _splitDuties(String raw) =>
@@ -583,6 +591,7 @@ class DbShiftRepository implements ShiftRepository {
             .write(const ApplicationRowsCompanion(
           status: Value(ApplicationStatus.active),
         ));
+        await _leaveWaitlist(shiftId);
         await _notifyApplied(shift);
         return BookingResult.ok;
       }
@@ -595,9 +604,64 @@ class DbShiftRepository implements ShiftRepository {
               createdAt: clock(),
             ),
           );
+      // Записался — ждать больше нечего.
+      await _leaveWaitlist(shiftId);
       await _notifyApplied(shift);
       return BookingResult.ok;
     });
+  }
+
+  @override
+  Future<BookingResult> setWaitlist(int shiftId, {required bool join}) async {
+    if (!join) {
+      await _leaveWaitlist(shiftId);
+      return BookingResult.ok;
+    }
+    final shift = await shiftById(shiftId);
+    if (shift == null) return BookingResult.notFound;
+    if (shift.isCancelled) return BookingResult.alreadyCancelled;
+    if (shift.isMine) return BookingResult.alreadyBooked;
+    if (shift.hasStartedAt(clock())) return BookingResult.alreadyStarted;
+
+    await db.into(db.waitlistRows).insert(
+          WaitlistRowsCompanion.insert(
+            shiftId: shiftId,
+            workerId: _workerId,
+            createdAt: clock(),
+          ),
+          onConflict: DoNothing(
+            target: [db.waitlistRows.shiftId, db.waitlistRows.workerId],
+          ),
+        );
+    return BookingResult.ok;
+  }
+
+  Future<void> _leaveWaitlist(int shiftId) =>
+      (db.delete(db.waitlistRows)
+            ..where((w) =>
+                w.shiftId.equals(shiftId) & w.workerId.equals(_workerId)))
+          .go();
+
+  /// На смене освободилось место — сказать всем, кто его ждёт.
+  ///
+  /// Всем сразу, а не первому в очереди: записывается тот, кто успел.
+  /// Так место не простаивает, пока первый в очереди спит.
+  Future<void> _notifyWaitlist(Shift shift) async {
+    if (shift.hasStartedAt(clock()) || shift.isCancelled) return;
+    final waiting = await (db.select(db.waitlistRows)
+          ..where((w) => w.shiftId.equals(shift.id)))
+        .get();
+    for (final w in waiting) {
+      if (w.workerId == _workerId) continue;
+      await _notify(
+        userId: w.workerId,
+        kind: NotificationKind.slotFreed,
+        title: 'Освободилось место',
+        body: 'На «${shift.title}» ${_dayText(shift.workDate)} появилось '
+            'свободное место. Успейте записаться, пока его не заняли.',
+        shiftId: shift.id,
+      );
+    }
   }
 
   Future<void> _notifyApplied(Shift shift) => _notify(
@@ -666,6 +730,7 @@ class DbShiftRepository implements ShiftRepository {
           '${_dayText(shift.workDate)}. Место снова свободно.',
       shiftId: shift.id,
     );
+    await _notifyWaitlist(shift);
     return BookingResult.ok;
   }
 
@@ -1839,6 +1904,13 @@ class DbShiftRepository implements ShiftRepository {
         );
       }
     }
+
+    // Мест стало больше, а на смену кто-то ждал — самое время сказать.
+    if (edit.workersNeeded > before.workersNeeded &&
+        before.workersHired >= before.workersNeeded) {
+      final after = await _loadShift(before.id);
+      if (after != null) await _notifyWaitlist(after);
+    }
     return BookingResult.ok;
   }
 
@@ -2297,11 +2369,13 @@ class DbShiftRepository implements ShiftRepository {
     required String title,
     required String body,
     int? shiftId,
+    bool toSelf = false,
   }) async {
     // Некому — например, смена учебная, её никто не создавал.
     if (userId == null || userId == 0) return;
     // Себе не пишем: человек и так знает, что он только что сделал.
-    if (userId == _workerId) return;
+    // Кроме напоминаний — их отправляет не человек, а расписание.
+    if (userId == _workerId && !toSelf) return;
 
     await db.into(db.notificationRows).insert(
           NotificationRowsCompanion.insert(
@@ -2367,6 +2441,76 @@ class DbShiftRepository implements ShiftRepository {
     for (final demo in buildDemoShifts()) {
       await _insertDemo(demo, hiredFrom: 100);
     }
+  }
+
+  /// Напомнить о сменах, которые начнутся в ближайшие сутки.
+  ///
+  /// Главная причина невыходов — не злой умысел, а «забыл». Конкуренты
+  /// напоминают накануне, и невыходов становится меньше. Здесь то же: всем,
+  /// кто записан на смену в ближайшие 24 часа, — одно уведомление. Второй
+  /// раз о той же смене не пишем: проверяем, не напоминали ли уже.
+  ///
+  /// Вызывается не человеком, а по расписанию — на сервере раз в час, на
+  /// телефоне при запуске. Поэтому смотрит на всех, а не на «текущего».
+  /// Возвращает, сколько напоминаний отправлено.
+  Future<int> sendReminders() async {
+    final now = clock();
+    final today = DateTime(now.year, now.month, now.day);
+    final rows = await db.query(
+      '''
+      SELECT s.*, a.worker_id AS reminder_worker
+      FROM application_rows a
+      JOIN shift_rows s ON s.id = a.shift_id
+      WHERE a.status = 'active' AND s.cancelled_at IS NULL
+        AND s.work_date >= ? AND s.work_date < ?
+        AND a.worker_id > 0
+        AND NOT EXISTS (SELECT 1 FROM notification_rows n
+          WHERE n.user_id = a.worker_id AND n.shift_id = s.id
+            AND n.kind = 'reminder')
+      ''',
+      variables: [
+        Variable.withDateTime(today),
+        Variable.withDateTime(today.add(const Duration(days: 2))),
+      ],
+      readsFrom: {db.shiftRows, db.applicationRows, db.notificationRows},
+    ).get();
+
+    var sent = 0;
+    for (final r in rows) {
+      final shift = Shift(
+        id: r.read<int>('id'),
+        workDate: r.read<DateTime>('work_date'),
+        title: r.read<String>('title'),
+        company: r.read<String>('company'),
+        address: r.read<String>('address'),
+        city: r.read<String>('city'),
+        startMinutes: r.read<int>('start_minutes'),
+        endMinutes: r.read<int>('end_minutes'),
+        hourlyRate: r.read<int>('hourly_rate'),
+        workersNeeded: r.read<int>('workers_needed'),
+        workersHired: 0,
+      );
+      // Сутки вперёд, но не начавшиеся: о смене, на которой человек уже
+      // стоит, напоминать поздно.
+      if (!now.isBefore(shift.startsAt)) continue;
+      if (shift.startsAt.difference(now) > const Duration(hours: 24)) continue;
+
+      await _notify(
+        userId: r.read<int>('reminder_worker'),
+        kind: NotificationKind.reminder,
+        title: 'Смена ${relativeDay(shift.workDate, now)} в '
+            '${formatTime(shift.startMinutes)}',
+        body: '«${shift.title}», ${shift.company}. ${shift.address}. '
+            'Придите на 10 минут раньше и отметьтесь в приложении — '
+            '«Я на месте».',
+        shiftId: shift.id,
+        // На телефоне без сервера напоминание рассылает само приложение —
+        // от имени того, кто вошёл, и ему же.
+        toSelf: true,
+      );
+      sent++;
+    }
+    return sent;
   }
 
   /// Держать демо-смены на неделю вперёд — в каждом городе.

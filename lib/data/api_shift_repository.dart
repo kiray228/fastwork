@@ -269,6 +269,11 @@ class ApiShiftRepository implements ShiftRepository {
   }
 
   @override
+  Future<BookingResult> setWaitlist(int shiftId, {required bool join}) async =>
+      _result(await client
+          .post('/api/shifts/$shiftId/waitlist', {'join': join}));
+
+  @override
   Future<BookingResult> setFavorite({
     required int workerId,
     required bool favorite,

@@ -993,4 +993,141 @@ void main() {
       hasLength(1),
     );
   });
+
+  // ---------------------------------------------------------------------
+  // ЛИСТ ОЖИДАНИЯ
+  // ---------------------------------------------------------------------
+
+  test('освободилось место — ждущим приходит уведомление', () async {
+    final manager = await auth.register(
+      phone: '77030000001',
+      fullName: 'Айгуль Досова',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      role: UserRole.manager,
+      company: 'Magnum',
+    );
+    final first = await auth.register(
+      phone: '77030000002',
+      fullName: 'Первый Исполнитель',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    final second = await auth.register(
+      phone: '77030000003',
+      fullName: 'Второй Исполнитель',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    session.setUser(manager);
+    // Через три дня: отменить запись ещё можно.
+    final shiftId = await shifts.publishShift(
+      workDate: daysAgo(-3),
+      title: 'Услуги бариста',
+      company: 'Magnum',
+      address: 'г. Алматы, ул. Абая, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 1,
+      createdBy: manager.id,
+      city: 'Алматы',
+      card: testCard,
+    );
+
+    session.setUser(first);
+    expect(await shifts.apply(shiftId), BookingResult.ok);
+
+    session.setUser(second);
+    expect(await shifts.apply(shiftId), BookingResult.noSlots);
+    expect(await shifts.setWaitlist(shiftId, join: true), BookingResult.ok);
+    expect((await shifts.shiftById(shiftId))!.onWaitlist, isTrue);
+
+    session.setUser(first);
+    expect(await shifts.cancelApplication(shiftId), BookingResult.ok);
+
+    session.setUser(second);
+    final freed = (await shifts.notifications())
+        .where((n) => n.kind == NotificationKind.slotFreed);
+    expect(freed, hasLength(1));
+    expect(freed.single.shiftId, shiftId);
+
+    // Записался — из листа ожидания ушёл сам.
+    expect(await shifts.apply(shiftId), BookingResult.ok);
+    expect((await shifts.shiftById(shiftId))!.onWaitlist, isFalse);
+  });
+
+  test('больше мест после правки — ждущим тоже скажут', () async {
+    final (shiftId, _, manager) = await upcomingShift(); // 2 места
+    final other = await auth.register(
+      phone: '77030000010',
+      fullName: 'Третий Исполнитель',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    // Занимаем второе место.
+    session.setUser(other);
+    expect(await shifts.apply(shiftId), BookingResult.ok);
+    final late = await auth.register(
+      phone: '77030000011',
+      fullName: 'Опоздавший',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    session.setUser(late);
+    await shifts.setWaitlist(shiftId, join: true);
+
+    session.setUser(manager);
+    final before = (await shifts.shiftById(shiftId))!;
+    final edit = await shifts.updateShift(
+      shiftId: shiftId,
+      workDate: before.workDate,
+      title: before.title,
+      address: before.address,
+      startMinutes: before.startMinutes,
+      endMinutes: before.endMinutes,
+      hourlyRate: before.hourlyRate,
+      workersNeeded: 3,
+      method: PaymentMethod.card,
+    );
+    // Мест больше — смена дороже: новые условия вступят после доплаты.
+    expect(edit.result, BookingResult.paymentRequired);
+
+    Future<int> freedFor(AppUser user) async {
+      session.setUser(user);
+      return (await shifts.notifications())
+          .where((n) => n.kind == NotificationKind.slotFreed)
+          .length;
+    }
+
+    // До доплаты мест не прибавилось — и уведомления пока нет.
+    expect(await freedFor(late), 0);
+
+    session.setUser(manager);
+    await shifts.completeSandboxPayment(edit.checkout!.id, card: testCard);
+    expect(await freedFor(late), 1);
+  });
+
+  // ---------------------------------------------------------------------
+  // НАПОМИНАНИЯ
+  // ---------------------------------------------------------------------
+
+  test('о смене напоминают за сутки — и только один раз', () async {
+    final (shiftId, worker, _) = await upcomingShift(); // сегодня в 10:00
+
+    // Вчера в девять утра: до смены больше суток — рано.
+    clock.now = DateTime(clock.now.year, clock.now.month, clock.now.day - 1, 9);
+    expect(await shifts.sendReminders(), 0);
+
+    clock.now = clock.now.add(const Duration(hours: 2)); // вчера, 11:00
+    expect(await shifts.sendReminders(), 1);
+    expect(await shifts.sendReminders(), 0, reason: 'второй раз не пишем');
+
+    session.setUser(worker);
+    final notes = (await shifts.notifications())
+        .where((n) => n.kind == NotificationKind.reminder)
+        .toList();
+    expect(notes.single.shiftId, shiftId);
+    expect(notes.single.title, 'Смена завтра в 10:00');
+  });
 }

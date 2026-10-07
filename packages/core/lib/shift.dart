@@ -45,6 +45,9 @@ class Shift {
   /// в ленту она попадёт, когда провайдер подтвердит оплату.
   final bool awaitingPayment;
 
+  /// Я в листе ожидания: мест нет, но мне скажут, когда освободится.
+  final bool onWaitlist;
+
   const Shift({
     required this.id,
     required this.workDate,
@@ -71,6 +74,7 @@ class Shift {
     this.category = kOtherCategory,
     this.isFunded = false,
     this.awaitingPayment = false,
+    this.onWaitlist = false,
   });
 
   /// Категория целиком — с названием и разделом.
@@ -90,6 +94,7 @@ class Shift {
     DateTime? cancelledAt,
     bool? isFunded,
     bool? awaitingPayment,
+    bool? onWaitlist,
   }) =>
       Shift(
         id: id,
@@ -117,6 +122,7 @@ class Shift {
         cancelledAt: cancelledAt ?? this.cancelledAt,
         isFunded: isFunded ?? this.isFunded,
         awaitingPayment: awaitingPayment ?? this.awaitingPayment,
+        onWaitlist: onWaitlist ?? this.onWaitlist,
       );
 
   /// Сколько всего длится смена.
@@ -588,6 +594,7 @@ extension ShiftJson on Shift {
         'cancelledAt': cancelledAt?.toIso8601String(),
         'isFunded': isFunded,
         'awaitingPayment': awaitingPayment,
+        'onWaitlist': onWaitlist,
       };
 }
 
@@ -623,4 +630,5 @@ Shift shiftFromJson(Map<String, dynamic> json) => Shift(
           : DateTime.parse(json['cancelledAt'] as String),
       isFunded: json['isFunded'] as bool? ?? false,
       awaitingPayment: json['awaitingPayment'] as bool? ?? false,
+      onWaitlist: json['onWaitlist'] as bool? ?? false,
     );

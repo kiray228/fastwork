@@ -8949,6 +8949,315 @@ class FavoriteRowsCompanion extends UpdateCompanion<FavoriteRow> {
   }
 }
 
+class $WaitlistRowsTable extends WaitlistRows
+    with TableInfo<$WaitlistRowsTable, WaitlistRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WaitlistRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _shiftIdMeta = const VerificationMeta(
+    'shiftId',
+  );
+  @override
+  late final GeneratedColumn<int> shiftId = GeneratedColumn<int>(
+    'shift_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES shift_rows (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _workerIdMeta = const VerificationMeta(
+    'workerId',
+  );
+  @override
+  late final GeneratedColumn<int> workerId = GeneratedColumn<int>(
+    'worker_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, shiftId, workerId, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'waitlist_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WaitlistRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('shift_id')) {
+      context.handle(
+        _shiftIdMeta,
+        shiftId.isAcceptableOrUnknown(data['shift_id']!, _shiftIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_shiftIdMeta);
+    }
+    if (data.containsKey('worker_id')) {
+      context.handle(
+        _workerIdMeta,
+        workerId.isAcceptableOrUnknown(data['worker_id']!, _workerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_workerIdMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {shiftId, workerId},
+  ];
+  @override
+  WaitlistRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WaitlistRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      shiftId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shift_id'],
+      )!,
+      workerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}worker_id'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $WaitlistRowsTable createAlias(String alias) {
+    return $WaitlistRowsTable(attachedDatabase, alias);
+  }
+}
+
+class WaitlistRow extends DataClass implements Insertable<WaitlistRow> {
+  final int id;
+
+  /// Смена удалена — и очередь на неё ни к чему.
+  final int shiftId;
+  final int workerId;
+  final DateTime createdAt;
+  const WaitlistRow({
+    required this.id,
+    required this.shiftId,
+    required this.workerId,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['shift_id'] = Variable<int>(shiftId);
+    map['worker_id'] = Variable<int>(workerId);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  WaitlistRowsCompanion toCompanion(bool nullToAbsent) {
+    return WaitlistRowsCompanion(
+      id: Value(id),
+      shiftId: Value(shiftId),
+      workerId: Value(workerId),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory WaitlistRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WaitlistRow(
+      id: serializer.fromJson<int>(json['id']),
+      shiftId: serializer.fromJson<int>(json['shiftId']),
+      workerId: serializer.fromJson<int>(json['workerId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'shiftId': serializer.toJson<int>(shiftId),
+      'workerId': serializer.toJson<int>(workerId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  WaitlistRow copyWith({
+    int? id,
+    int? shiftId,
+    int? workerId,
+    DateTime? createdAt,
+  }) => WaitlistRow(
+    id: id ?? this.id,
+    shiftId: shiftId ?? this.shiftId,
+    workerId: workerId ?? this.workerId,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  WaitlistRow copyWithCompanion(WaitlistRowsCompanion data) {
+    return WaitlistRow(
+      id: data.id.present ? data.id.value : this.id,
+      shiftId: data.shiftId.present ? data.shiftId.value : this.shiftId,
+      workerId: data.workerId.present ? data.workerId.value : this.workerId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WaitlistRow(')
+          ..write('id: $id, ')
+          ..write('shiftId: $shiftId, ')
+          ..write('workerId: $workerId, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, shiftId, workerId, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WaitlistRow &&
+          other.id == this.id &&
+          other.shiftId == this.shiftId &&
+          other.workerId == this.workerId &&
+          other.createdAt == this.createdAt);
+}
+
+class WaitlistRowsCompanion extends UpdateCompanion<WaitlistRow> {
+  final Value<int> id;
+  final Value<int> shiftId;
+  final Value<int> workerId;
+  final Value<DateTime> createdAt;
+  const WaitlistRowsCompanion({
+    this.id = const Value.absent(),
+    this.shiftId = const Value.absent(),
+    this.workerId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  WaitlistRowsCompanion.insert({
+    this.id = const Value.absent(),
+    required int shiftId,
+    required int workerId,
+    required DateTime createdAt,
+  }) : shiftId = Value(shiftId),
+       workerId = Value(workerId),
+       createdAt = Value(createdAt);
+  static Insertable<WaitlistRow> custom({
+    Expression<int>? id,
+    Expression<int>? shiftId,
+    Expression<int>? workerId,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (shiftId != null) 'shift_id': shiftId,
+      if (workerId != null) 'worker_id': workerId,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  WaitlistRowsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? shiftId,
+    Value<int>? workerId,
+    Value<DateTime>? createdAt,
+  }) {
+    return WaitlistRowsCompanion(
+      id: id ?? this.id,
+      shiftId: shiftId ?? this.shiftId,
+      workerId: workerId ?? this.workerId,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (shiftId.present) {
+      map['shift_id'] = Variable<int>(shiftId.value);
+    }
+    if (workerId.present) {
+      map['worker_id'] = Variable<int>(workerId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WaitlistRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('shiftId: $shiftId, ')
+          ..write('workerId: $workerId, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -8980,6 +9289,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ChargeRowsTable chargeRows = $ChargeRowsTable(this);
   late final $PayoutRowsTable payoutRows = $PayoutRowsTable(this);
   late final $FavoriteRowsTable favoriteRows = $FavoriteRowsTable(this);
+  late final $WaitlistRowsTable waitlistRows = $WaitlistRowsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -9003,6 +9313,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     chargeRows,
     payoutRows,
     favoriteRows,
+    waitlistRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -9033,6 +9344,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('worker_review_rows', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'shift_rows',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('waitlist_rows', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -9175,6 +9493,24 @@ final class $$ShiftRowsTableReferences
     ).filter((f) => f.shiftId.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_chargeRowsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$WaitlistRowsTable, List<WaitlistRow>>
+  _waitlistRowsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.waitlistRows,
+    aliasName: 'shift_rows__id__waitlist_rows__shift_id',
+  );
+
+  $$WaitlistRowsTableProcessedTableManager get waitlistRowsRefs {
+    final manager = $$WaitlistRowsTableTableManager(
+      $_db,
+      $_db.waitlistRows,
+    ).filter((f) => f.shiftId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_waitlistRowsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -9406,6 +9742,31 @@ class $$ShiftRowsTableFilterComposer
           }) => $$ChargeRowsTableFilterComposer(
             $db: $db,
             $table: $db.chargeRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> waitlistRowsRefs(
+    Expression<bool> Function($$WaitlistRowsTableFilterComposer f) f,
+  ) {
+    final $$WaitlistRowsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.waitlistRows,
+      getReferencedColumn: (t) => t.shiftId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WaitlistRowsTableFilterComposer(
+            $db: $db,
+            $table: $db.waitlistRows,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -9737,6 +10098,31 @@ class $$ShiftRowsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> waitlistRowsRefs<T extends Object>(
+    Expression<T> Function($$WaitlistRowsTableAnnotationComposer a) f,
+  ) {
+    final $$WaitlistRowsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.waitlistRows,
+      getReferencedColumn: (t) => t.shiftId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WaitlistRowsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.waitlistRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$ShiftRowsTableTableManager
@@ -9758,6 +10144,7 @@ class $$ShiftRowsTableTableManager
             bool workerReviewRowsRefs,
             bool paymentRowsRefs,
             bool chargeRowsRefs,
+            bool waitlistRowsRefs,
           })
         > {
   $$ShiftRowsTableTableManager(_$AppDatabase db, $ShiftRowsTable table)
@@ -9874,6 +10261,7 @@ class $$ShiftRowsTableTableManager
                 workerReviewRowsRefs = false,
                 paymentRowsRefs = false,
                 chargeRowsRefs = false,
+                waitlistRowsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -9883,6 +10271,7 @@ class $$ShiftRowsTableTableManager
                     if (workerReviewRowsRefs) db.workerReviewRows,
                     if (paymentRowsRefs) db.paymentRows,
                     if (chargeRowsRefs) db.chargeRows,
+                    if (waitlistRowsRefs) db.waitlistRows,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -9992,6 +10381,27 @@ class $$ShiftRowsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (waitlistRowsRefs)
+                        await $_getPrefetchedData<
+                          ShiftRow,
+                          $ShiftRowsTable,
+                          WaitlistRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ShiftRowsTableReferences
+                              ._waitlistRowsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ShiftRowsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).waitlistRowsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.shiftId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -10018,6 +10428,7 @@ typedef $$ShiftRowsTableProcessedTableManager =
         bool workerReviewRowsRefs,
         bool paymentRowsRefs,
         bool chargeRowsRefs,
+        bool waitlistRowsRefs,
       })
     >;
 typedef $$ApplicationRowsTableCreateCompanionBuilder =
@@ -14934,6 +15345,296 @@ typedef $$FavoriteRowsTableProcessedTableManager =
       FavoriteRow,
       PrefetchHooks Function()
     >;
+typedef $$WaitlistRowsTableCreateCompanionBuilder =
+    WaitlistRowsCompanion Function({
+      Value<int> id,
+      required int shiftId,
+      required int workerId,
+      required DateTime createdAt,
+    });
+typedef $$WaitlistRowsTableUpdateCompanionBuilder =
+    WaitlistRowsCompanion Function({
+      Value<int> id,
+      Value<int> shiftId,
+      Value<int> workerId,
+      Value<DateTime> createdAt,
+    });
+
+final class $$WaitlistRowsTableReferences
+    extends BaseReferences<_$AppDatabase, $WaitlistRowsTable, WaitlistRow> {
+  $$WaitlistRowsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $ShiftRowsTable _shiftIdTable(_$AppDatabase db) =>
+      db.shiftRows.createAlias('waitlist_rows__shift_id__shift_rows__id');
+
+  $$ShiftRowsTableProcessedTableManager get shiftId {
+    final $_column = $_itemColumn<int>('shift_id')!;
+
+    final manager = $$ShiftRowsTableTableManager(
+      $_db,
+      $_db.shiftRows,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_shiftIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$WaitlistRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $WaitlistRowsTable> {
+  $$WaitlistRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get workerId => $composableBuilder(
+    column: $table.workerId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ShiftRowsTableFilterComposer get shiftId {
+    final $$ShiftRowsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftId,
+      referencedTable: $db.shiftRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ShiftRowsTableFilterComposer(
+            $db: $db,
+            $table: $db.shiftRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$WaitlistRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $WaitlistRowsTable> {
+  $$WaitlistRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get workerId => $composableBuilder(
+    column: $table.workerId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ShiftRowsTableOrderingComposer get shiftId {
+    final $$ShiftRowsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftId,
+      referencedTable: $db.shiftRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ShiftRowsTableOrderingComposer(
+            $db: $db,
+            $table: $db.shiftRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$WaitlistRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $WaitlistRowsTable> {
+  $$WaitlistRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get workerId =>
+      $composableBuilder(column: $table.workerId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$ShiftRowsTableAnnotationComposer get shiftId {
+    final $$ShiftRowsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftId,
+      referencedTable: $db.shiftRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ShiftRowsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.shiftRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$WaitlistRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $WaitlistRowsTable,
+          WaitlistRow,
+          $$WaitlistRowsTableFilterComposer,
+          $$WaitlistRowsTableOrderingComposer,
+          $$WaitlistRowsTableAnnotationComposer,
+          $$WaitlistRowsTableCreateCompanionBuilder,
+          $$WaitlistRowsTableUpdateCompanionBuilder,
+          (WaitlistRow, $$WaitlistRowsTableReferences),
+          WaitlistRow,
+          PrefetchHooks Function({bool shiftId})
+        > {
+  $$WaitlistRowsTableTableManager(_$AppDatabase db, $WaitlistRowsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WaitlistRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WaitlistRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$WaitlistRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> shiftId = const Value.absent(),
+                Value<int> workerId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => WaitlistRowsCompanion(
+                id: id,
+                shiftId: shiftId,
+                workerId: workerId,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int shiftId,
+                required int workerId,
+                required DateTime createdAt,
+              }) => WaitlistRowsCompanion.insert(
+                id: id,
+                shiftId: shiftId,
+                workerId: workerId,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$WaitlistRowsTable, WaitlistRow>(table),
+                  $$WaitlistRowsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({shiftId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (shiftId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.shiftId,
+                        referencedTable: $$WaitlistRowsTableReferences
+                            ._shiftIdTable(db),
+                        referencedColumn: $$WaitlistRowsTableReferences
+                            ._shiftIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$WaitlistRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $WaitlistRowsTable,
+      WaitlistRow,
+      $$WaitlistRowsTableFilterComposer,
+      $$WaitlistRowsTableOrderingComposer,
+      $$WaitlistRowsTableAnnotationComposer,
+      $$WaitlistRowsTableCreateCompanionBuilder,
+      $$WaitlistRowsTableUpdateCompanionBuilder,
+      (WaitlistRow, $$WaitlistRowsTableReferences),
+      WaitlistRow,
+      PrefetchHooks Function({bool shiftId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -14974,4 +15675,6 @@ class $AppDatabaseManager {
       $$PayoutRowsTableTableManager(_db, _db.payoutRows);
   $$FavoriteRowsTableTableManager get favoriteRows =>
       $$FavoriteRowsTableTableManager(_db, _db.favoriteRows);
+  $$WaitlistRowsTableTableManager get waitlistRows =>
+      $$WaitlistRowsTableTableManager(_db, _db.waitlistRows);
 }

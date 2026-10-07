@@ -168,6 +168,33 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     );
   }
 
+  /// Встать в лист ожидания или выйти из него.
+  Future<void> _toggleWaitlist() async {
+    final current = shift;
+    if (current == null) return;
+    final join = !current.onWaitlist;
+
+    setState(() => busy = true);
+    final result = await guarded(
+      context,
+      () => widget.repository.setWaitlist(widget.shiftId, join: join),
+    );
+    await _load();
+    if (!mounted) return;
+    setState(() => busy = false);
+    if (result == null) return;
+
+    _showResult(
+      switch (result) {
+        BookingResult.ok when join =>
+          'Сообщим, как только освободится место',
+        BookingResult.ok => 'Вы больше не в листе ожидания',
+        BookingResult.alreadyStarted => 'Смена уже началась',
+        _ => 'Не получилось',
+      },
+    );
+  }
+
   /// Положить текст в буфер обмена и сказать об этом.
   Future<void> _copy(String text, String message) async {
     await Clipboard.setData(ClipboardData(text: text));
@@ -374,6 +401,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
             onBook: _book,
             onCancel: _cancel,
             onCheckIn: _checkIn,
+            onWaitlist: _toggleWaitlist,
           ),
         ],
       ),
@@ -965,6 +993,7 @@ class _BottomBar extends StatelessWidget {
   final VoidCallback onBook;
   final VoidCallback onCancel;
   final VoidCallback onCheckIn;
+  final VoidCallback onWaitlist;
 
   const _BottomBar({
     required this.shift,
@@ -973,6 +1002,7 @@ class _BottomBar extends StatelessWidget {
     required this.onBook,
     required this.onCancel,
     required this.onCheckIn,
+    required this.onWaitlist,
   });
 
   @override
@@ -1016,10 +1046,16 @@ class _BottomBar extends StatelessWidget {
       label = 'Записаться на смену';
       action = onBook;
       outlined = false;
+    } else if (shift.onWaitlist) {
+      label = 'Вы в листе ожидания · Выйти';
+      action = onWaitlist;
+      outlined = true;
     } else {
-      label = 'Мест нет';
-      action = null;
-      outlined = false;
+      // Мест нет — но кто-нибудь может отменить запись. Лучше подождать
+      // с уведомлением, чем проверять смену каждый час самому.
+      label = 'Мест нет · Сообщить, когда освободится';
+      action = onWaitlist;
+      outlined = true;
     }
 
     // Низ экрана — стеклянная панель: лента под ней видна размытой,
@@ -1048,7 +1084,8 @@ class _BottomBar extends StatelessWidget {
                     child: Text(
                       shift.payoutDelayDays == 1
                           ? 'Вознаграждение на следующий день после смены'
-                          : 'Вознаграждение через ${shift.payoutDelayDays} дня',
+                          : 'Вознаграждение через '
+                              '${daysLabel(shift.payoutDelayDays)}',
                       style: const TextStyle(
                         fontSize: 12.5,
                         color: AppColors.muted,

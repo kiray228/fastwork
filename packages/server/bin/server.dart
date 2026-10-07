@@ -63,10 +63,13 @@ Future<void> main(List<String> args) async {
       ).router.call);
 
   _settleEveryMinute(db, payments);
-  if (demo) {
-    // Раз в час: в полночь появляется новый седьмой день недели.
-    Timer.periodic(const Duration(hours: 1), (_) => _refreshDemo(db));
-  }
+  await _remind(db);
+  // Раз в час: напоминания о сменах на ближайшие сутки, а в полночь
+  // у демо-смен появляется новый седьмой день недели.
+  Timer.periodic(const Duration(hours: 1), (_) async {
+    await _remind(db);
+    if (demo) await _refreshDemo(db);
+  });
 
   // InternetAddress.anyIPv4 — «слушать все сетевые интерфейсы».
   // На localhost хватило бы и loopback, но в облаке запрос приходит
@@ -145,5 +148,16 @@ Future<void> _refreshDemo(AppDatabase db) async {
     if (added > 0) stdout.writeln('демо-смены: добавлено $added');
   } catch (error) {
     stderr.writeln('демо-смены не обновились: $error');
+  }
+}
+
+/// Разослать напоминания о сменах на ближайшие сутки.
+Future<void> _remind(AppDatabase db) async {
+  try {
+    final sent =
+        await DbShiftRepository(db, const StaticUser(null)).sendReminders();
+    if (sent > 0) stdout.writeln('напоминаний о сменах: $sent');
+  } catch (error) {
+    stderr.writeln('напоминания не отправились: $error');
   }
 }
