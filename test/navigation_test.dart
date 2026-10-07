@@ -1375,6 +1375,46 @@ void main() {
       expect((await repo.shiftById(1))!.workersNeeded, 3);
     });
 
+    testWidgets('прошедшую смену можно повторить на завтра', (tester) async {
+      final repo = await managerRepo(); // смена два дня назад
+      await openApp(
+        tester,
+        role: UserRole.manager,
+        repos: buildRepos(
+          shifts: repo,
+          signedIn: testUser(role: UserRole.manager),
+        ),
+      );
+
+      // Править прошедшую нельзя — а повторить можно.
+      expect(find.text('Изменить'), findsNothing);
+      await tester.tap(find.text('Повторить'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Повторить смену'), findsOneWidget);
+      // Форма заполнена по образцу.
+      expect(find.text('Услуги фасовщика'), findsWidgets);
+      expect(find.text('г. Алматы, ул. Абая, 1'), findsWidgets);
+
+      // Категория тоже взята из образца — выбирать её заново не нужно.
+      expect(find.text('Выберите категорию'), findsNothing);
+      await tester.tap(find.text('Оплатить и опубликовать'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Оплатить ').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подставить тестовую карту'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Оплатить ').last);
+      await tester.pumpAndSettle();
+
+      final mine = await repo.shiftsCreatedBy(1);
+      expect(mine, hasLength(2));
+      final copy = mine.firstWhere((s) => s.id != 1);
+      final tomorrow = DateTime.now().add(const Duration(days: 1));
+      expect(copy.title, 'Услуги фасовщика');
+      expect(isSameDay(copy.workDate, tomorrow), isTrue);
+    });
+
     testWidgets('отменённая смена исчезает из ленты исполнителя',
         (tester) async {
       final repo = FakeShiftRepository(clock: morning(), shifts: [tomorrowShift()]);

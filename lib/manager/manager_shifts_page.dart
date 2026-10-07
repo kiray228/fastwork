@@ -124,6 +124,21 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
     await _load();
   }
 
+  /// Выставить такую же смену ещё раз — на другой день.
+  Future<void> _repeatShift(Shift shift) async {
+    await Navigator.of(context).push(
+      appRoute(
+        CreateShiftPage(
+          session: widget.session,
+          repository: repository,
+          template: shift,
+          onCreated: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+    await _load();
+  }
+
   /// Оплатить смену, которая так и не оплачена.
   Future<void> _payShift(Shift shift) async {
     final cost = ShiftCost.of(shift);
@@ -233,6 +248,7 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
                           onTap: () => _openApplicants(value[index]),
                           onCancel: () => _cancelShift(value[index]),
                           onEdit: () => _editShift(value[index]),
+                          onRepeat: () => _repeatShift(value[index]),
                           onPay: () => _payShift(value[index]),
                         ),
                       ),
@@ -252,6 +268,7 @@ class _ManagerShiftCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onCancel;
   final VoidCallback onEdit;
+  final VoidCallback onRepeat;
   final VoidCallback onPay;
 
   const _ManagerShiftCard({
@@ -259,6 +276,7 @@ class _ManagerShiftCard extends StatelessWidget {
     required this.onTap,
     required this.onCancel,
     required this.onEdit,
+    required this.onRepeat,
     required this.onPay,
   });
 
@@ -435,9 +453,38 @@ class _ManagerShiftCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  // Повтор — значком: три слова в строку на узком
+                  // экране не помещаются.
+                  IconButton(
+                    onPressed: onRepeat,
+                    tooltip: 'Повторить',
+                    icon: const Icon(Icons.replay_rounded, size: 18),
+                    color: AppColors.brand,
+                    visualDensity: VisualDensity.compact,
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 32),
+                    padding: EdgeInsets.zero,
+                  ),
                 ] else
-                  const Icon(Icons.chevron_right_rounded,
-                      size: 18, color: AppColors.muted),
+                  // Прошедшую и отменённую уже не правят — зато такую же
+                  // можно выставить снова одним касанием.
+                  TextButton.icon(
+                    onPressed: onRepeat,
+                    icon: const Icon(Icons.replay_rounded, size: 16),
+                    label: const Text(
+                      'Повторить',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.brand,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
               ],
             ),
           ],

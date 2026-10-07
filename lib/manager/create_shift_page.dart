@@ -32,12 +32,22 @@ class CreateShiftPage extends StatefulWidget {
   /// Смена, которую правим. `null` — создаём новую.
   final Shift? editing;
 
+  /// Образец для новой смены: «повторить» прошлую.
+  ///
+  /// Заказчик выставляет одно и то же из недели в неделю — те же
+  /// обязанности, адрес, ставку. Набирать их заново каждый раз скучно и
+  /// легко ошибиться, поэтому форма заполняется по образцу, а меняют
+  /// обычно только день. Это не правка: образец остаётся как был, а
+  /// новая смена создаётся и оплачивается отдельно.
+  final Shift? template;
+
   const CreateShiftPage({
     super.key,
     required this.session,
     required this.repository,
     required this.onCreated,
     this.editing,
+    this.template,
   });
 
   @override
@@ -68,7 +78,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
   @override
   void initState() {
     super.initState();
-    final shift = widget.editing;
+    final shift = widget.editing ?? widget.template;
 
     titleController = TextEditingController(text: shift?.title ?? 'Услуги ');
     addressController = TextEditingController(text: shift?.address ?? '');
@@ -82,7 +92,9 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
       text: shift?.duties.join('\n') ?? '',
     );
 
-    date = shift?.workDate ?? DateTime.now().add(const Duration(days: 1));
+    // Повтор ставим на завтра: день у образца почти наверняка прошёл.
+    date = widget.editing?.workDate ??
+        DateTime.now().add(const Duration(days: 1));
     start = _asTime(shift?.startMinutes ?? 600);
     end = _asTime(shift?.endMinutes ?? 1320);
     category = shift?.category;
@@ -368,7 +380,11 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isEditing ? 'Изменить смену' : 'Новая смена'),
+        title: Text(isEditing
+            ? 'Изменить смену'
+            : widget.template != null
+                ? 'Повторить смену'
+                : 'Новая смена'),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),

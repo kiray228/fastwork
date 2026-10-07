@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'company_page.dart';
+import 'links.dart';
 import 'package:fastwork_core/shift.dart';
 import 'theme/app_colors.dart';
 import 'theme/glass.dart';
@@ -172,6 +174,62 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     if (mounted) _showResult(message);
   }
 
+  /// Открыть ссылку во внешнем приложении — картах или календаре.
+  Future<void> _open(Uri link) async {
+    final ok = await launchUrl(
+      link,
+      mode: LaunchMode.externalApplication,
+      webOnlyWindowName: '_blank',
+    );
+    if (!ok && mounted) _showResult('Не получилось открыть ссылку');
+  }
+
+  /// Как добраться: выбрать карты и открыть в них адрес смены.
+  Future<void> _route(Shift current) async {
+    final app = await showModalBottomSheet<MapsApp>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => GlassSheet(
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SheetHandle(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                child: Text(
+                  'Как добраться',
+                  style: Theme.of(sheetContext)
+                      .textTheme
+                      .headlineSmall
+                      ?.copyWith(fontSize: 20),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  fullAddress(current),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13, color: AppColors.muted),
+                ),
+              ),
+              for (final app in MapsApp.values)
+                ListTile(
+                  leading: const Icon(Icons.map_outlined, color: AppColors.brand),
+                  title: Text(app.label),
+                  trailing: const Icon(Icons.open_in_new_rounded, size: 18),
+                  onTap: () => Navigator.of(sheetContext).pop(app),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (app != null) await _open(mapsLink(current, app));
+  }
+
   void _showResult(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
@@ -228,6 +286,12 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
                     current.address,
                     'Адрес скопирован — вставьте его в карты',
                   ),
+                  onRoute: () => _route(current),
+                  // В календарь — только то, куда человек уже записан:
+                  // календарь напомнит о смене накануне.
+                  onCalendar: current.isApplied
+                      ? () => _open(calendarLink(current))
+                      : null,
                   onCompanyTap: () => Navigator.of(context).push(
                     appRoute(
                       CompanyPage(
@@ -429,11 +493,17 @@ class _HeroCard extends StatelessWidget {
   final Shift shift;
   final VoidCallback onCompanyTap;
   final VoidCallback onCopyAddress;
+  final VoidCallback onRoute;
+
+  /// null — кнопки «В календарь» нет: человек ещё не записан.
+  final VoidCallback? onCalendar;
 
   const _HeroCard({
     required this.shift,
     required this.onCompanyTap,
     required this.onCopyAddress,
+    required this.onRoute,
+    this.onCalendar,
   });
 
   @override
@@ -565,6 +635,28 @@ class _HeroCard extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _LinkButton(
+                  icon: Icons.directions_rounded,
+                  label: 'Как добраться',
+                  onTap: onRoute,
+                ),
+              ),
+              if (onCalendar != null) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _LinkButton(
+                    icon: Icons.event_available_rounded,
+                    label: 'В календарь',
+                    onTap: onCalendar!,
+                  ),
+                ),
+              ],
+            ],
+          ),
           const SizedBox(height: 12),
           Wrap(
             spacing: 6,
@@ -580,6 +672,36 @@ class _HeroCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Небольшая кнопка-ссылка наружу: в карты или в календарь.
+class _LinkButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _LinkButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 18),
+      label: Text(label, overflow: TextOverflow.ellipsis),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.brand,
+        side: BorderSide(color: AppColors.brand.withValues(alpha: 0.35)),
+        minimumSize: const Size(0, 40),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
