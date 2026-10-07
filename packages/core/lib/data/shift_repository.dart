@@ -1816,6 +1816,17 @@ class DbShiftRepository implements ShiftRepository {
       dressCode: dressCode,
     );
 
+    // Прошлая правка могла ещё ждать доплаты. Новая её отменяет: условия
+    // теперь другие. Раньше обе доплаты оставались в силе — и заплатив
+    // обе, заказчик переплачивал разницу первой правки, а если первая
+    // приходила позже второй, она откатывала смену к старым условиям.
+    await (db.update(db.chargeRows)
+          ..where((c) =>
+              c.shiftId.equals(shiftId) &
+              c.kind.equals(_ChargeKind.topup) &
+              c.status.equals(CheckoutStatus.pending)))
+        .write(const ChargeRowsCompanion(message: Value(_superseded)));
+
     final funding = await _heldPayment(shiftId);
     // Старые смены, созданные до оплаты, правятся без денег.
     if (funding == null) {
@@ -2159,6 +2170,14 @@ class DbShiftRepository implements ShiftRepository {
           ? 'Доплата за смену «${shift.title}» · $paidWith'
           : 'Оплата смены «${shift.title}» · $paidWith',
     );
+
+    // Доплата за правку, которую уже заменила более новая: её условия не
+    // действуют, деньги — назад.
+    if (isTopup && charge.message == _superseded) {
+      await _refundCharge(charge, charge.amount,
+          'Возврат доплаты: правку «${shift.title}» заменила новая');
+      return;
+    }
 
     // Деньги пришли, а взять их уже не за что: смену отменили, пока
     // человек платил, или её уже оплатили другой попыткой. Возвращаем
@@ -2612,6 +2631,9 @@ class DbShiftRepository implements ShiftRepository {
 }
 
 /// Виды списаний по смене.
+/// Пометка на доплате, которую заменила более новая правка той же смены.
+const _superseded = 'Заменена более новой правкой';
+
 class _ChargeKind {
   _ChargeKind._();
 

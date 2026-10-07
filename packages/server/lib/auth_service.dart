@@ -232,10 +232,25 @@ class AuthService {
     return token;
   }
 
-  /// Что стоит за токеном.
-  Future<AuthTokenRow?> lookup(String token) =>
-      (db.select(db.authTokenRows)..where((t) => t.token.equals(token)))
-          .getSingleOrNull();
+  /// Сколько живёт вход. Потом — снова код на почту.
+  ///
+  /// Раньше токен был вечным: украденный однажды (чужой телефон, забытый
+  /// вход в браузере) открывал аккаунт навсегда. Три месяца — компромисс:
+  /// входить заново почти не приходится, а утечка не длится вечно.
+  static const tokenLifetime = Duration(days: 90);
+
+  /// Что стоит за токеном. Просроченный — всё равно что неизвестный.
+  Future<AuthTokenRow?> lookup(String token) async {
+    final row = await (db.select(db.authTokenRows)
+          ..where((t) => t.token.equals(token)))
+        .getSingleOrNull();
+    if (row == null) return null;
+    if (DateTime.now().difference(row.createdAt) > tokenLifetime) {
+      await revoke(token);
+      return null;
+    }
+    return row;
+  }
 
   /// Привязать токен к созданному аккаунту.
   Future<void> bind(String token, int userId) async {

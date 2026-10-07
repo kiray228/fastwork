@@ -415,6 +415,41 @@ void main() {
       ]);
     });
 
+    test('новая правка отменяет доплату за прошлую', () async {
+      final id = await publish();
+      session.setUser(manager);
+      final before = (await shifts.shiftById(id))!;
+      Future<ShiftEditResult> edit(int rate) => shifts.updateShift(
+            shiftId: id,
+            workDate: before.workDate,
+            title: before.title,
+            address: before.address,
+            startMinutes: before.startMinutes,
+            endMinutes: before.endMinutes,
+            hourlyRate: rate,
+            workersNeeded: before.workersNeeded,
+          );
+
+      final first = await edit(150000);
+      final second = await edit(130000);
+      expect(second.result, BookingResult.paymentRequired);
+
+      // Платят сначала за новую правку — она и вступает в силу.
+      await shifts.completeSandboxPayment(second.checkout!.id, card: card);
+      expect((await shifts.shiftById(id))!.hourlyRate, 130000);
+
+      // Старую ссылку всё-таки оплатили — деньги вернулись, а условия
+      // не откатились к прошлой правке.
+      await shifts.completeSandboxPayment(first.checkout!.id, card: card);
+      expect((await shifts.shiftById(id))!.hourlyRate, 130000);
+      expect(gateway.operations.last, 'refund:${first.checkout!.amount}');
+
+      final history = await summaryOf(manager);
+      final net = history.entries.fold<int>(0, (sum, e) => sum + e.amount);
+      final cost = ShiftCost.of((await shifts.shiftById(id))!).total;
+      expect(net, -cost, reason: 'заплачено ровно за действующие условия');
+    });
+
     test('неоплаченную смену не правят', () async {
       final checkout = await order();
       session.setUser(manager);

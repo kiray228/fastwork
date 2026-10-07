@@ -254,6 +254,20 @@ void main() {
   });
 
   group('вход по коду', () {
+    test('старый токен больше не пускает', () async {
+      final (fresh, _) = await call('GET', '/api/me', token: workerToken);
+      expect(fresh, 200);
+
+      // Токену четыре месяца.
+      await (db.update(db.authTokenRows)
+            ..where((t) => t.token.equals(workerToken)))
+          .write(AuthTokenRowsCompanion(
+        createdAt: Value(DateTime.now().subtract(const Duration(days: 120))),
+      ));
+      final (stale, _) = await call('GET', '/api/me', token: workerToken);
+      expect(stale, 401);
+    });
+
     test('после трёх попыток код не подойдёт, даже верный', () async {
       final auth = AuthService(db, ConsoleCodeSender());
       await auth.requestCode('worker@example.kz');
