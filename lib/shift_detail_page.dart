@@ -259,7 +259,14 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
 
   void _showResult(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+      SnackBar(
+        content: Text(message),
+        // Над нижней панелью, а не поверх неё: иначе на несколько секунд
+        // сообщение закрывало кнопку — «Выйти из листа ожидания» или
+        // «Отменить запись» было не нажать.
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 120),
+      ),
     );
   }
 

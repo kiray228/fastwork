@@ -549,10 +549,8 @@ void main() {
           findsOneWidget);
       expect((await repo.shiftById(1))!.onWaitlist, isTrue);
 
-      // Передумал — из очереди можно выйти той же кнопкой. Сначала ждём,
-      // пока уйдёт подсказка внизу: она лежит поверх кнопки.
-      await tester.pump(const Duration(seconds: 5));
-      await tester.pumpAndSettle();
+      // Передумал — из очереди можно выйти той же кнопкой, не дожидаясь,
+      // пока уйдёт сообщение: оно висит над панелью, а не поверх неё.
       await tester.tap(find.text('Вы в листе ожидания · Выйти'));
       await tester.pumpAndSettle();
       expect((await repo.shiftById(1))!.onWaitlist, isFalse);
