@@ -41,7 +41,9 @@ jobs:
 
       - name: Анализ кода
         # Предупреждение — тоже ошибка: на них и держится порядок.
-        run: flutter analyze --fatal-infos
+        # Только своё: ядро и сервер со своими зависимостями проверяет
+        # вторая задача, а здесь их пакеты не скачаны.
+        run: flutter analyze --fatal-infos lib test
 
       - name: Тесты приложения
         run: flutter test
