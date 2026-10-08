@@ -557,6 +557,57 @@ void main() {
     });
   });
 
+  group('ссылка на смену', () {
+    testWidgets('по ссылке открывается сама смена', (tester) async {
+      useTallPhone(tester);
+      final user = testUser(rating: 5.0);
+      await tester.pumpWidget(FastworkApp(
+        session: AppSession()..setUser(user),
+        repos: buildRepos(
+          shifts: FakeShiftRepository(clock: morning(), userRating: 5.0),
+          signedIn: user,
+        ),
+        sharedShiftId: 4, // курьер Magnum завтра
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Услуги курьера'), findsWidgets);
+      expect(find.text('Вознаграждение'), findsOneWidget);
+    });
+
+    testWidgets('несуществующая смена — понятный экран, а не вечная загрузка',
+        (tester) async {
+      useTallPhone(tester);
+      final user = testUser();
+      await tester.pumpWidget(FastworkApp(
+        session: AppSession()..setUser(user),
+        repos: buildRepos(signedIn: user),
+        sharedShiftId: 999,
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Смена не найдена'), findsOneWidget);
+    });
+  });
+
+  group('компания', () {
+    testWidgets('на компанию можно подписаться со страницы смены',
+        (tester) async {
+      final repo = FakeShiftRepository(clock: morning(), userRating: 5.0);
+      await openApp(tester, rating: 5.0, shifts: repo);
+      await tester.tap(find.text('Подробнее').first);
+      await tester.pumpAndSettle();
+      // Компания в шапке смены кликабельна.
+      await tester.tap(find.byIcon(Icons.chevron_right_rounded).first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('О компании'), findsOneWidget);
+      await tester.tap(find.text('Сообщать о новых сменах'));
+      await tester.pumpAndSettle();
+      expect(find.text('Вы подписаны · Отписаться'), findsOneWidget);
+    });
+  });
+
   group('рейтинг как допуск', () {
     testWidgets('смена с порогом 4.5 закрыта при рейтинге 4.0',
         (tester) async {
@@ -1038,10 +1089,27 @@ void main() {
 
       expect(find.text('Я на месте'), findsOneWidget);
 
+      // Код на экране у заказчика; сначала человек ошибся цифрой.
+      final code = (await repo.checkInCode(1))!;
+      final wrong = code == '0000' ? '1111' : '0000';
       await tester.tap(find.text('Я на месте'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, wrong);
+      await tester.pump();
+      await tester.tap(find.text('Отметиться'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Код не подошёл'), findsOneWidget);
+
+      await tester.tap(find.text('Я на месте'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, code);
+      await tester.pump();
+      await tester.tap(find.text('Отметиться'));
       await tester.pumpAndSettle();
 
       expect(find.text('Вы отметились — ждём подтверждения'), findsOneWidget);
+      // Заказчик увидит отметку как подтверждённую кодом.
+      expect((await repo.applicantsFor(1)).single.checkInVerified, isTrue);
     });
 
     testWidgets('до дня смены отметки нет', (tester) async {

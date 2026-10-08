@@ -1,3 +1,5 @@
+import 'shift.dart';
+
 /// Отзыв исполнителя о месте работы.
 class Review {
   final int id;
@@ -28,11 +30,20 @@ class CompanyInfo {
   final int reviewCount;
   final List<Review> reviews;
 
+  /// Я подписан на новые смены этой компании.
+  final bool isFollowed;
+
+  /// Ближайшие смены компании в моём городе, на которые ещё можно
+  /// записаться, — чтобы со страницы компании сразу было куда идти.
+  final List<Shift> upcoming;
+
   const CompanyInfo({
     required this.name,
     required this.rating,
     required this.reviewCount,
     required this.reviews,
+    this.isFollowed = false,
+    this.upcoming = const [],
   });
 }
 
@@ -111,6 +122,8 @@ extension CompanyInfoJson on CompanyInfo {
         'rating': rating,
         'reviewCount': reviewCount,
         'reviews': reviews.map((r) => r.toJson()).toList(),
+        'isFollowed': isFollowed,
+        'upcoming': upcoming.map((s) => s.toJson()).toList(),
       };
 }
 
@@ -120,6 +133,11 @@ CompanyInfo companyInfoFromJson(Map<String, dynamic> json) => CompanyInfo(
       reviewCount: json['reviewCount'] as int,
       reviews: (json['reviews'] as List<dynamic>)
           .map((r) => reviewFromJson(r as Map<String, dynamic>))
+          .toList(),
+      // Старый сервер этих полей не знает.
+      isFollowed: json['isFollowed'] as bool? ?? false,
+      upcoming: (json['upcoming'] as List<dynamic>? ?? const [])
+          .map((s) => shiftFromJson(s as Map<String, dynamic>))
           .toList(),
     );
 

@@ -8,9 +8,11 @@ import 'manager/manager_shifts_page.dart';
 import 'manager/rate_workers_page.dart';
 import 'my_shifts_page.dart';
 import 'profile_page.dart';
+import 'shift_detail_page.dart';
 import 'shifts_page.dart';
 import 'theme/app_colors.dart';
 import 'theme/glass.dart';
+import 'widgets/nav.dart';
 
 /// Каркас приложения: нижнее меню и разделы.
 ///
@@ -21,11 +23,17 @@ class HomeShell extends StatefulWidget {
   final AppRepositories repos;
   final AppPreferences preferences;
 
+  /// Смена, которую нужно сразу открыть, — пришли по ссылке на неё.
+  final int? openShiftId;
+  final VoidCallback? onShiftOpened;
+
   const HomeShell({
     super.key,
     required this.session,
     required this.repos,
     required this.preferences,
+    this.openShiftId,
+    this.onShiftOpened,
   });
 
   @override
@@ -44,6 +52,23 @@ class _HomeShellState extends State<HomeShell> {
     final user = widget.session.user;
     if (user != null && !user.isManager) {
       widget.repos.shifts.prepareDemoHistory(user.id);
+    }
+
+    // Пришли по ссылке на смену — открываем её поверх ленты. После первого
+    // кадра: до него открывать экран не над чем.
+    final shared = widget.openShiftId;
+    if (shared != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        widget.onShiftOpened?.call();
+        Navigator.of(context).push(
+          appRoute(ShiftDetailPage(
+            shiftId: shared,
+            repository: widget.repos.shifts,
+            session: widget.session,
+          )),
+        );
+      });
     }
   }
 

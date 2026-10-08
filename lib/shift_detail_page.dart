@@ -10,6 +10,7 @@ import 'package:fastwork_core/shift.dart';
 import 'theme/app_colors.dart';
 import 'theme/glass.dart';
 import 'widgets/booking_confirm_sheet.dart';
+import 'widgets/check_in_dialog.dart';
 import 'widgets/async_state.dart';
 import 'widgets/common.dart';
 import 'widgets/nav.dart';
@@ -35,6 +36,11 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
   Shift? shift;
   bool busy = false;
 
+  /// Ответ уже пришёл. Без этого флага «смены нет» и «ещё грузим»
+  /// выглядели одинаково — вечным кружком. А по ссылке от друга смена
+  /// могла быть уже удалена или ещё не оплачена.
+  bool loaded = false;
+
   @override
   void initState() {
     super.initState();
@@ -42,9 +48,12 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
   }
 
   Future<void> _load() async {
-    final loaded = await widget.repository.shiftById(widget.shiftId);
+    final found = await widget.repository.shiftById(widget.shiftId);
     if (!mounted) return;
-    setState(() => shift = loaded);
+    setState(() {
+      shift = found;
+      loaded = true;
+    });
   }
 
   /// Записаться на смену.
@@ -96,10 +105,14 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
   /// отработанной просто потому, что дата прошла, — теперь нужно
   /// действие человека и подтверждение заказчика.
   Future<void> _checkIn() async {
+    final choice = await showCheckInDialog(context);
+    if (choice == null || !mounted) return;
+    final code = choice is WithCode ? choice.code : null;
+
     setState(() => busy = true);
     final result = await guarded(
       context,
-      () => widget.repository.checkIn(widget.shiftId),
+      () => widget.repository.checkIn(widget.shiftId, code: code),
     );
     await _load();
     if (!mounted) return;
@@ -108,8 +121,12 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
 
     _showResult(
       switch (result) {
+        BookingResult.ok when code != null =>
+          'Отметка подтверждена кодом — заказчик её видит',
         BookingResult.ok => 'Отметка принята — заказчик её видит',
         BookingResult.alreadyBooked => 'Вы уже отметились',
+        BookingResult.wrongCode =>
+          'Код не подошёл — проверьте цифры у старшего смены',
         BookingResult.tooEarlyToCheckIn =>
           'Отметиться можно в день смены, не раньше чем за час до начала',
         _ => 'Не получилось отметиться',
@@ -277,7 +294,13 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     if (current == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Смена')),
-        body: const Center(child: CircularProgressIndicator()),
+        body: loaded
+            ? const EmptyState(
+                icon: Icons.event_busy_rounded,
+                title: 'Смена не найдена',
+                subtitle: 'Её могли удалить, или она ещё не опубликована',
+              )
+            : const Center(child: CircularProgressIndicator()),
       );
     }
 
@@ -287,7 +310,10 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
         actions: [
           IconButton(
             onPressed: () => _copy(
-              shiftShareText(current),
+              shiftShareText(
+                current,
+                link: sharedLinksWork ? shiftLink(current.id) : null,
+              ),
               'Описание смены скопировано — вставьте его в чат',
             ),
             tooltip: 'Поделиться',
@@ -331,6 +357,13 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
                       CompanyPage(
                         company: current.company,
                         repository: widget.repository,
+                        onOpenShift: (id) => Navigator.of(context).push(
+                          appRoute(ShiftDetailPage(
+                            shiftId: id,
+                            repository: widget.repository,
+                            session: widget.session,
+                          )),
+                        ),
                       ),
                     ),
                   ),
@@ -699,10 +732,17 @@ class _HeroCard extends StatelessWidget {
             children: [
               CategoryChip(category: shift.category),
               if (shift.isFunded) const GuaranteeChip(),
-              for (final tag in shift.tags)
+              for (final tag in shift.tagsAt(DateTime.now()))
                 TagChip(
                   text: tag,
-                  color: tag == 'Мало мест' ? AppColors.accent : null,
+                  icon: tag == 'Срочно'
+                      ? Icons.local_fire_department_rounded
+                      : null,
+                  color: switch (tag) {
+                    'Срочно' => AppColors.danger,
+                    'Мало мест' => AppColors.accent,
+                    _ => null,
+                  },
                 ),
             ],
           ),

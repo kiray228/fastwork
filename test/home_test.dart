@@ -114,6 +114,9 @@ void main() {
 
       await tester.tap(find.text('Я на месте'));
       await tester.pumpAndSettle();
+      // Старшего смены с кодом ещё нет — отмечаемся без кода.
+      await tester.tap(find.text('Без кода'));
+      await tester.pumpAndSettle();
 
       expect(find.text('Отметка принята — заказчик её видит'), findsOneWidget);
       expect(find.text('Вы на смене'), findsOneWidget);

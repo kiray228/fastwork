@@ -250,6 +250,25 @@ class Shift {
     if (hasFreeSlots && freeSlots <= 2) result.add('Мало мест');
     return result;
   }
+
+  /// Смена срочная: начнётся в ближайшие сутки, а люди ещё нужны.
+  ///
+  /// Заказчики называют это «горящей» сменой: кто-то заболел, поток
+  /// покупателей больше обычного. Исполнителю же это подсказка, где его
+  /// возьмут почти наверняка и прямо сейчас.
+  bool isUrgentAt(DateTime now) =>
+      hasFreeSlots &&
+      !hasStartedAt(now) &&
+      startsAt.difference(now) <= const Duration(hours: 24);
+
+  /// Ярлыки с поправкой на время: к обычным добавляются «Срочно» и
+  /// «Без отмены» — до начала меньше срока отмены, и записавшись сейчас,
+  /// передумать уже не выйдет. Лучше знать это до записи, а не после.
+  List<String> tagsAt(DateTime now) => [
+        if (isUrgentAt(now)) 'Срочно',
+        ...tags,
+        if (!isMine && !hasStartedAt(now) && !canCancelAt(now)) 'Без отмены',
+      ];
 }
 
 /// Сколько человек можно позвать на одну смену. Больше — уже не смена,
@@ -382,7 +401,11 @@ String shiftsLabel(int count) =>
 /// Кнопка «Поделиться» раньше ничего не делала. Теперь она кладёт в буфер
 /// обмена вот это: всё, что нужно, чтобы решить «пойду или нет», без
 /// ссылок и без необходимости ставить приложение.
-String shiftShareText(Shift shift) {
+///
+/// [link] — адрес, по которому смена открывается в приложении на сайте.
+/// Его нет, когда приложение работает без сервера: номера смен там свои
+/// у каждого телефона, и ссылка открыла бы у друга чужую смену.
+String shiftShareText(Shift shift, {Uri? link}) {
   final date = shift.workDate;
   return [
     '${shift.title} — ${shift.company}',
@@ -392,7 +415,7 @@ String shiftShareText(Shift shift) {
     shift.address,
     '${formatMoney(shift.totalPay)} за смену'
         '${shift.isFunded ? ', оплата гарантирована' : ''}',
-    'Смена в fastwork',
+    if (link != null) 'Записаться: $link' else 'Смена в fastwork',
   ].join('\n');
 }
 

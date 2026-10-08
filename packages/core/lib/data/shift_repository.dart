@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:drift/drift.dart';
 
@@ -37,6 +38,7 @@ enum BookingResult {
   notStarted, // отмечать выход рано — смена ещё не началась
   timeConflict, // в это время человек уже записан на другую смену
   alreadyFinished, // запись уже закрыта: выход подтверждён или отмечен невыход
+  wrongCode, // код отметки не совпал с кодом на экране заказчика
   notFound,
 }
 
@@ -110,6 +112,9 @@ abstract class ShiftRepository {
 
   /// Сводка по компании: описание, средняя оценка, отзывы.
   Future<CompanyInfo> companyInfo(String company);
+
+  /// Подписаться на новые смены компании (`follow: true`) или отписаться.
+  Future<void> followCompany(String company, {required bool follow});
 
   /// Оставлял ли текущий пользователь отзыв об этой смене.
   Future<bool> hasReviewed(int shiftId);
@@ -200,7 +205,14 @@ abstract class ShiftRepository {
   Future<BookingResult> setWaitlist(int shiftId, {required bool join});
 
   /// Отметиться на смене: «я на месте».
-  Future<BookingResult> checkIn(int shiftId);
+  ///
+  /// [code] — четыре цифры с экрана заказчика. С кодом отметка
+  /// подтверждена (и неверный код — отказ `wrongCode`), без кода — просто
+  /// «нажал кнопку», как раньше.
+  Future<BookingResult> checkIn(int shiftId, {String? code});
+
+  /// Код отметки для заказчика смены. Чужому — null.
+  Future<String?> checkInCode(int shiftId);
 
   /// Заказчик подтверждает, что человек отработал.
   /// Только после этого смена идёт в заработок и в рейтинг.
@@ -337,6 +349,16 @@ List<String> sortCategories(Iterable<String> ids) {
 /// он сегодня идёт.
 List<Shift> bookable(Iterable<Shift> shifts, DateTime now) =>
     shifts.where((s) => s.isMine || !s.hasStartedAt(now)).toList();
+
+/// Новый код отметки: четыре случайные цифры.
+///
+/// `Random.secure`, а не обычный `Random`: последовательность обычного
+/// можно предсказать, а код должен быть известен только тому, кто стоит
+/// на точке.
+String newCheckInCode() {
+  final random = Random.secure();
+  return List.generate(4, (_) => random.nextInt(10)).join();
+}
 
 /// Пересекается ли смена хоть с одной из тех, на которые человек уже
 /// записан.
@@ -818,7 +840,7 @@ class DbShiftRepository implements ShiftRepository {
   }
 
   @override
-  Future<BookingResult> checkIn(int shiftId) async {
+  Future<BookingResult> checkIn(int shiftId, {String? code}) async {
     final shift = await shiftById(shiftId);
     if (shift == null) return BookingResult.notFound;
     if (shift.isCheckedIn) return BookingResult.alreadyBooked;
@@ -829,13 +851,47 @@ class DbShiftRepository implements ShiftRepository {
       return BookingResult.tooEarlyToCheckIn;
     }
 
+    var verified = false;
+    if (code != null) {
+      final row = await (db.select(db.shiftRows)
+            ..where((s) => s.id.equals(shiftId)))
+          .getSingle();
+      if (row.checkInCode == null || row.checkInCode != code.trim()) {
+        return BookingResult.wrongCode;
+      }
+      verified = true;
+    }
+
     await (db.update(db.applicationRows)
           ..where((a) =>
               a.shiftId.equals(shiftId) & a.workerId.equals(_workerId)))
         .write(ApplicationRowsCompanion(
       checkedInAt: Value(clock()),
+      checkInVerified: Value(verified),
     ));
     return BookingResult.ok;
+  }
+
+  @override
+  Future<String?> checkInCode(int shiftId) async {
+    final row = await (db.select(db.shiftRows)
+          ..where((s) => s.id.equals(shiftId)))
+        .getSingleOrNull();
+    // Код видит только заказчик смены: иначе его можно было бы узнать,
+    // не выходя из дома, и смысл кода пропал бы.
+    if (row == null || row.createdBy != _workerId) return null;
+    if (row.checkInCode != null) return row.checkInCode;
+
+    final code = newCheckInCode();
+    // Заводим условием: если два запроса придут разом, код останется
+    // тем, что записан первым, — и оба получат один и тот же.
+    await (db.update(db.shiftRows)
+          ..where((s) => s.id.equals(shiftId) & s.checkInCode.isNull()))
+        .write(ShiftRowsCompanion(checkInCode: Value(code)));
+    final saved = await (db.select(db.shiftRows)
+          ..where((s) => s.id.equals(shiftId)))
+        .getSingle();
+    return saved.checkInCode;
   }
 
   @override
@@ -1016,7 +1072,96 @@ class DbShiftRepository implements ShiftRepository {
                 createdAt: r.read<DateTime>('created_at'),
               ))
           .toList(),
+      isFollowed: await _follows(company),
+      upcoming: await _upcomingOf(company),
     );
+  }
+
+  Future<bool> _follows(String company) async {
+    final row = await (db.select(db.companyFollowRows)
+          ..where((f) =>
+              f.userId.equals(_workerId) & f.company.equals(company)))
+        .getSingleOrNull();
+    return row != null;
+  }
+
+  /// Ближайшие смены компании в городе того, кто смотрит.
+  Future<List<Shift>> _upcomingOf(String company) async {
+    final now = clock();
+    final rows = await db.query(
+      '''
+      SELECT s.*, $_hiredSql, $_mineSql, $_fundedSql
+      FROM shift_rows s
+      WHERE s.company = ? AND s.city = ? AND s.work_date >= ?
+        AND s.cancelled_at IS NULL AND $_publishedSql
+      ORDER BY s.work_date, s.start_minutes
+      ''',
+      variables: [
+        Variable.withString(company),
+        Variable.withString(session.city),
+        Variable.withDateTime(DateTime(now.year, now.month, now.day)),
+      ],
+      readsFrom: {db.shiftRows, db.applicationRows},
+    ).get();
+    return bookable(rows.map(_toShift), now).take(5).toList();
+  }
+
+  @override
+  Future<void> followCompany(String company, {required bool follow}) async {
+    if (!follow) {
+      await (db.delete(db.companyFollowRows)
+            ..where((f) =>
+                f.userId.equals(_workerId) & f.company.equals(company)))
+          .go();
+      return;
+    }
+    await db.into(db.companyFollowRows).insert(
+          CompanyFollowRowsCompanion.insert(
+            userId: _workerId,
+            company: company,
+            createdAt: clock(),
+          ),
+          onConflict: DoNothing(
+            target: [db.companyFollowRows.userId, db.companyFollowRows.company],
+          ),
+        );
+  }
+
+  /// Сказать подписчикам компании о её новой смене.
+  ///
+  /// Только тем, кто в городе смены. И не тем, кого уже позвали как
+  /// любимых исполнителей: два уведомления об одной смене — это шум.
+  Future<void> _notifyFollowers(Shift shift) async {
+    final employer = shift.createdBy;
+    final rows = await db.query(
+      '''
+      SELECT f.user_id FROM company_follow_rows f
+      JOIN user_rows u ON u.id = f.user_id
+      WHERE f.company = ? AND u.city = ?
+        AND NOT EXISTS (SELECT 1 FROM favorite_rows fav
+          WHERE fav.employer_id = ? AND fav.worker_id = f.user_id)
+      ''',
+      variables: [
+        Variable.withString(shift.company),
+        Variable.withString(shift.city),
+        Variable.withInt(employer ?? 0),
+      ],
+      readsFrom: {db.companyFollowRows, db.userRows, db.favoriteRows},
+    ).get();
+
+    for (final r in rows) {
+      final userId = r.read<int>('user_id');
+      if (userId == employer) continue;
+      await _notify(
+        userId: userId,
+        kind: NotificationKind.newShift,
+        title: 'Новая смена: ${shift.company}',
+        body: '«${shift.title}» ${_dayText(shift.workDate)}, '
+            '${formatTime(shift.startMinutes)}–${formatTime(shift.endMinutes)}, '
+            '${formatMoney(shift.totalPay)}. Вы подписаны на эту компанию.',
+        shiftId: shift.id,
+      );
+    }
   }
 
   @override
@@ -1406,6 +1551,7 @@ class DbShiftRepository implements ShiftRepository {
              CAST(COALESCE((SELECT COUNT(*) FROM application_rows n
                WHERE n.worker_id = u.id AND n.status = 'no_show'
              ), 0) AS INTEGER) AS missed_count,
+             a.check_in_verified AS check_in_verified,
              CASE WHEN EXISTS (SELECT 1 FROM favorite_rows f
                WHERE f.employer_id = $_workerId AND f.worker_id = u.id)
              THEN 1 ELSE 0 END AS is_favorite
@@ -1440,6 +1586,7 @@ class DbShiftRepository implements ShiftRepository {
               status: r.read<String>('application_status'),
               checkedInAt: r.readNullable<DateTime>('checked_in_at'),
               isFavorite: r.read<int>('is_favorite') > 0,
+              checkInVerified: r.read<bool>('check_in_verified'),
             ))
         .toList();
   }
@@ -2200,6 +2347,7 @@ class DbShiftRepository implements ShiftRepository {
       // Смена опубликована — самое время позвать тех, с кем заказчику
       // уже понравилось работать.
       await _inviteFavorites(shift);
+      await _notifyFollowers(shift);
       return;
     }
 

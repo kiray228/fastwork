@@ -6,6 +6,7 @@ import '../data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_core/shift.dart';
+import 'package:fastwork_core/stats.dart';
 import '../theme/app_colors.dart';
 import 'package:fastwork_core/user.dart';
 import '../widgets/async_state.dart';
@@ -45,6 +46,9 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
 
   late final stories = storiesFor(widget.session);
 
+  /// История платежей — для сводки «потрачено за месяц».
+  List<WalletEntry> payments = const [];
+
   @override
   void initState() {
     super.initState();
@@ -57,6 +61,19 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
     );
     if (!mounted) return;
     setState(() => state = result);
+    await _loadPayments();
+  }
+
+  /// Платежи грузим отдельно и молча: если они не ответят, смены всё
+  /// равно должны показаться — без сводки, но со списком.
+  Future<void> _loadPayments() async {
+    try {
+      final summary = await widget.repos.wallet.summary();
+      if (!mounted) return;
+      setState(() => payments = summary.entries);
+    } catch (_) {
+      // Нет истории — нет и строки «потрачено».
+    }
   }
 
   /// Отменить смену. Спрашиваем подтверждение: действие видят все
@@ -237,6 +254,14 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
                   ),
                 ],
               Ready(:final value) => [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+                      child: _StatsRow(
+                        stats: employerStats(value, payments, DateTime.now()),
+                      ),
+                    ),
+                  ),
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                     sliver: SliverList.builder(
@@ -258,6 +283,91 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
             },
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Сводка заказчика: три числа над списком смен.
+///
+/// Не график, а числа: заказчику важно увидеть итог одним взглядом —
+/// сколько смен прошло, набираются ли они и во что обошлись.
+class _StatsRow extends StatelessWidget {
+  final EmployerStats stats;
+
+  const _StatsRow({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    final month = DateTime.now().month;
+    return Row(
+      children: [
+        Expanded(
+          child: _StatTile(
+            value: '${stats.shifts}',
+            label: 'смен за 30 дней',
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _StatTile(
+            value: stats.fillPercent == null ? '—' : '${stats.fillPercent}%',
+            label: 'мест заполнено',
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _StatTile(
+            value: formatMoney(stats.spentThisMonth),
+            label: 'потрачено в ${_monthsIn[month - 1]}',
+          ),
+        ),
+      ],
+    );
+  }
+
+  static const _monthsIn = [
+    'январе', 'феврале', 'марте', 'апреле', 'мае', 'июне',
+    'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре',
+  ];
+}
+
+class _StatTile extends StatelessWidget {
+  final String value;
+  final String label;
+
+  const _StatTile({required this.value, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return SurfaceCard(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      child: Column(
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: isDark ? AppColors.darkInk : AppColors.ink,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            style: TextStyle(
+              fontSize: 11.5,
+              height: 1.25,
+              color: isDark ? AppColors.darkMuted : AppColors.muted,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -508,10 +618,27 @@ class _ApplicantsPage extends StatefulWidget {
 class _ApplicantsPageState extends State<_ApplicantsPage> {
   Async<List<ShiftApplicant>> state = const Loading();
 
+  /// Код отметки этой смены. null — ещё не пришёл или смена не своя.
+  String? code;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadCode();
+  }
+
+  /// Код показываем, пока смена не закончилась: после неё он ни к чему.
+  Future<void> _loadCode() async {
+    if (!widget.shift.isAheadAt(DateTime.now()) || widget.shift.isCancelled) {
+      return;
+    }
+    try {
+      final value = await widget.repository.checkInCode(widget.shift.id);
+      if (mounted) setState(() => code = value);
+    } catch (_) {
+      // Нет кода — люди отметятся и без него.
+    }
   }
 
   Future<void> _load() async {
@@ -648,7 +775,14 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               itemCount: value.length + 1,
               itemBuilder: (context, index) {
-                if (index == 0) return _AttendanceHint(shift: widget.shift);
+                if (index == 0) {
+                  return Column(
+                    children: [
+                      if (code != null) _CheckInCodeCard(code: code!),
+                      _AttendanceHint(shift: widget.shift),
+                    ],
+                  );
+                }
                 final item = value[index - 1];
                 final canMark = DateTime.now().isAfter(widget.shift.startsAt);
                 return AnimatedEntrance(
@@ -675,6 +809,63 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
               },
             ),
         },
+      ),
+    );
+  }
+}
+
+/// Код отметки крупно — чтобы показать экран людям на точке.
+class _CheckInCodeCard extends StatelessWidget {
+  final String code;
+
+  const _CheckInCodeCard({required this.code});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [AppColors.brand, AppColors.brandDark],
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          children: [
+            Text(
+              'Код отметки',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              code.split('').join(' '),
+              style: const TextStyle(
+                fontSize: 40,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 4,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Покажите его людям на месте: кто введёт код, '
+              'тот точно пришёл',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1.35,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -834,10 +1025,16 @@ class _ApplicantTile extends StatelessWidget {
                     color: AppColors.danger,
                   )
                 else if (applicant.isCheckedIn)
-                  const TagChip(
-                    text: 'На месте',
-                    icon: Icons.location_on_outlined,
-                    color: AppColors.accent,
+                  TagChip(
+                    // По коду — человек точно был на точке; без кода —
+                    // только нажал кнопку.
+                    text: applicant.checkInVerified ? 'На месте · код' : 'На месте',
+                    icon: applicant.checkInVerified
+                        ? Icons.verified_rounded
+                        : Icons.location_on_outlined,
+                    color: applicant.checkInVerified
+                        ? AppColors.brand
+                        : AppColors.accent,
                   )
                 else
                   const TagChip(text: 'Записан'),

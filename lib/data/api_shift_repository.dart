@@ -92,8 +92,15 @@ class ApiShiftRepository implements ShiftRepository {
       _result(await client.post('/api/shifts/$shiftId/cancel'));
 
   @override
-  Future<BookingResult> checkIn(int shiftId) async =>
-      _result(await client.post('/api/shifts/$shiftId/checkin'));
+  Future<BookingResult> checkIn(int shiftId, {String? code}) async =>
+      _result(await client.post(
+          '/api/shifts/$shiftId/checkin', code == null ? null : {'code': code}));
+
+  @override
+  Future<String?> checkInCode(int shiftId) async {
+    final data = await client.get('/api/shifts/$shiftId/code');
+    return (data as Map<String, dynamic>)['code'] as String?;
+  }
 
   @override
   Future<BookingResult> markNoShow({
@@ -169,6 +176,11 @@ class ApiShiftRepository implements ShiftRepository {
         await client.get('/api/companies/${Uri.encodeComponent(company)}');
     return companyInfoFromJson(data as Map<String, dynamic>);
   }
+
+  @override
+  Future<void> followCompany(String company, {required bool follow}) async =>
+      client.post('/api/companies/${Uri.encodeComponent(company)}/follow',
+          {'follow': follow});
 
   @override
   Future<bool> hasReviewed(int shiftId) async {

@@ -208,6 +208,31 @@ void main() {
       expect(shiftId, isPositive);
     });
 
+    test('код отметки не выдают никому, кроме заказчика смены', () async {
+      final shiftId = await bookedShift();
+      final (own, body) =
+          await call('GET', '/api/shifts/$shiftId/code', token: managerToken);
+      expect(own, 200);
+      expect(body['code'], hasLength(4));
+      for (final token in [workerToken, strangerToken]) {
+        final (code, _) =
+            await call('GET', '/api/shifts/$shiftId/code', token: token);
+        expect(code, 403);
+      }
+    });
+
+    test('подписка на компанию видна на её странице', () async {
+      await bookedShift(); // у Magnum есть смена
+      final (code, _) = await call('POST', '/api/companies/Magnum/follow',
+          token: workerToken, body: {'follow': true});
+      expect(code, 200);
+      final (_, info) =
+          await call('GET', '/api/companies/Magnum', token: workerToken);
+      expect(info['isFollowed'], isTrue);
+      // Свою запись человек видит в ближайших сменах компании.
+      expect(info['upcoming'], isNotEmpty);
+    });
+
     test('отзыв о компании — только от того, кто у неё работал', () async {
       final shiftId = await bookedShift();
       final (code, _) = await call('POST', '/api/shifts/$shiftId/review',
