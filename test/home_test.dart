@@ -76,8 +76,10 @@ void main() {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
-    Shift shiftOn(DateTime day, {int start = 540, int end = 1020}) => Shift(
-          id: 1,
+    Shift shiftOn(DateTime day,
+            {int id = 1, int start = 540, int end = 1020}) =>
+        Shift(
+          id: id,
           workDate: day,
           title: 'Сборка заказов',
           company: 'Склад «Восток»',
@@ -99,6 +101,24 @@ void main() {
       expect(find.text('Ближайшая смена'), findsOneWidget);
       expect(find.text('Завтра, 09:00 — 17:00'), findsOneWidget);
       expect(find.text('Я на месте'), findsNothing);
+    });
+
+    testWidgets('«Все дни» — смены нескольких дней одним списком',
+        (tester) async {
+      final shifts = FakeShiftRepository(clock: morning(), shifts: [
+        shiftOn(today.add(const Duration(days: 1))),
+        shiftOn(today.add(const Duration(days: 3)), id: 2),
+      ]);
+      await openApp(tester, shifts: shifts);
+      expect(find.text('Подробнее'), findsNothing, reason: 'сегодня пусто');
+
+      await tester.tap(find.text('Все дни'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ближайшие две недели'), findsOneWidget);
+      expect(find.text('2 смены'), findsOneWidget);
+      expect(find.textContaining('Завтра, '), findsOneWidget);
+      expect(find.text('Подробнее'), findsNWidgets(2));
     });
 
     testWidgets('накануне можно подтвердить «Точно выйду»', (tester) async {
