@@ -6,6 +6,7 @@ import '../data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_core/shift.dart';
+import 'package:fastwork_core/stats.dart';
 import '../theme/app_colors.dart';
 import 'package:fastwork_core/user.dart';
 import '../widgets/async_state.dart';
@@ -45,6 +46,9 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
 
   late final stories = storiesFor(widget.session);
 
+  /// История платежей — для сводки «потрачено за месяц».
+  List<WalletEntry> payments = const [];
+
   @override
   void initState() {
     super.initState();
@@ -57,6 +61,19 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
     );
     if (!mounted) return;
     setState(() => state = result);
+    await _loadPayments();
+  }
+
+  /// Платежи грузим отдельно и молча: если они не ответят, смены всё
+  /// равно должны показаться — без сводки, но со списком.
+  Future<void> _loadPayments() async {
+    try {
+      final summary = await widget.repos.wallet.summary();
+      if (!mounted) return;
+      setState(() => payments = summary.entries);
+    } catch (_) {
+      // Нет истории — нет и строки «потрачено».
+    }
   }
 
   /// Отменить смену. Спрашиваем подтверждение: действие видят все
@@ -237,6 +254,14 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
                   ),
                 ],
               Ready(:final value) => [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+                      child: _StatsRow(
+                        stats: employerStats(value, payments, DateTime.now()),
+                      ),
+                    ),
+                  ),
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                     sliver: SliverList.builder(
@@ -258,6 +283,91 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
             },
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Сводка заказчика: три числа над списком смен.
+///
+/// Не график, а числа: заказчику важно увидеть итог одним взглядом —
+/// сколько смен прошло, набираются ли они и во что обошлись.
+class _StatsRow extends StatelessWidget {
+  final EmployerStats stats;
+
+  const _StatsRow({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    final month = DateTime.now().month;
+    return Row(
+      children: [
+        Expanded(
+          child: _StatTile(
+            value: '${stats.shifts}',
+            label: 'смен за 30 дней',
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _StatTile(
+            value: stats.fillPercent == null ? '—' : '${stats.fillPercent}%',
+            label: 'мест заполнено',
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _StatTile(
+            value: formatMoney(stats.spentThisMonth),
+            label: 'потрачено в ${_monthsIn[month - 1]}',
+          ),
+        ),
+      ],
+    );
+  }
+
+  static const _monthsIn = [
+    'январе', 'феврале', 'марте', 'апреле', 'мае', 'июне',
+    'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре',
+  ];
+}
+
+class _StatTile extends StatelessWidget {
+  final String value;
+  final String label;
+
+  const _StatTile({required this.value, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return SurfaceCard(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      child: Column(
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: isDark ? AppColors.darkInk : AppColors.ink,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            style: TextStyle(
+              fontSize: 11.5,
+              height: 1.25,
+              color: isDark ? AppColors.darkMuted : AppColors.muted,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -723,10 +723,17 @@ class _HeroCard extends StatelessWidget {
             children: [
               CategoryChip(category: shift.category),
               if (shift.isFunded) const GuaranteeChip(),
-              for (final tag in shift.tags)
+              for (final tag in shift.tagsAt(DateTime.now()))
                 TagChip(
                   text: tag,
-                  color: tag == 'Мало мест' ? AppColors.accent : null,
+                  icon: tag == 'Срочно'
+                      ? Icons.local_fire_department_rounded
+                      : null,
+                  color: switch (tag) {
+                    'Срочно' => AppColors.danger,
+                    'Мало мест' => AppColors.accent,
+                    _ => null,
+                  },
                 ),
             ],
           ),

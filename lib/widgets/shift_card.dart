@@ -115,10 +115,17 @@ class ShiftCard extends StatelessWidget {
                     icon: Icons.lock_outline_rounded,
                     color: AppColors.accent,
                   ),
-                for (final tag in shift.tags)
+                for (final tag in shift.tagsAt(DateTime.now()))
                   TagChip(
                     text: tag,
-                    color: tag == 'Мало мест' ? AppColors.accent : null,
+                    icon: tag == 'Срочно'
+                        ? Icons.local_fire_department_rounded
+                        : null,
+                    color: switch (tag) {
+                      'Срочно' => AppColors.danger,
+                      'Мало мест' => AppColors.accent,
+                      _ => null,
+                    },
                   ),
               ],
             ),
