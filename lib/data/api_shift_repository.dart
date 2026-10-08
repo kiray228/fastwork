@@ -183,6 +183,17 @@ class ApiShiftRepository implements ShiftRepository {
           {'follow': follow});
 
   @override
+  Future<Set<String>> followedCategories() async {
+    final data = await client.get('/api/me/categories');
+    return {for (final c in data as List) c as String};
+  }
+
+  @override
+  Future<void> followCategory(String category, {required bool follow}) async =>
+      client.post('/api/me/categories/${Uri.encodeComponent(category)}',
+          {'follow': follow});
+
+  @override
   Future<bool> hasReviewed(int shiftId) async {
     final data = await client.get('/api/shifts/$shiftId/reviewed');
     return (data as Map<String, dynamic>)['reviewed'] as bool;

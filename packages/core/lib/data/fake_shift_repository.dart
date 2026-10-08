@@ -328,6 +328,17 @@ class FakeShiftRepository implements ShiftRepository {
   Future<void> followCompany(String company, {required bool follow}) async =>
       follow ? _followed.add(company) : _followed.remove(company);
 
+  final Set<String> _followedCategories = {};
+
+  @override
+  Future<Set<String>> followedCategories() async => {..._followedCategories};
+
+  @override
+  Future<void> followCategory(String category, {required bool follow}) async =>
+      follow
+          ? _followedCategories.add(category)
+          : _followedCategories.remove(category);
+
   @override
   Future<bool> hasReviewed(int shiftId) async =>
       _reviews.any((r) => r.shiftId == shiftId);

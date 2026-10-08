@@ -4,6 +4,8 @@ import 'package:fastwork_core/data/auth_repository.dart';
 import 'package:fastwork_core/data/database.dart';
 import 'package:fastwork/data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
+import 'package:fastwork_core/data/user_language.dart';
+import 'package:fastwork_core/lang.dart';
 import 'package:fastwork_core/notification.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/terms.dart';
@@ -1233,6 +1235,90 @@ void main() {
             k == NotificationKind.invited || k == NotificationKind.newShift)
         .toList();
     expect(kinds, [NotificationKind.invited]);
+  });
+
+  // ---------------------------------------------------------------------
+  // ПОДПИСКИ НА ВИДЫ РАБОТ
+  // ---------------------------------------------------------------------
+
+  test('подписчик на вид работ узнаёт о новой смене — один раз', () async {
+    final manager = await auth.register(
+      phone: '77060000001',
+      fullName: 'Айгуль Досова',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      role: UserRole.manager,
+      company: 'Magnum',
+    );
+    final loader = await auth.register(
+      phone: '77060000002',
+      fullName: 'Грузчик',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    final both = await auth.register(
+      phone: '77060000003',
+      fullName: 'Подписан на всё',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    final cashier = await auth.register(
+      phone: '77060000004',
+      fullName: 'Кассир',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+
+    session.setUser(loader);
+    await shifts.followCategory('loader', follow: true);
+    await shifts.followCategory('loader', follow: true); // второй раз — ничего
+    expect(await shifts.followedCategories(), {'loader'});
+    // Уведомление придёт по-английски: на этом языке человек пользуется
+    // приложением, а не на языке заказчика.
+    await rememberLanguage(db, loader.id, Lang.en);
+
+    session.setUser(both);
+    await shifts.followCategory('loader', follow: true);
+    await shifts.followCompany('Magnum', follow: true);
+
+    session.setUser(cashier);
+    await shifts.followCategory('cashier', follow: true);
+
+    session.setUser(manager);
+    final shiftId = await shifts.publishShift(
+      workDate: daysAgo(-2),
+      title: 'Разгрузка фуры',
+      company: 'Magnum',
+      address: 'г. Алматы, пр. Абая, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 2,
+      createdBy: manager.id,
+      city: 'Алматы',
+      card: testCard,
+      category: 'loader',
+    );
+
+    Future<List<AppNotification>> newShifts(AppUser user) async {
+      session.setUser(user);
+      return (await shifts.notifications())
+          .where((n) => n.kind == NotificationKind.newShift)
+          .toList();
+    }
+
+    final note = (await newShifts(loader)).single;
+    expect(note.shiftId, shiftId);
+    expect(note.title, 'New shift: Loader');
+
+    // Подписан и на компанию, и на вид работ — одно уведомление, про
+    // компанию.
+    expect((await newShifts(both)).single.title, 'Новая смена: Magnum');
+    expect(await newShifts(cashier), isEmpty, reason: 'другой вид работ');
+
+    session.setUser(loader);
+    await shifts.followCategory('loader', follow: false);
+    expect(await shifts.followedCategories(), isEmpty);
   });
 
   // ---------------------------------------------------------------------

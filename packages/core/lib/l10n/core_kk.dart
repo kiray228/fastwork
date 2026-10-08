@@ -370,6 +370,14 @@ class CoreKk extends CoreStrings {
             'компанияның жаңа ауысымдарын бақылайсыз.',
       );
   @override
+  Note newShiftInCategory(String category, String company, String title,
+          DateTime day, String time, String amount) =>
+      (
+        title: 'Жаңа ауысым: $category',
+        body: '$company, «$title», ${dayMonth(day)}, $time, $amount. Сіз '
+            'бұл жұмыс түрінің жаңа ауысымдарын бақылайсыз.',
+      );
+  @override
   Note reminder(String when, String time, String title, String company,
           String address) =>
       (

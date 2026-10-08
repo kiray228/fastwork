@@ -118,6 +118,13 @@ abstract class ShiftRepository {
   /// Подписаться на новые смены компании (`follow: true`) или отписаться.
   Future<void> followCompany(String company, {required bool follow});
 
+  /// Виды работ (ключи категорий), о новых сменах которых сообщать.
+  Future<Set<String>> followedCategories();
+
+  /// Подписаться на вид работ (`follow: true`) или отписаться: новая
+  /// смена этого вида в городе человека придёт уведомлением.
+  Future<void> followCategory(String category, {required bool follow});
+
   /// Оставлял ли текущий пользователь отзыв об этой смене.
   Future<bool> hasReviewed(int shiftId);
 
@@ -1117,10 +1124,44 @@ class DbShiftRepository implements ShiftRepository {
         );
   }
 
-  /// Сказать подписчикам компании о её новой смене.
+  @override
+  Future<Set<String>> followedCategories() async {
+    final rows = await (db.select(db.categoryFollowRows)
+          ..where((f) => f.userId.equals(_workerId)))
+        .get();
+    return {for (final r in rows) r.category};
+  }
+
+  @override
+  Future<void> followCategory(String category, {required bool follow}) async {
+    if (!follow) {
+      await (db.delete(db.categoryFollowRows)
+            ..where((f) =>
+                f.userId.equals(_workerId) & f.category.equals(category)))
+          .go();
+      return;
+    }
+    await db.into(db.categoryFollowRows).insert(
+          CategoryFollowRowsCompanion.insert(
+            userId: _workerId,
+            category: category,
+            createdAt: clock(),
+          ),
+          onConflict: DoNothing(
+            target: [
+              db.categoryFollowRows.userId,
+              db.categoryFollowRows.category,
+            ],
+          ),
+        );
+  }
+
+  /// Сказать подписчикам компании и вида работ о новой смене.
   ///
   /// Только тем, кто в городе смены. И не тем, кого уже позвали как
   /// любимых исполнителей: два уведомления об одной смене — это шум.
+  /// По той же причине подписанный и на компанию, и на вид работ получит
+  /// одно уведомление — про компанию: её он выбрал осознанно.
   Future<void> _notifyFollowers(Shift shift) async {
     final employer = shift.createdBy;
     final rows = await db.query(
@@ -1139,14 +1180,48 @@ class DbShiftRepository implements ShiftRepository {
       readsFrom: {db.companyFollowRows, db.userRows, db.favoriteRows},
     ).get();
 
+    final told = <int>{};
     for (final r in rows) {
       final userId = r.read<int>('user_id');
-      if (userId == employer) continue;
+      if (userId == employer || !told.add(userId)) continue;
       await _notify(
         userId: userId,
         kind: NotificationKind.newShift,
         note: (t) => t.newShift(shift.company, shift.title, shift.workDate,
             _timeOf(shift), formatMoney(shift.totalPay)),
+        shiftId: shift.id,
+      );
+    }
+
+    final byCategory = await db.query(
+      '''
+      SELECT f.user_id FROM category_follow_rows f
+      JOIN user_rows u ON u.id = f.user_id
+      WHERE f.category = ? AND u.city = ?
+        AND NOT EXISTS (SELECT 1 FROM favorite_rows fav
+          WHERE fav.employer_id = ? AND fav.worker_id = f.user_id)
+      ''',
+      variables: [
+        Variable.withString(shift.category),
+        Variable.withString(shift.city),
+        Variable.withInt(employer ?? 0),
+      ],
+      readsFrom: {db.categoryFollowRows, db.userRows, db.favoriteRows},
+    ).get();
+
+    for (final r in byCategory) {
+      final userId = r.read<int>('user_id');
+      if (userId == employer || !told.add(userId)) continue;
+      await _notify(
+        userId: userId,
+        kind: NotificationKind.newShift,
+        note: (t) => t.newShiftInCategory(
+            t.category(shift.category),
+            shift.company,
+            shift.title,
+            shift.workDate,
+            _timeOf(shift),
+            formatMoney(shift.totalPay)),
         shiftId: shift.id,
       );
     }

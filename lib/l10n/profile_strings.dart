@@ -8,6 +8,14 @@ import 'package:fastwork_core/lang.dart';
 abstract class ProfileStrings {
   const ProfileStrings();
 
+  // ---- Подписки на виды работ ----
+  String get menuAlerts;
+  String get menuAlertsHint;
+  String get alertsTitle;
+  String alertsHint(String city);
+  String alertsOnSnack(String category);
+  String alertsOffSnack(String category);
+
   static ProfileStrings of(Lang lang) => switch (lang) {
         Lang.ru => const _Ru(),
         Lang.kk => const _Kk(),
@@ -156,6 +164,21 @@ abstract class ProfileStrings {
 
 class _Ru extends ProfileStrings {
   const _Ru();
+
+  @override
+  String get menuAlerts => 'Новые смены';
+  @override
+  String get menuAlertsHint => 'По видам работ';
+  @override
+  String get alertsTitle => 'Новые смены по видам работ';
+  @override
+  String alertsHint(String city) =>
+      'Отметьте, что умеете делать. Новая смена такого вида в городе $city придёт уведомлением.';
+  @override
+  String alertsOnSnack(String category) =>
+      'Сообщим о новых сменах: $category';
+  @override
+  String alertsOffSnack(String category) => 'Больше не сообщаем: $category';
 
   static String _plural(int n, String one, String few, String many) {
     final last = n % 10, lastTwo = n % 100;
@@ -394,6 +417,21 @@ class _Ru extends ProfileStrings {
 class _Kk extends ProfileStrings {
   const _Kk();
 
+  @override
+  String get menuAlerts => 'Жаңа ауысымдар';
+  @override
+  String get menuAlertsHint => 'Жұмыс түрі бойынша';
+  @override
+  String get alertsTitle => 'Жұмыс түрі бойынша жаңа ауысымдар';
+  @override
+  String alertsHint(String city) =>
+      'Не істей алатыныңызды белгілеңіз. $city қаласында осындай жаңа ауысым шыққанда хабарлама келеді.';
+  @override
+  String alertsOnSnack(String category) =>
+      'Жаңа ауысымдар туралы хабарлаймыз: $category';
+  @override
+  String alertsOffSnack(String category) => 'Енді хабарламаймыз: $category';
+
   // ---- Общие кнопки окон ----
   @override
   String get cancel => 'Бас тарту';
@@ -623,6 +661,21 @@ class _Kk extends ProfileStrings {
 
 class _En extends ProfileStrings {
   const _En();
+
+  @override
+  String get menuAlerts => 'New shifts';
+  @override
+  String get menuAlertsHint => 'By job type';
+  @override
+  String get alertsTitle => 'New shifts by job type';
+  @override
+  String alertsHint(String city) =>
+      "Pick what you can do. When a new shift of that kind appears in $city, you'll get a notification.";
+  @override
+  String alertsOnSnack(String category) =>
+      "We'll let you know about new shifts: $category";
+  @override
+  String alertsOffSnack(String category) => 'No more alerts: $category';
 
   // ---- Общие кнопки окон ----
   @override

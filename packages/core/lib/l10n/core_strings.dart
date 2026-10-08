@@ -212,6 +212,9 @@ abstract class CoreStrings {
       String amount);
   Note newShift(String company, String title, DateTime day, String time,
       String amount);
+  /// Новая смена по виду работ, на который человек подписан.
+  Note newShiftInCategory(String category, String company, String title,
+      DateTime day, String time, String amount);
   Note reminder(String when, String time, String title, String company,
       String address);
 
