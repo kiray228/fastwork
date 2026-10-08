@@ -557,6 +557,24 @@ void main() {
     });
   });
 
+  group('компания', () {
+    testWidgets('на компанию можно подписаться со страницы смены',
+        (tester) async {
+      final repo = FakeShiftRepository(clock: morning(), userRating: 5.0);
+      await openApp(tester, rating: 5.0, shifts: repo);
+      await tester.tap(find.text('Подробнее').first);
+      await tester.pumpAndSettle();
+      // Компания в шапке смены кликабельна.
+      await tester.tap(find.byIcon(Icons.chevron_right_rounded).first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('О компании'), findsOneWidget);
+      await tester.tap(find.text('Сообщать о новых сменах'));
+      await tester.pumpAndSettle();
+      expect(find.text('Вы подписаны · Отписаться'), findsOneWidget);
+    });
+  });
+
   group('рейтинг как допуск', () {
     testWidgets('смена с порогом 4.5 закрыта при рейтинге 4.0',
         (tester) async {

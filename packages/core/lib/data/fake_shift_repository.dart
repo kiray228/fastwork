@@ -287,13 +287,32 @@ class FakeShiftRepository implements ShiftRepository {
         ? null
         : list.map((r) => r.rating).reduce((a, b) => a + b) / list.length;
 
+    final now = clock();
     return CompanyInfo(
       name: company,
       rating: avg,
       reviewCount: list.length,
       reviews: list,
+      isFollowed: _followed.contains(company),
+      upcoming: bookable(
+        _shifts
+            .where((s) =>
+                s.company == company &&
+                s.city == city &&
+                _published(s) &&
+                !s.workDate.isBefore(DateTime(now.year, now.month, now.day)))
+            .map(_decorate),
+        now,
+      ).take(5).toList(),
     );
   }
+
+  /// Компании, на которые «я» подписан.
+  final Set<String> _followed = {};
+
+  @override
+  Future<void> followCompany(String company, {required bool follow}) async =>
+      follow ? _followed.add(company) : _followed.remove(company);
 
   @override
   Future<bool> hasReviewed(int shiftId) async =>

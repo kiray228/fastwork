@@ -1134,4 +1134,104 @@ void main() {
     expect(notes.single.shiftId, shiftId);
     expect(notes.single.title, 'Смена завтра в 10:00');
   });
+
+  // ---------------------------------------------------------------------
+  // ПОДПИСКИ НА КОМПАНИИ
+  // ---------------------------------------------------------------------
+
+  test('подписчик узнаёт о новой смене компании в своём городе', () async {
+    final manager = await auth.register(
+      phone: '77050000001',
+      fullName: 'Айгуль Досова',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      role: UserRole.manager,
+      company: 'Magnum',
+    );
+    final here = await auth.register(
+      phone: '77050000002',
+      fullName: 'Алматинец',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    final there = await auth.register(
+      phone: '77050000003',
+      fullName: 'Астанчанин',
+      city: 'Астана',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    for (final user in [here, there]) {
+      session.setUser(user);
+      await shifts.followCompany('Magnum', follow: true);
+      await shifts.followCompany('Magnum', follow: true); // второй раз — ничего
+    }
+    session.setUser(here);
+    expect((await shifts.companyInfo('Magnum')).isFollowed, isTrue);
+
+    session.setUser(manager);
+    final shiftId = await shifts.publishShift(
+      workDate: daysAgo(-2),
+      title: 'Услуги кассира',
+      company: 'Magnum',
+      address: 'г. Алматы, пр. Абая, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 2,
+      createdBy: manager.id,
+      city: 'Алматы',
+      card: testCard,
+    );
+
+    Future<List<AppNotification>> newShifts(AppUser user) async {
+      session.setUser(user);
+      return (await shifts.notifications())
+          .where((n) => n.kind == NotificationKind.newShift)
+          .toList();
+    }
+
+    expect((await newShifts(here)).single.shiftId, shiftId);
+    expect(await newShifts(there), isEmpty, reason: 'другой город');
+
+    // На странице компании — её ближайшая смена.
+    session.setUser(here);
+    final info = await shifts.companyInfo('Magnum');
+    expect(info.upcoming.map((s) => s.id), contains(shiftId));
+
+    // Отписался — больше не пишут.
+    await shifts.followCompany('Magnum', follow: false);
+    expect((await shifts.companyInfo('Magnum')).isFollowed, isFalse);
+  });
+
+  test('любимому исполнителю не пишут дважды об одной смене', () async {
+    final (_, workerId, managerId) = await workedShift();
+    final manager = (await auth.refresh(managerId))!;
+    session.setUser(manager);
+    await shifts.setFavorite(workerId: workerId, favorite: true);
+    session.setUser((await auth.refresh(workerId))!);
+    await shifts.followCompany('Magnum', follow: true);
+
+    session.setUser(manager);
+    await shifts.publishShift(
+      workDate: daysAgo(-2),
+      title: 'Услуги фасовщика',
+      company: 'Magnum',
+      address: 'г. Алматы, ул. Абая, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 2,
+      createdBy: managerId,
+      city: 'Алматы',
+      card: testCard,
+    );
+
+    session.setUser((await auth.refresh(workerId))!);
+    final kinds = (await shifts.notifications())
+        .map((n) => n.kind)
+        .where((k) =>
+            k == NotificationKind.invited || k == NotificationKind.newShift)
+        .toList();
+    expect(kinds, [NotificationKind.invited]);
+  });
 }

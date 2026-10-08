@@ -111,6 +111,9 @@ abstract class ShiftRepository {
   /// Сводка по компании: описание, средняя оценка, отзывы.
   Future<CompanyInfo> companyInfo(String company);
 
+  /// Подписаться на новые смены компании (`follow: true`) или отписаться.
+  Future<void> followCompany(String company, {required bool follow});
+
   /// Оставлял ли текущий пользователь отзыв об этой смене.
   Future<bool> hasReviewed(int shiftId);
 
@@ -1016,7 +1019,96 @@ class DbShiftRepository implements ShiftRepository {
                 createdAt: r.read<DateTime>('created_at'),
               ))
           .toList(),
+      isFollowed: await _follows(company),
+      upcoming: await _upcomingOf(company),
     );
+  }
+
+  Future<bool> _follows(String company) async {
+    final row = await (db.select(db.companyFollowRows)
+          ..where((f) =>
+              f.userId.equals(_workerId) & f.company.equals(company)))
+        .getSingleOrNull();
+    return row != null;
+  }
+
+  /// Ближайшие смены компании в городе того, кто смотрит.
+  Future<List<Shift>> _upcomingOf(String company) async {
+    final now = clock();
+    final rows = await db.query(
+      '''
+      SELECT s.*, $_hiredSql, $_mineSql, $_fundedSql
+      FROM shift_rows s
+      WHERE s.company = ? AND s.city = ? AND s.work_date >= ?
+        AND s.cancelled_at IS NULL AND $_publishedSql
+      ORDER BY s.work_date, s.start_minutes
+      ''',
+      variables: [
+        Variable.withString(company),
+        Variable.withString(session.city),
+        Variable.withDateTime(DateTime(now.year, now.month, now.day)),
+      ],
+      readsFrom: {db.shiftRows, db.applicationRows},
+    ).get();
+    return bookable(rows.map(_toShift), now).take(5).toList();
+  }
+
+  @override
+  Future<void> followCompany(String company, {required bool follow}) async {
+    if (!follow) {
+      await (db.delete(db.companyFollowRows)
+            ..where((f) =>
+                f.userId.equals(_workerId) & f.company.equals(company)))
+          .go();
+      return;
+    }
+    await db.into(db.companyFollowRows).insert(
+          CompanyFollowRowsCompanion.insert(
+            userId: _workerId,
+            company: company,
+            createdAt: clock(),
+          ),
+          onConflict: DoNothing(
+            target: [db.companyFollowRows.userId, db.companyFollowRows.company],
+          ),
+        );
+  }
+
+  /// Сказать подписчикам компании о её новой смене.
+  ///
+  /// Только тем, кто в городе смены. И не тем, кого уже позвали как
+  /// любимых исполнителей: два уведомления об одной смене — это шум.
+  Future<void> _notifyFollowers(Shift shift) async {
+    final employer = shift.createdBy;
+    final rows = await db.query(
+      '''
+      SELECT f.user_id FROM company_follow_rows f
+      JOIN user_rows u ON u.id = f.user_id
+      WHERE f.company = ? AND u.city = ?
+        AND NOT EXISTS (SELECT 1 FROM favorite_rows fav
+          WHERE fav.employer_id = ? AND fav.worker_id = f.user_id)
+      ''',
+      variables: [
+        Variable.withString(shift.company),
+        Variable.withString(shift.city),
+        Variable.withInt(employer ?? 0),
+      ],
+      readsFrom: {db.companyFollowRows, db.userRows, db.favoriteRows},
+    ).get();
+
+    for (final r in rows) {
+      final userId = r.read<int>('user_id');
+      if (userId == employer) continue;
+      await _notify(
+        userId: userId,
+        kind: NotificationKind.newShift,
+        title: 'Новая смена: ${shift.company}',
+        body: '«${shift.title}» ${_dayText(shift.workDate)}, '
+            '${formatTime(shift.startMinutes)}–${formatTime(shift.endMinutes)}, '
+            '${formatMoney(shift.totalPay)}. Вы подписаны на эту компанию.',
+        shiftId: shift.id,
+      );
+    }
   }
 
   @override
@@ -2200,6 +2292,7 @@ class DbShiftRepository implements ShiftRepository {
       // Смена опубликована — самое время позвать тех, с кем заказчику
       // уже понравилось работать.
       await _inviteFavorites(shift);
+      await _notifyFollowers(shift);
       return;
     }
 

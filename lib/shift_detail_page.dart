@@ -331,6 +331,13 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
                       CompanyPage(
                         company: current.company,
                         repository: widget.repository,
+                        onOpenShift: (id) => Navigator.of(context).push(
+                          appRoute(ShiftDetailPage(
+                            shiftId: id,
+                            repository: widget.repository,
+                            session: widget.session,
+                          )),
+                        ),
                       ),
                     ),
                   ),

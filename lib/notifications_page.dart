@@ -133,6 +133,8 @@ class _NotificationTile extends StatelessWidget {
         NotificationKind.invited => (Icons.favorite_rounded, AppColors.accent),
         NotificationKind.slotFreed => (Icons.event_seat_rounded, AppColors.brand),
         NotificationKind.reminder => (Icons.alarm_rounded, AppColors.brand),
+        NotificationKind.newShift =>
+          (Icons.notifications_active_rounded, AppColors.brand),
       };
 
   @override

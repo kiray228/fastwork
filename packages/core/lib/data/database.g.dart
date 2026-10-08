@@ -9258,6 +9258,309 @@ class WaitlistRowsCompanion extends UpdateCompanion<WaitlistRow> {
   }
 }
 
+class $CompanyFollowRowsTable extends CompanyFollowRows
+    with TableInfo<$CompanyFollowRowsTable, CompanyFollowRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CompanyFollowRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<int> userId = GeneratedColumn<int>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _companyMeta = const VerificationMeta(
+    'company',
+  );
+  @override
+  late final GeneratedColumn<String> company = GeneratedColumn<String>(
+    'company',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, userId, company, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'company_follow_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CompanyFollowRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('company')) {
+      context.handle(
+        _companyMeta,
+        company.isAcceptableOrUnknown(data['company']!, _companyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_companyMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {userId, company},
+  ];
+  @override
+  CompanyFollowRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CompanyFollowRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}user_id'],
+      )!,
+      company: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}company'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CompanyFollowRowsTable createAlias(String alias) {
+    return $CompanyFollowRowsTable(attachedDatabase, alias);
+  }
+}
+
+class CompanyFollowRow extends DataClass
+    implements Insertable<CompanyFollowRow> {
+  final int id;
+  final int userId;
+  final String company;
+  final DateTime createdAt;
+  const CompanyFollowRow({
+    required this.id,
+    required this.userId,
+    required this.company,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['user_id'] = Variable<int>(userId);
+    map['company'] = Variable<String>(company);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  CompanyFollowRowsCompanion toCompanion(bool nullToAbsent) {
+    return CompanyFollowRowsCompanion(
+      id: Value(id),
+      userId: Value(userId),
+      company: Value(company),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory CompanyFollowRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CompanyFollowRow(
+      id: serializer.fromJson<int>(json['id']),
+      userId: serializer.fromJson<int>(json['userId']),
+      company: serializer.fromJson<String>(json['company']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'userId': serializer.toJson<int>(userId),
+      'company': serializer.toJson<String>(company),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  CompanyFollowRow copyWith({
+    int? id,
+    int? userId,
+    String? company,
+    DateTime? createdAt,
+  }) => CompanyFollowRow(
+    id: id ?? this.id,
+    userId: userId ?? this.userId,
+    company: company ?? this.company,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  CompanyFollowRow copyWithCompanion(CompanyFollowRowsCompanion data) {
+    return CompanyFollowRow(
+      id: data.id.present ? data.id.value : this.id,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      company: data.company.present ? data.company.value : this.company,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CompanyFollowRow(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('company: $company, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, userId, company, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CompanyFollowRow &&
+          other.id == this.id &&
+          other.userId == this.userId &&
+          other.company == this.company &&
+          other.createdAt == this.createdAt);
+}
+
+class CompanyFollowRowsCompanion extends UpdateCompanion<CompanyFollowRow> {
+  final Value<int> id;
+  final Value<int> userId;
+  final Value<String> company;
+  final Value<DateTime> createdAt;
+  const CompanyFollowRowsCompanion({
+    this.id = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.company = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  CompanyFollowRowsCompanion.insert({
+    this.id = const Value.absent(),
+    required int userId,
+    required String company,
+    required DateTime createdAt,
+  }) : userId = Value(userId),
+       company = Value(company),
+       createdAt = Value(createdAt);
+  static Insertable<CompanyFollowRow> custom({
+    Expression<int>? id,
+    Expression<int>? userId,
+    Expression<String>? company,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (userId != null) 'user_id': userId,
+      if (company != null) 'company': company,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  CompanyFollowRowsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? userId,
+    Value<String>? company,
+    Value<DateTime>? createdAt,
+  }) {
+    return CompanyFollowRowsCompanion(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      company: company ?? this.company,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<int>(userId.value);
+    }
+    if (company.present) {
+      map['company'] = Variable<String>(company.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CompanyFollowRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('company: $company, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -9290,6 +9593,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $PayoutRowsTable payoutRows = $PayoutRowsTable(this);
   late final $FavoriteRowsTable favoriteRows = $FavoriteRowsTable(this);
   late final $WaitlistRowsTable waitlistRows = $WaitlistRowsTable(this);
+  late final $CompanyFollowRowsTable companyFollowRows =
+      $CompanyFollowRowsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -9314,6 +9619,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     payoutRows,
     favoriteRows,
     waitlistRows,
+    companyFollowRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -15635,6 +15941,203 @@ typedef $$WaitlistRowsTableProcessedTableManager =
       WaitlistRow,
       PrefetchHooks Function({bool shiftId})
     >;
+typedef $$CompanyFollowRowsTableCreateCompanionBuilder =
+    CompanyFollowRowsCompanion Function({
+      Value<int> id,
+      required int userId,
+      required String company,
+      required DateTime createdAt,
+    });
+typedef $$CompanyFollowRowsTableUpdateCompanionBuilder =
+    CompanyFollowRowsCompanion Function({
+      Value<int> id,
+      Value<int> userId,
+      Value<String> company,
+      Value<DateTime> createdAt,
+    });
+
+class $$CompanyFollowRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $CompanyFollowRowsTable> {
+  $$CompanyFollowRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get company => $composableBuilder(
+    column: $table.company,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CompanyFollowRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CompanyFollowRowsTable> {
+  $$CompanyFollowRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get company => $composableBuilder(
+    column: $table.company,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CompanyFollowRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CompanyFollowRowsTable> {
+  $$CompanyFollowRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<String> get company =>
+      $composableBuilder(column: $table.company, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$CompanyFollowRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CompanyFollowRowsTable,
+          CompanyFollowRow,
+          $$CompanyFollowRowsTableFilterComposer,
+          $$CompanyFollowRowsTableOrderingComposer,
+          $$CompanyFollowRowsTableAnnotationComposer,
+          $$CompanyFollowRowsTableCreateCompanionBuilder,
+          $$CompanyFollowRowsTableUpdateCompanionBuilder,
+          (
+            CompanyFollowRow,
+            BaseReferences<
+              _$AppDatabase,
+              $CompanyFollowRowsTable,
+              CompanyFollowRow
+            >,
+          ),
+          CompanyFollowRow,
+          PrefetchHooks Function()
+        > {
+  $$CompanyFollowRowsTableTableManager(
+    _$AppDatabase db,
+    $CompanyFollowRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CompanyFollowRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CompanyFollowRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CompanyFollowRowsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> userId = const Value.absent(),
+                Value<String> company = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => CompanyFollowRowsCompanion(
+                id: id,
+                userId: userId,
+                company: company,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int userId,
+                required String company,
+                required DateTime createdAt,
+              }) => CompanyFollowRowsCompanion.insert(
+                id: id,
+                userId: userId,
+                company: company,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$CompanyFollowRowsTable, CompanyFollowRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $CompanyFollowRowsTable,
+                    CompanyFollowRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CompanyFollowRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CompanyFollowRowsTable,
+      CompanyFollowRow,
+      $$CompanyFollowRowsTableFilterComposer,
+      $$CompanyFollowRowsTableOrderingComposer,
+      $$CompanyFollowRowsTableAnnotationComposer,
+      $$CompanyFollowRowsTableCreateCompanionBuilder,
+      $$CompanyFollowRowsTableUpdateCompanionBuilder,
+      (
+        CompanyFollowRow,
+        BaseReferences<
+          _$AppDatabase,
+          $CompanyFollowRowsTable,
+          CompanyFollowRow
+        >,
+      ),
+      CompanyFollowRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -15677,4 +16180,6 @@ class $AppDatabaseManager {
       $$FavoriteRowsTableTableManager(_db, _db.favoriteRows);
   $$WaitlistRowsTableTableManager get waitlistRows =>
       $$WaitlistRowsTableTableManager(_db, _db.waitlistRows);
+  $$CompanyFollowRowsTableTableManager get companyFollowRows =>
+      $$CompanyFollowRowsTableTableManager(_db, _db.companyFollowRows);
 }

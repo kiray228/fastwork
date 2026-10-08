@@ -428,6 +428,19 @@ class Api {
       });
     });
 
+    // Подписка на новые смены компании.
+    router.post('/api/companies/<name>/follow',
+        (Request request, String name) async {
+      return _authorized(request, (user) async {
+        final body = await _body(request);
+        await _shiftsFor(user).followCompany(
+          Uri.decodeComponent(name),
+          follow: body['follow'] as bool? ?? true,
+        );
+        return _json({'ok': true});
+      });
+    });
+
     router.get('/api/shifts/<id|[0-9]+>', (Request request, String id) async {
       return _authorized(request, (user) async {
         final shift = await _shiftsFor(user).shiftById(int.parse(id));

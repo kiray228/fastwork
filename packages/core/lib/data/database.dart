@@ -291,6 +291,27 @@ class WaitlistRows extends Table {
       ];
 }
 
+/// Подписки исполнителей на компании.
+///
+/// Понравилось работать в «Magnum» — подписался, и когда Magnum
+/// выставит смену в твоём городе, придёт уведомление. Это дешёвая
+/// замена «сохранённому поиску» у конкурентов: люди обычно ищут не
+/// абстрактную «смену грузчика», а работу у знакомого заказчика.
+///
+/// Компания здесь — название, как и в сменах: отдельной таблицы компаний
+/// в проекте нет, и заводить её ради подписок незачем.
+class CompanyFollowRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer()();
+  TextColumn get company => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {userId, company},
+      ];
+}
+
 /// Одноразовые коды для входа.
 ///
 /// Обрати внимание: хранится не сам код, а его **отпечаток** — результат
@@ -617,6 +638,7 @@ class NotificationRows extends Table {
     PayoutRows,
     FavoriteRows,
     WaitlistRows,
+    CompanyFollowRows,
   ],
 )
 /// Описание базы: какие таблицы и какой версии схема.
@@ -725,7 +747,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -814,6 +836,9 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 16) {
             await m.createTable(waitlistRows);
+          }
+          if (from < 17) {
+            await m.createTable(companyFollowRows);
           }
         },
         beforeOpen: (details) async {
