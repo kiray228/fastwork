@@ -465,6 +465,29 @@ class Api {
       });
     });
 
+    // Подписки на виды работ: какие есть и включить/выключить одну.
+    router.get('/api/me/categories', (Request request) async {
+      return _authorized(request, (user) async {
+        final followed = await _shiftsFor(user).followedCategories();
+        return _json(followed.toList()..sort());
+      });
+    });
+
+    router.post('/api/me/categories/<id>', (Request request, String id) async {
+      return _authorized(request, (user) async {
+        final category = Uri.decodeComponent(id);
+        if (!kShiftCategories.any((c) => c.id == category)) {
+          return _error(serverTr.unknownCategory);
+        }
+        final body = await _body(request);
+        await _shiftsFor(user).followCategory(
+          category,
+          follow: body['follow'] as bool? ?? true,
+        );
+        return _json({'ok': true});
+      });
+    });
+
     router.get('/api/shifts/<id|[0-9]+>', (Request request, String id) async {
       return _authorized(request, (user) async {
         final shift = await _shiftsFor(user).shiftById(int.parse(id));
@@ -524,6 +547,15 @@ class Api {
           int.parse(id),
           code: body['code'] as String?,
         );
+        return _json({'result': result.name});
+      });
+    });
+
+    // «Точно выйду» — подтверждение накануне.
+    router.post('/api/shifts/<id|[0-9]+>/confirm-coming',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        final result = await _shiftsFor(user).confirmComing(int.parse(id));
         return _json({'result': result.name});
       });
     });

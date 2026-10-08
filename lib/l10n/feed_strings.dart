@@ -8,6 +8,10 @@ import 'package:fastwork_core/lang.dart';
 abstract class FeedStrings {
   const FeedStrings();
 
+  /// Плитка «Все дни» в полосе дат и заголовок списка.
+  String get allDays;
+  String get allDaysTitle;
+
   static FeedStrings of(Lang lang) => switch (lang) {
         Lang.ru => const _Ru(),
         Lang.kk => const _Kk(),
@@ -89,6 +93,11 @@ abstract class FeedStrings {
 
 class _Ru extends FeedStrings {
   const _Ru();
+
+  @override
+  String get allDays => 'Все дни';
+  @override
+  String get allDaysTitle => 'Две недели';
 
   // ---- Лента: отметка «Я на месте» ----
 
@@ -205,6 +214,11 @@ class _Ru extends FeedStrings {
 
 class _Kk extends FeedStrings {
   const _Kk();
+
+  @override
+  String get allDays => 'Барлығы';
+  @override
+  String get allDaysTitle => 'Екі апта';
 
   // ---- Лента: отметка «Я на месте» ----
 
@@ -325,6 +339,11 @@ class _Kk extends FeedStrings {
 
 class _En extends FeedStrings {
   const _En();
+
+  @override
+  String get allDays => 'All days';
+  @override
+  String get allDaysTitle => 'Two weeks';
 
   // ---- Лента: отметка «Я на месте» ----
 

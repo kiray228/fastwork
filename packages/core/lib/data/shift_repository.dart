@@ -30,6 +30,7 @@ enum BookingResult {
   ratingTooLow, // рейтинг ниже порога заказчика
   tooLateToCancel, // срок отмены прошёл
   tooEarlyToCheckIn, // отметиться можно только в день смены
+  tooEarlyToConfirm, // подтвердить выход можно только за сутки до начала
   notMine, // чужую смену отменить или изменить нельзя
   alreadyCancelled, // смена уже отменена
   fewerThanHired, // мест меньше, чем уже набрано людей
@@ -117,6 +118,13 @@ abstract class ShiftRepository {
 
   /// Подписаться на новые смены компании (`follow: true`) или отписаться.
   Future<void> followCompany(String company, {required bool follow});
+
+  /// Виды работ (ключи категорий), о новых сменах которых сообщать.
+  Future<Set<String>> followedCategories();
+
+  /// Подписаться на вид работ (`follow: true`) или отписаться: новая
+  /// смена этого вида в городе человека придёт уведомлением.
+  Future<void> followCategory(String category, {required bool follow});
 
   /// Оставлял ли текущий пользователь отзыв об этой смене.
   Future<bool> hasReviewed(int shiftId);
@@ -215,6 +223,10 @@ abstract class ShiftRepository {
 
   /// Код отметки для заказчика смены. Чужому — null.
   Future<String?> checkInCode(int shiftId);
+
+  /// Подтвердить накануне: «точно выйду». Можно за сутки до начала и до
+  /// него; заказчик увидит это в списке записавшихся.
+  Future<BookingResult> confirmComing(int shiftId);
 
   /// Заказчик подтверждает, что человек отработал.
   /// Только после этого смена идёт в заработок и в рейтинг.
@@ -439,6 +451,9 @@ class DbShiftRepository implements ShiftRepository {
     (SELECT a3.checked_in_at FROM application_rows a3
       WHERE a3.shift_id = s.id AND a3.worker_id = $_workerId)
       AS my_checked_in_at,
+    (SELECT a4.coming_confirmed_at FROM application_rows a4
+      WHERE a4.shift_id = s.id AND a4.worker_id = $_workerId)
+      AS my_coming_confirmed_at,
     CASE WHEN EXISTS (SELECT 1 FROM waitlist_rows wl
       WHERE wl.shift_id = s.id AND wl.worker_id = $_workerId)
       THEN 1 ELSE 0 END AS my_waitlisted''';
@@ -461,6 +476,8 @@ class DbShiftRepository implements ShiftRepository {
         workersHired: row.read<int>('hired'),
         myStatus: row.readNullable<String>('my_status'),
         myCheckedInAt: row.readNullable<DateTime>('my_checked_in_at'),
+        myComingConfirmedAt:
+            row.readNullable<DateTime>('my_coming_confirmed_at'),
         duties: _splitDuties(row.read<String>('duties')),
         dressCode: row.readNullable<String>('dress_code'),
         employerComment: row.readNullable<String>('employer_comment'),
@@ -868,6 +885,26 @@ class DbShiftRepository implements ShiftRepository {
   }
 
   @override
+  Future<BookingResult> confirmComing(int shiftId) async {
+    final shift = await shiftById(shiftId);
+    if (shift == null || !shift.isApplied) return BookingResult.notFound;
+    if (shift.isCancelled) return BookingResult.alreadyCancelled;
+    if (shift.isComingConfirmed) return BookingResult.ok;
+    final now = clock();
+    if (!now.isBefore(shift.startsAt)) return BookingResult.alreadyStarted;
+    if (!shift.canConfirmComingAt(now)) return BookingResult.tooEarlyToConfirm;
+
+    await (db.update(db.applicationRows)
+          ..where((a) =>
+              a.shiftId.equals(shiftId) &
+              a.workerId.equals(_workerId) &
+              a.status.equals(ApplicationStatus.active) &
+              a.comingConfirmedAt.isNull()))
+        .write(ApplicationRowsCompanion(comingConfirmedAt: Value(now)));
+    return BookingResult.ok;
+  }
+
+  @override
   Future<String?> checkInCode(int shiftId) async {
     final row = await (db.select(db.shiftRows)
           ..where((s) => s.id.equals(shiftId)))
@@ -1117,10 +1154,44 @@ class DbShiftRepository implements ShiftRepository {
         );
   }
 
-  /// Сказать подписчикам компании о её новой смене.
+  @override
+  Future<Set<String>> followedCategories() async {
+    final rows = await (db.select(db.categoryFollowRows)
+          ..where((f) => f.userId.equals(_workerId)))
+        .get();
+    return {for (final r in rows) r.category};
+  }
+
+  @override
+  Future<void> followCategory(String category, {required bool follow}) async {
+    if (!follow) {
+      await (db.delete(db.categoryFollowRows)
+            ..where((f) =>
+                f.userId.equals(_workerId) & f.category.equals(category)))
+          .go();
+      return;
+    }
+    await db.into(db.categoryFollowRows).insert(
+          CategoryFollowRowsCompanion.insert(
+            userId: _workerId,
+            category: category,
+            createdAt: clock(),
+          ),
+          onConflict: DoNothing(
+            target: [
+              db.categoryFollowRows.userId,
+              db.categoryFollowRows.category,
+            ],
+          ),
+        );
+  }
+
+  /// Сказать подписчикам компании и вида работ о новой смене.
   ///
   /// Только тем, кто в городе смены. И не тем, кого уже позвали как
   /// любимых исполнителей: два уведомления об одной смене — это шум.
+  /// По той же причине подписанный и на компанию, и на вид работ получит
+  /// одно уведомление — про компанию: её он выбрал осознанно.
   Future<void> _notifyFollowers(Shift shift) async {
     final employer = shift.createdBy;
     final rows = await db.query(
@@ -1139,14 +1210,48 @@ class DbShiftRepository implements ShiftRepository {
       readsFrom: {db.companyFollowRows, db.userRows, db.favoriteRows},
     ).get();
 
+    final told = <int>{};
     for (final r in rows) {
       final userId = r.read<int>('user_id');
-      if (userId == employer) continue;
+      if (userId == employer || !told.add(userId)) continue;
       await _notify(
         userId: userId,
         kind: NotificationKind.newShift,
         note: (t) => t.newShift(shift.company, shift.title, shift.workDate,
             _timeOf(shift), formatMoney(shift.totalPay)),
+        shiftId: shift.id,
+      );
+    }
+
+    final byCategory = await db.query(
+      '''
+      SELECT f.user_id FROM category_follow_rows f
+      JOIN user_rows u ON u.id = f.user_id
+      WHERE f.category = ? AND u.city = ?
+        AND NOT EXISTS (SELECT 1 FROM favorite_rows fav
+          WHERE fav.employer_id = ? AND fav.worker_id = f.user_id)
+      ''',
+      variables: [
+        Variable.withString(shift.category),
+        Variable.withString(shift.city),
+        Variable.withInt(employer ?? 0),
+      ],
+      readsFrom: {db.categoryFollowRows, db.userRows, db.favoriteRows},
+    ).get();
+
+    for (final r in byCategory) {
+      final userId = r.read<int>('user_id');
+      if (userId == employer || !told.add(userId)) continue;
+      await _notify(
+        userId: userId,
+        kind: NotificationKind.newShift,
+        note: (t) => t.newShiftInCategory(
+            t.category(shift.category),
+            shift.company,
+            shift.title,
+            shift.workDate,
+            _timeOf(shift),
+            formatMoney(shift.totalPay)),
         shiftId: shift.id,
       );
     }
@@ -1538,6 +1643,7 @@ class DbShiftRepository implements ShiftRepository {
                WHERE n.worker_id = u.id AND n.status = 'no_show'
              ), 0) AS INTEGER) AS missed_count,
              a.check_in_verified AS check_in_verified,
+             a.coming_confirmed_at AS coming_confirmed_at,
              CASE WHEN EXISTS (SELECT 1 FROM favorite_rows f
                WHERE f.employer_id = $_workerId AND f.worker_id = u.id)
              THEN 1 ELSE 0 END AS is_favorite
@@ -1573,6 +1679,8 @@ class DbShiftRepository implements ShiftRepository {
               checkedInAt: r.readNullable<DateTime>('checked_in_at'),
               isFavorite: r.read<int>('is_favorite') > 0,
               checkInVerified: r.read<bool>('check_in_verified'),
+              comingConfirmedAt:
+                  r.readNullable<DateTime>('coming_confirmed_at'),
             ))
         .toList();
   }

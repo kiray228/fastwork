@@ -124,11 +124,20 @@ class _ShiftsPageState extends State<ShiftsPage> {
   /// и `await` говорит «подожди ответа, но не морозь при этом экран».
   Future<void> _load() async {
     final result = await load(() async {
-      final loaded = await repository.shiftsOn(
-        dayAt(selectedDay),
-        filter: filter,
-      );
       final days = await repository.daysWithShifts();
+      final List<Shift> loaded;
+      if (selectedDay == DateStrip.allDays) {
+        // Все дни — это дни с точками в полосе: пустые спрашивать незачем.
+        final ahead = [
+          for (var i = 0; i < DateStrip.days; i++)
+            if (days.contains(dayAt(i))) dayAt(i),
+        ];
+        final perDay = await Future.wait(
+            ahead.map((day) => repository.shiftsOn(day, filter: filter)));
+        loaded = [for (final list in perDay) ...list];
+      } else {
+        loaded = await repository.shiftsOn(dayAt(selectedDay), filter: filter);
+      }
       final names = await repository.companies();
       final kinds = await repository.categories();
       return (loaded, days, names, kinds);
@@ -359,7 +368,7 @@ class _ShiftsPageState extends State<ShiftsPage> {
             ),
             SliverToBoxAdapter(
               child: _ListHeader(
-                date: selectedDate,
+                date: selectedDay == DateStrip.allDays ? null : selectedDate,
                 count: count,
                 filter: filter,
                 onFilterTap: _openFilter,
@@ -397,6 +406,31 @@ class _ShiftsPageState extends State<ShiftsPage> {
                           : filter.query.isNotEmpty
                               ? tr.feed.emptyQuerySubtitle
                               : tr.feed.emptyFilterSubtitle,
+                    ),
+                  ),
+                ],
+              Ready(:final value) when selectedDay == DateStrip.allDays => [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    sliver: SliverList.list(
+                      children: [
+                        for (final (index, shift) in value.indexed) ...[
+                          // Новый день — подпись над его первой сменой.
+                          if (index == 0 ||
+                              !isSameDay(value[index - 1].workDate,
+                                  shift.workDate))
+                            _DayHeading(date: shift.workDate),
+                          AnimatedEntrance(
+                            key: ValueKey('all/${shift.id}'),
+                            index: index,
+                            child: ShiftCard(
+                              shift: shift,
+                              userRating: widget.session.rating,
+                              onTap: () => _openShift(shift),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ],
@@ -553,7 +587,8 @@ class _NextShiftBanner extends StatelessWidget {
 
 /// Строка над списком: дата, число смен и кнопка фильтра.
 class _ListHeader extends StatelessWidget {
-  final DateTime date;
+  /// null — «Все дни».
+  final DateTime? date;
   final int? count;
   final ShiftFilter filter;
   final VoidCallback onFilterTap;
@@ -581,8 +616,10 @@ class _ListHeader extends StatelessWidget {
         children: [
           Flexible(
             child: Text(
-              '${date.day} ${monthsShort[date.month - 1]}, '
-              '${weekdaysShort[date.weekday - 1]}',
+              switch (date) {
+                null => tr.feed.allDaysTitle,
+                final date => tr.core.dayMonthWeekday(date),
+              },
               style: Theme.of(context).textTheme.titleMedium,
               overflow: TextOverflow.ellipsis,
             ),
@@ -598,6 +635,31 @@ class _ListHeader extends StatelessWidget {
           const Spacer(),
           _FilterButton(activeCount: active, onTap: onFilterTap),
         ],
+      ),
+    );
+  }
+}
+
+/// Подпись дня в списке «Все дни»: «Завтра, 9 окт, пт».
+class _DayHeading extends StatelessWidget {
+  final DateTime date;
+
+  const _DayHeading({required this.date});
+
+  @override
+  Widget build(BuildContext context) {
+    final relative = relativeDay(date, DateTime.now());
+    final full = tr.core.dayMonthWeekday(date);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 6, 4, 10),
+      child: Text(
+        relative == full
+            ? full
+            : '${relative[0].toUpperCase()}${relative.substring(1)}, $full',
+        style: Theme.of(context)
+            .textTheme
+            .titleMedium
+            ?.copyWith(fontSize: 14.5, color: AppColors.muted),
       ),
     );
   }

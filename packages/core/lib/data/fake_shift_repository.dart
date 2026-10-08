@@ -51,6 +51,7 @@ class FakeShiftRepository implements ShiftRepository {
       myStatus: status,
       clearMyStatus: status == null,
       myCheckedInAt: _checkIns[s.id],
+      myComingConfirmedAt: _coming[s.id],
       cancelledAt: _cancelled.contains(s.id) ? clock() : null,
       // Демо-смены «оплатил» сервис, новые оплачены, когда прошла оплата.
       isFunded: !_refunded.contains(s.id) && !_awaiting.contains(s.id),
@@ -164,6 +165,22 @@ class FakeShiftRepository implements ShiftRepository {
 
     _checkIns[shiftId] = clock();
     if (code != null) _verified.add(shiftId);
+    return BookingResult.ok;
+  }
+
+  /// Подтверждения «точно выйду»: номер смены -> когда подтвердил.
+  final Map<int, DateTime> _coming = {};
+
+  @override
+  Future<BookingResult> confirmComing(int shiftId) async {
+    final shift = await shiftById(shiftId);
+    if (shift == null || !shift.isApplied) return BookingResult.notFound;
+    if (shift.isCancelled) return BookingResult.alreadyCancelled;
+    if (shift.isComingConfirmed) return BookingResult.ok;
+    final now = clock();
+    if (!now.isBefore(shift.startsAt)) return BookingResult.alreadyStarted;
+    if (!shift.canConfirmComingAt(now)) return BookingResult.tooEarlyToConfirm;
+    _coming[shiftId] = now;
     return BookingResult.ok;
   }
 
@@ -327,6 +344,17 @@ class FakeShiftRepository implements ShiftRepository {
   @override
   Future<void> followCompany(String company, {required bool follow}) async =>
       follow ? _followed.add(company) : _followed.remove(company);
+
+  final Set<String> _followedCategories = {};
+
+  @override
+  Future<Set<String>> followedCategories() async => {..._followedCategories};
+
+  @override
+  Future<void> followCategory(String category, {required bool follow}) async =>
+      follow
+          ? _followedCategories.add(category)
+          : _followedCategories.remove(category);
 
   @override
   Future<bool> hasReviewed(int shiftId) async =>
@@ -522,6 +550,7 @@ class FakeShiftRepository implements ShiftRepository {
         checkedInAt: _checkIns[shiftId],
         isFavorite: _favorites.contains(1),
         checkInVerified: _verified.contains(shiftId),
+        comingConfirmedAt: _coming[shiftId],
       ),
     ];
   }

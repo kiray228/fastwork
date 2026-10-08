@@ -126,6 +126,28 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     );
   }
 
+  /// Подтвердить накануне: «точно выйду».
+  Future<void> _confirmComing() async {
+    setState(() => busy = true);
+    final result = await guarded(
+      context,
+      () => widget.repository.confirmComing(widget.shiftId),
+    );
+    await _load();
+    if (!mounted) return;
+    setState(() => busy = false);
+    if (result == null) return;
+
+    _showResult(
+      switch (result) {
+        BookingResult.ok => tr.shift.comingConfirmedSnack,
+        BookingResult.tooEarlyToConfirm => tr.shift.comingTooEarly,
+        BookingResult.alreadyStarted => tr.shift.comingTooLate,
+        _ => tr.shift.comingFailed,
+      },
+    );
+  }
+
   /// Отменить запись — тоже с подтверждением, но коротким.
   Future<void> _cancel() async {
     final current = shift;
@@ -319,7 +341,11 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
               children: [
                 if (current.isApplied) ...[
-                  _AppliedBanner(shift: current),
+                  _AppliedBanner(
+                    shift: current,
+                    busy: busy,
+                    onConfirmComing: _confirmComing,
+                  ),
                   const SizedBox(height: 14),
                 ] else if (!current.ratingAllows(widget.session.rating)) ...[
                   _RatingLockBanner(
@@ -440,12 +466,20 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
 /// Плашка «вы записаны» вверху экрана.
 class _AppliedBanner extends StatelessWidget {
   final Shift shift;
+  final bool busy;
+  final VoidCallback onConfirmComing;
 
-  const _AppliedBanner({required this.shift});
+  const _AppliedBanner({
+    required this.shift,
+    required this.busy,
+    required this.onConfirmComing,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final canCancel = shift.canCancelAt(DateTime.now());
+    final now = DateTime.now();
+    final canCancel = shift.canCancelAt(now);
+    final canConfirm = shift.canConfirmComingAt(now);
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -485,6 +519,47 @@ class _AppliedBanner extends StatelessWidget {
               fontWeight: canCancel ? FontWeight.w500 : FontWeight.w700,
             ),
           ),
+          // Накануне — «точно выйду». Заказчик за сутки видит, на кого
+          // можно рассчитывать, и не обзванивает всех подряд.
+          if (shift.isComingConfirmed) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.thumb_up_alt_rounded,
+                    size: 16, color: AppColors.brand),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    tr.shift.comingConfirmed,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.brandDark,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ] else if (canConfirm) ...[
+            const SizedBox(height: 10),
+            Text(
+              tr.shift.comingHint,
+              style: const TextStyle(
+                fontSize: 12.5,
+                height: 1.35,
+                color: AppColors.body,
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: busy ? null : onConfirmComing,
+                icon: const Icon(Icons.thumb_up_alt_outlined, size: 18),
+                label: Text(tr.shift.comingButton),
+              ),
+            ),
+          ],
         ],
       ),
     );

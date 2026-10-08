@@ -147,4 +147,19 @@ void main() {
     final titles = [for (final n in notes as List) n['title']];
     expect(titles, contains('New booking for your shift'));
   });
+
+  test('подписки на виды работ: включить, увидеть, незнакомый вид — отказ',
+      () async {
+    final (ok, _) = await call('POST', '/api/me/categories/loader',
+        token: workerToken, body: {'follow': true});
+    expect(ok, 200);
+    final (_, list) =
+        await call('GET', '/api/me/categories', token: workerToken);
+    expect(list, ['loader']);
+
+    final (bad, json) = await call('POST', '/api/me/categories/rocket',
+        token: workerToken, lang: 'en', body: {'follow': true});
+    expect(bad, 400);
+    expect(json['error'], 'Unknown job category');
+  });
 }

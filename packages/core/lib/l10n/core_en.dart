@@ -371,12 +371,21 @@ class CoreEn extends CoreStrings {
             'You follow this company.',
       );
   @override
+  Note newShiftInCategory(String category, String company, String title,
+          DateTime day, String time, String amount) =>
+      (
+        title: 'New shift: $category',
+        body: '$company, “$title”, ${dayMonth(day)}, $time, $amount. '
+            'You follow this type of work.',
+      );
+  @override
   Note reminder(String when, String time, String title, String company,
           String address) =>
       (
         title: 'Shift $when at $time',
-        body: '“$title”, $company. $address. Arrive 10 minutes early and '
-            'check in in the app — “I’m here”.',
+        body: '“$title”, $company. $address. Confirm you’re coming — '
+            '“I’ll be there”. Arrive 10 minutes early and check in in the '
+            'app — “I’m here”.',
       );
 
   @override

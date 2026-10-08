@@ -372,12 +372,21 @@ class CoreRu extends CoreStrings {
             'Вы подписаны на эту компанию.',
       );
   @override
+  Note newShiftInCategory(String category, String company, String title,
+          DateTime day, String time, String amount) =>
+      (
+        title: 'Новая смена: $category',
+        body: '$company, «$title» ${dayMonth(day)}, $time, $amount. '
+            'Вы подписаны на этот вид работ.',
+      );
+  @override
   Note reminder(String when, String time, String title, String company,
           String address) =>
       (
         title: 'Смена $when в $time',
-        body: '«$title», $company. $address. Придите на 10 минут раньше и '
-            'отметьтесь в приложении — «Я на месте».',
+        body: '«$title», $company. $address. Подтвердите, что выйдете, — '
+            '«Точно выйду». Придите на 10 минут раньше и отметьтесь в '
+            'приложении — «Я на месте».',
       );
 
   @override

@@ -92,6 +92,10 @@ class ApiShiftRepository implements ShiftRepository {
       _result(await client.post('/api/shifts/$shiftId/cancel'));
 
   @override
+  Future<BookingResult> confirmComing(int shiftId) async =>
+      _result(await client.post('/api/shifts/$shiftId/confirm-coming'));
+
+  @override
   Future<BookingResult> checkIn(int shiftId, {String? code}) async =>
       _result(await client.post(
           '/api/shifts/$shiftId/checkin', code == null ? null : {'code': code}));
@@ -180,6 +184,17 @@ class ApiShiftRepository implements ShiftRepository {
   @override
   Future<void> followCompany(String company, {required bool follow}) async =>
       client.post('/api/companies/${Uri.encodeComponent(company)}/follow',
+          {'follow': follow});
+
+  @override
+  Future<Set<String>> followedCategories() async {
+    final data = await client.get('/api/me/categories');
+    return {for (final c in data as List) c as String};
+  }
+
+  @override
+  Future<void> followCategory(String category, {required bool follow}) async =>
+      client.post('/api/me/categories/${Uri.encodeComponent(category)}',
           {'follow': follow});
 
   @override

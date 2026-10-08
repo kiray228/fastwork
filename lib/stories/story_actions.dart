@@ -72,6 +72,7 @@ Future<void> openStories(
         repository: repos.shifts,
         wallet: repos.wallet,
         isManager: user?.isManager ?? false,
+        user: user,
       )));
     case StoryAction.documents:
       await navigator.push(appRoute(

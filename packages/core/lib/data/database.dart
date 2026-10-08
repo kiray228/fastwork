@@ -327,6 +327,25 @@ class CompanyFollowRows extends Table {
       ];
 }
 
+/// Подписки исполнителей на виды работ: «сообщать о новых сменах
+/// грузчика».
+///
+/// Это и есть «сохранённый поиск» конкурентов, только без лишнего: город
+/// у человека и так один, а день не важен — важно, что появилась работа,
+/// которую он умеет делать. Вид работ — ключ категории (`loader`), а не
+/// название: названия переводятся, а ключ один на всех языках.
+class CategoryFollowRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer()();
+  TextColumn get category => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {userId, category},
+      ];
+}
+
 /// Одноразовые коды для входа.
 ///
 /// Обрати внимание: хранится не сам код, а его **отпечаток** — результат
@@ -562,6 +581,11 @@ class ApplicationRows extends Table {
   BoolColumn get checkInVerified =>
       boolean().withDefault(const Constant(false))();
 
+  /// Когда исполнитель подтвердил накануне: «точно выйду». null — не
+  /// подтверждал. Заказчик видит это в списке записавшихся и за сутки
+  /// знает, на кого рассчитывать, а кого стоит переспросить.
+  DateTimeColumn get comingConfirmedAt => dateTime().nullable()();
+
   /// Один работник не может откликнуться на одну смену дважды.
   /// Это проверяет сама база — обойти нельзя.
   @override
@@ -658,6 +682,7 @@ class NotificationRows extends Table {
     FavoriteRows,
     WaitlistRows,
     CompanyFollowRows,
+    CategoryFollowRows,
   ],
 )
 /// Описание базы: какие таблицы и какой версии схема.
@@ -766,7 +791,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -866,6 +891,13 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 19) {
             await addColumnIfMissing(m, userRows, userRows.language);
+          }
+          if (from < 20) {
+            await m.createTable(categoryFollowRows);
+          }
+          if (from < 21) {
+            await addColumnIfMissing(
+                m, applicationRows, applicationRows.comingConfirmedAt);
           }
         },
         beforeOpen: (details) async {

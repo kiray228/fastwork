@@ -8,6 +8,15 @@ import 'package:fastwork_core/lang.dart';
 abstract class ShiftStrings {
   const ShiftStrings();
 
+  // ---- «Точно выйду» ----
+  String get comingButton;
+  String get comingHint;
+  String get comingConfirmed;
+  String get comingConfirmedSnack;
+  String get comingTooEarly;
+  String get comingTooLate;
+  String get comingFailed;
+
   static ShiftStrings of(Lang lang) => switch (lang) {
         Lang.ru => const _Ru(),
         Lang.kk => const _Kk(),
@@ -168,6 +177,23 @@ abstract class ShiftStrings {
 
 class _Ru extends ShiftStrings {
   const _Ru();
+
+  @override
+  String get comingButton => 'Точно выйду';
+  @override
+  String get comingHint =>
+      'Подтвердите, что выйдете: заказчик увидит, что на вас можно рассчитывать.';
+  @override
+  String get comingConfirmed => 'Вы подтвердили, что выйдете';
+  @override
+  String get comingConfirmedSnack =>
+      'Спасибо! Заказчик увидит, что вы точно выйдете';
+  @override
+  String get comingTooEarly => 'Подтвердить можно за сутки до начала';
+  @override
+  String get comingTooLate => 'Смена уже началась — отметьтесь «Я на месте»';
+  @override
+  String get comingFailed => 'Не получилось подтвердить';
 
   static String _plural(int n, String one, String few, String many) {
     final last = n % 10;
@@ -456,6 +482,25 @@ class _Ru extends ShiftStrings {
 class _Kk extends ShiftStrings {
   const _Kk();
 
+  @override
+  String get comingButton => 'Келемін';
+  @override
+  String get comingHint =>
+      'Келетініңізді растаңыз: тапсырыс беруші сізге сенуге болатынын көреді.';
+  @override
+  String get comingConfirmed => 'Келетініңізді растадыңыз';
+  @override
+  String get comingConfirmedSnack =>
+      'Рақмет! Тапсырыс беруші келетініңізді көреді';
+  @override
+  String get comingTooEarly =>
+      'Ауысым басталуына бір тәулік қалғанда растауға болады';
+  @override
+  String get comingTooLate =>
+      'Ауысым басталып кетті — «Мен орнымдамын» деп белгіленіңіз';
+  @override
+  String get comingFailed => 'Растау мүмкін болмады';
+
   // ---- Экран смены: шапка ----
   @override
   String get title => 'Ауысым';
@@ -727,6 +772,24 @@ class _Kk extends ShiftStrings {
 
 class _En extends ShiftStrings {
   const _En();
+
+  @override
+  String get comingButton => "I'll be there";
+  @override
+  String get comingHint =>
+      "Confirm you're coming: the employer will see they can count on you.";
+  @override
+  String get comingConfirmed => "You've confirmed you're coming";
+  @override
+  String get comingConfirmedSnack =>
+      "Thanks! The employer will see you're coming";
+  @override
+  String get comingTooEarly => 'You can confirm within 24 hours of the start';
+  @override
+  String get comingTooLate =>
+      "The shift has started — check in with “I'm here”";
+  @override
+  String get comingFailed => "Couldn't confirm";
 
   static String _plural(int n, String one, String many) =>
       n == 1 ? '$n $one' : '$n $many';

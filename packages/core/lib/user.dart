@@ -177,13 +177,19 @@ class ShiftApplicant {
   /// на месте, а не нажал кнопку из дома.
   final bool checkInVerified;
 
+  /// Когда человек подтвердил накануне, что выйдет. null — не подтверждал.
+  final DateTime? comingConfirmedAt;
+
   const ShiftApplicant({
     required this.user,
     required this.status,
     required this.checkedInAt,
     this.isFavorite = false,
     this.checkInVerified = false,
+    this.comingConfirmedAt,
   });
+
+  bool get isComingConfirmed => comingConfirmedAt != null;
 
   bool get isCheckedIn => checkedInAt != null;
   bool get isConfirmed => status == 'completed';
@@ -234,6 +240,7 @@ extension ShiftApplicantJson on ShiftApplicant {
         'checkedInAt': checkedInAt?.toIso8601String(),
         'isFavorite': isFavorite,
         'checkInVerified': checkInVerified,
+        'comingConfirmedAt': comingConfirmedAt?.toIso8601String(),
       };
 }
 
@@ -246,4 +253,7 @@ ShiftApplicant applicantFromJson(Map<String, dynamic> json) => ShiftApplicant(
       // Старый сервер этого поля не знает — значит, не отмечен.
       isFavorite: json['isFavorite'] as bool? ?? false,
       checkInVerified: json['checkInVerified'] as bool? ?? false,
+      comingConfirmedAt: json['comingConfirmedAt'] == null
+          ? null
+          : DateTime.parse(json['comingConfirmedAt'] as String),
     );

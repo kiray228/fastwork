@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'auth/terms_page.dart';
+import 'category_alerts_page.dart';
 import 'data/app_preferences.dart';
 import 'data/repositories.dart';
 import 'data/session.dart';
@@ -200,6 +201,7 @@ class ProfilePage extends StatelessWidget {
                       repository: repos.shifts,
                       wallet: repos.wallet,
                       isManager: user.isManager,
+                      user: user,
                     )),
                   ),
                 ),
@@ -224,6 +226,20 @@ class ProfilePage extends StatelessWidget {
                         DocumentsPage(
                           repository: repos.documents,
                           session: session,
+                        ),
+                      ),
+                    ),
+                  ),
+                if (!user.isManager)
+                  _MenuRow(
+                    icon: Icons.notifications_active_outlined,
+                    title: tr.profile.menuAlerts,
+                    trailing: tr.profile.menuAlertsHint,
+                    onTap: () => Navigator.of(context).push(
+                      appRoute(
+                        CategoryAlertsPage(
+                          repository: repos.shifts,
+                          city: user.city,
                         ),
                       ),
                     ),
