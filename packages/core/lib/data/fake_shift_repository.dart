@@ -150,17 +150,29 @@ class FakeShiftRepository implements ShiftRepository {
   final Map<int, DateTime> _checkIns = {};
 
   @override
-  Future<BookingResult> checkIn(int shiftId) async {
+  Future<BookingResult> checkIn(int shiftId, {String? code}) async {
     final shift = await shiftById(shiftId);
     if (shift == null) return BookingResult.notFound;
     if (shift.isCheckedIn) return BookingResult.alreadyBooked;
     if (!shift.canCheckInAt(clock())) {
       return BookingResult.tooEarlyToCheckIn;
     }
+    if (code != null && code.trim() != _codes[shiftId]) {
+      return BookingResult.wrongCode;
+    }
 
     _checkIns[shiftId] = clock();
+    if (code != null) _verified.add(shiftId);
     return BookingResult.ok;
   }
+
+  /// Коды отметки по сменам и смены, где отметка подтверждена кодом.
+  final Map<int, String> _codes = {};
+  final Set<int> _verified = {};
+
+  @override
+  Future<String?> checkInCode(int shiftId) async =>
+      _codes.putIfAbsent(shiftId, newCheckInCode);
 
   @override
   Future<BookingResult> confirmAttendance({
@@ -505,6 +517,7 @@ class FakeShiftRepository implements ShiftRepository {
         status: status!,
         checkedInAt: _checkIns[shiftId],
         isFavorite: _favorites.contains(1),
+        checkInVerified: _verified.contains(shiftId),
       ),
     ];
   }

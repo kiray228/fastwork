@@ -1089,10 +1089,27 @@ void main() {
 
       expect(find.text('Я на месте'), findsOneWidget);
 
+      // Код на экране у заказчика; сначала человек ошибся цифрой.
+      final code = (await repo.checkInCode(1))!;
+      final wrong = code == '0000' ? '1111' : '0000';
       await tester.tap(find.text('Я на месте'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, wrong);
+      await tester.pump();
+      await tester.tap(find.text('Отметиться'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Код не подошёл'), findsOneWidget);
+
+      await tester.tap(find.text('Я на месте'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, code);
+      await tester.pump();
+      await tester.tap(find.text('Отметиться'));
       await tester.pumpAndSettle();
 
       expect(find.text('Вы отметились — ждём подтверждения'), findsOneWidget);
+      // Заказчик увидит отметку как подтверждённую кодом.
+      expect((await repo.applicantsFor(1)).single.checkInVerified, isTrue);
     });
 
     testWidgets('до дня смены отметки нет', (tester) async {

@@ -1234,4 +1234,31 @@ void main() {
         .toList();
     expect(kinds, [NotificationKind.invited]);
   });
+
+  // ---------------------------------------------------------------------
+  // КОД ОТМЕТКИ
+  // ---------------------------------------------------------------------
+
+  test('код отметки видит только заказчик, и он подтверждает отметку',
+      () async {
+    final (shiftId, worker, manager) = await upcomingShift(); // сегодня 10:00
+
+    session.setUser(worker);
+    expect(await shifts.checkInCode(shiftId), isNull, reason: 'не его смена');
+
+    session.setUser(manager);
+    final code = (await shifts.checkInCode(shiftId))!;
+    expect(code, matches(RegExp(r'^\d{4}$')));
+    expect(await shifts.checkInCode(shiftId), code, reason: 'код не меняется');
+
+    clock.setHour(10);
+    session.setUser(worker);
+    final wrong = code == '0000' ? '1111' : '0000';
+    expect(await shifts.checkIn(shiftId, code: wrong), BookingResult.wrongCode);
+    expect((await shifts.shiftById(shiftId))!.isCheckedIn, isFalse);
+    expect(await shifts.checkIn(shiftId, code: code), BookingResult.ok);
+
+    session.setUser(manager);
+    expect((await shifts.applicantsFor(shiftId)).single.checkInVerified, isTrue);
+  });
 }

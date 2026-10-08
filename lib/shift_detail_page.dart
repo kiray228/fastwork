@@ -10,6 +10,7 @@ import 'package:fastwork_core/shift.dart';
 import 'theme/app_colors.dart';
 import 'theme/glass.dart';
 import 'widgets/booking_confirm_sheet.dart';
+import 'widgets/check_in_dialog.dart';
 import 'widgets/async_state.dart';
 import 'widgets/common.dart';
 import 'widgets/nav.dart';
@@ -104,10 +105,14 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
   /// отработанной просто потому, что дата прошла, — теперь нужно
   /// действие человека и подтверждение заказчика.
   Future<void> _checkIn() async {
+    final choice = await showCheckInDialog(context);
+    if (choice == null || !mounted) return;
+    final code = choice is WithCode ? choice.code : null;
+
     setState(() => busy = true);
     final result = await guarded(
       context,
-      () => widget.repository.checkIn(widget.shiftId),
+      () => widget.repository.checkIn(widget.shiftId, code: code),
     );
     await _load();
     if (!mounted) return;
@@ -116,8 +121,12 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
 
     _showResult(
       switch (result) {
+        BookingResult.ok when code != null =>
+          'Отметка подтверждена кодом — заказчик её видит',
         BookingResult.ok => 'Отметка принята — заказчик её видит',
         BookingResult.alreadyBooked => 'Вы уже отметились',
+        BookingResult.wrongCode =>
+          'Код не подошёл — проверьте цифры у старшего смены',
         BookingResult.tooEarlyToCheckIn =>
           'Отметиться можно в день смены, не раньше чем за час до начала',
         _ => 'Не получилось отметиться',

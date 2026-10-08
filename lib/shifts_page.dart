@@ -14,6 +14,7 @@ import 'stories/story_actions.dart';
 import 'theme/app_colors.dart';
 import 'theme/glass.dart';
 import 'widgets/async_state.dart';
+import 'widgets/check_in_dialog.dart';
 import 'widgets/common.dart';
 import 'widgets/date_strip.dart';
 import 'widgets/filter_sheet.dart';
@@ -262,8 +263,15 @@ class _ShiftsPageState extends State<ShiftsPage> {
 
   /// «Я на месте» прямо с главного экрана — без захода в смену.
   Future<void> _checkIn(Shift shift) async {
+    final choice = await showCheckInDialog(context);
+    if (choice == null || !mounted) return;
+    final code = choice is WithCode ? choice.code : null;
+
     setState(() => checkingIn = true);
-    final result = await guarded(context, () => repository.checkIn(shift.id));
+    final result = await guarded(
+      context,
+      () => repository.checkIn(shift.id, code: code),
+    );
     if (!mounted) return;
     setState(() => checkingIn = false);
     if (result == null) return;
@@ -271,8 +279,12 @@ class _ShiftsPageState extends State<ShiftsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(switch (result) {
+          BookingResult.ok when code != null =>
+            'Отметка подтверждена кодом — заказчик её видит',
           BookingResult.ok => 'Отметка принята — заказчик её видит',
           BookingResult.alreadyBooked => 'Вы уже отметились',
+          BookingResult.wrongCode =>
+            'Код не подошёл — проверьте цифры у старшего смены',
           BookingResult.tooEarlyToCheckIn =>
             'Отметиться можно в день смены, не раньше чем за час до начала',
           _ => 'Не получилось отметиться',

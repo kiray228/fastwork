@@ -57,6 +57,14 @@ class ShiftRows extends Table {
   /// рассчитывал, не нашёл бы в архиве даже следа. А так смена остаётся:
   /// её видно в «Моих сменах» с пометкой «отменена».
   DateTimeColumn get cancelledAt => dateTime().nullable()();
+
+  /// Код отметки: четыре цифры, которые заказчик показывает людям на
+  /// месте. Кто ввёл код — точно пришёл: кнопку «Я на месте» можно
+  /// нажать и из дома, а код видно только на точке.
+  ///
+  /// Заводится при первом запросе заказчика, а не при создании смены:
+  /// так он появляется и у смен, созданных до этой колонки.
+  TextColumn get checkInCode => text().nullable()();
 }
 
 /// Пользователи приложения.
@@ -543,6 +551,10 @@ class ApplicationRows extends Table {
   /// время уже не вернёшь. Общее правило: храни самое подробное.
   DateTimeColumn get checkedInAt => dateTime().nullable()();
 
+  /// Отметка подтверждена кодом с экрана заказчика.
+  BoolColumn get checkInVerified =>
+      boolean().withDefault(const Constant(false))();
+
   /// Один работник не может откликнуться на одну смену дважды.
   /// Это проверяет сама база — обойти нельзя.
   @override
@@ -747,7 +759,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -839,6 +851,11 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 17) {
             await m.createTable(companyFollowRows);
+          }
+          if (from < 18) {
+            await addColumnIfMissing(m, shiftRows, shiftRows.checkInCode);
+            await addColumnIfMissing(
+                m, applicationRows, applicationRows.checkInVerified);
           }
         },
         beforeOpen: (details) async {

@@ -495,8 +495,22 @@ class Api {
     router.post('/api/shifts/<id|[0-9]+>/checkin',
         (Request request, String id) async {
       return _authorized(request, (user) async {
-        final result = await _shiftsFor(user).checkIn(int.parse(id));
+        final body = await _body(request);
+        final result = await _shiftsFor(user).checkIn(
+          int.parse(id),
+          code: body['code'] as String?,
+        );
         return _json({'result': result.name});
+      });
+    });
+
+    // Код отметки — только заказчику этой смены.
+    router.get('/api/shifts/<id|[0-9]+>/code',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        final code = await _shiftsFor(user).checkInCode(int.parse(id));
+        if (code == null) return _error('Это не ваша смена', status: 403);
+        return _json({'code': code});
       });
     });
 
