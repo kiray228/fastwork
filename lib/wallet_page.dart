@@ -5,12 +5,15 @@ import 'package:fastwork_core/data/wallet_repository.dart';
 import 'package:fastwork_core/mrp.dart';
 import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_core/shift.dart';
+import 'package:fastwork_core/user.dart';
+import 'earnings_statement_page.dart';
 import 'stories/story.dart';
 import 'stories/story_actions.dart';
 import 'theme/app_colors.dart';
 import 'widgets/async_state.dart';
 import 'widgets/common.dart';
 import 'widgets/earnings_chart.dart';
+import 'widgets/nav.dart';
 import 'widgets/payment_sheet.dart';
 import 'widgets/skeleton.dart';
 import 'l10n/strings.dart';
@@ -29,11 +32,15 @@ class WalletPage extends StatefulWidget {
   final WalletRepository wallet;
   final bool isManager;
 
+  /// Кто смотрит — для справки о заработке. Не передали — справки нет.
+  final AppUser? user;
+
   const WalletPage({
     super.key,
     required this.repository,
     required this.wallet,
     this.isManager = false,
+    this.user,
   });
 
   @override
@@ -162,6 +169,20 @@ class _WalletPageState extends State<WalletPage> {
                   EarningsChart(
                     weeks: weeklyEarnings(summary.entries, DateTime.now()),
                   ),
+                  if (widget.user != null)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => Navigator.of(context).push(
+                          appRoute(EarningsStatementPage(
+                            repository: widget.repository,
+                            user: widget.user!,
+                          )),
+                        ),
+                        icon: const Icon(Icons.description_outlined, size: 18),
+                        label: Text(tr.wallet.statementLink),
+                      ),
+                    ),
                 ],
                 if (limit != null) ...[
                   const SizedBox(height: 14),

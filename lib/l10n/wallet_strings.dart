@@ -8,6 +8,24 @@ import 'package:fastwork_core/lang.dart';
 abstract class WalletStrings {
   const WalletStrings();
 
+  // ---- Справка о заработке ----
+  String get statementLink;
+  String get statementTitle;
+  String get statementPrevMonth;
+  String get statementNextMonth;
+  String get statementShifts;
+  String get statementHours;
+  String get statementEarned;
+  String get statementShiftsTitle;
+  String get statementEmpty;
+  String get statementNote;
+  String get statementCopy;
+  String get statementCopied;
+  String get statementHeader;
+  String statementLine(String day, String company, String title, String time,
+      String duration, String amount);
+  String statementTotal(String shifts, String hours, String amount);
+
   static WalletStrings of(Lang lang) => switch (lang) {
         Lang.ru => const _Ru(),
         Lang.kk => const _Kk(),
@@ -117,6 +135,42 @@ abstract class WalletStrings {
 
 class _Ru extends WalletStrings {
   const _Ru();
+
+  @override
+  String get statementLink => 'Справка о заработке';
+  @override
+  String get statementTitle => 'Справка о заработке';
+  @override
+  String get statementPrevMonth => 'Предыдущий месяц';
+  @override
+  String get statementNextMonth => 'Следующий месяц';
+  @override
+  String get statementShifts => 'Смены';
+  @override
+  String get statementHours => 'Часы';
+  @override
+  String get statementEarned => 'Заработано';
+  @override
+  String get statementShiftsTitle => 'Отработанные смены';
+  @override
+  String get statementEmpty => 'За этот месяц подтверждённых смен нет.';
+  @override
+  String get statementNote =>
+      'Только смены, которые подтвердил заказчик, — за них начислены деньги.';
+  @override
+  String get statementCopy => 'Скопировать справку';
+  @override
+  String get statementCopied =>
+      'Справка скопирована — вставьте её в письмо или чат';
+  @override
+  String get statementHeader => 'Справка о заработке в fastwork';
+  @override
+  String statementLine(String day, String company, String title, String time,
+          String duration, String amount) =>
+      '$day — $company, «$title», $time, $duration — $amount';
+  @override
+  String statementTotal(String shifts, String hours, String amount) =>
+      'Итого: $shifts, $hours, $amount';
 
   static String _plural(int n, String one, String few, String many) {
     final last = n % 10;
@@ -292,6 +346,42 @@ class _Ru extends WalletStrings {
 class _Kk extends WalletStrings {
   const _Kk();
 
+  @override
+  String get statementLink => 'Табыс туралы анықтама';
+  @override
+  String get statementTitle => 'Табыс туралы анықтама';
+  @override
+  String get statementPrevMonth => 'Алдыңғы ай';
+  @override
+  String get statementNextMonth => 'Келесі ай';
+  @override
+  String get statementShifts => 'Ауысым';
+  @override
+  String get statementHours => 'Сағат';
+  @override
+  String get statementEarned => 'Табыс';
+  @override
+  String get statementShiftsTitle => 'Жұмыс істелген ауысымдар';
+  @override
+  String get statementEmpty => 'Бұл айда расталған ауысым жоқ.';
+  @override
+  String get statementNote =>
+      'Тек тапсырыс беруші растаған ауысымдар — ақша солар үшін есептелді.';
+  @override
+  String get statementCopy => 'Анықтаманы көшіру';
+  @override
+  String get statementCopied =>
+      'Анықтама көшірілді — оны хатқа не чатқа қойыңыз';
+  @override
+  String get statementHeader => 'fastwork-тегі табыс туралы анықтама';
+  @override
+  String statementLine(String day, String company, String title, String time,
+          String duration, String amount) =>
+      '$day — $company, «$title», $time, $duration — $amount';
+  @override
+  String statementTotal(String shifts, String hours, String amount) =>
+      'Барлығы: $shifts, $hours, $amount';
+
   // ---- Экран кошелька ----
 
   @override
@@ -455,6 +545,42 @@ class _Kk extends WalletStrings {
 
 class _En extends WalletStrings {
   const _En();
+
+  @override
+  String get statementLink => 'Earnings statement';
+  @override
+  String get statementTitle => 'Earnings statement';
+  @override
+  String get statementPrevMonth => 'Previous month';
+  @override
+  String get statementNextMonth => 'Next month';
+  @override
+  String get statementShifts => 'Shifts';
+  @override
+  String get statementHours => 'Hours';
+  @override
+  String get statementEarned => 'Earned';
+  @override
+  String get statementShiftsTitle => 'Shifts worked';
+  @override
+  String get statementEmpty => 'No confirmed shifts this month.';
+  @override
+  String get statementNote =>
+      'Only shifts confirmed by the employer — the ones you were paid for.';
+  @override
+  String get statementCopy => 'Copy statement';
+  @override
+  String get statementCopied =>
+      'Statement copied — paste it into an email or chat';
+  @override
+  String get statementHeader => 'fastwork earnings statement';
+  @override
+  String statementLine(String day, String company, String title, String time,
+          String duration, String amount) =>
+      '$day — $company, “$title”, $time, $duration — $amount';
+  @override
+  String statementTotal(String shifts, String hours, String amount) =>
+      'Total: $shifts, $hours, $amount';
 
   // ---- Экран кошелька ----
 

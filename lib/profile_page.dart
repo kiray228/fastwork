@@ -201,6 +201,7 @@ class ProfilePage extends StatelessWidget {
                       repository: repos.shifts,
                       wallet: repos.wallet,
                       isManager: user.isManager,
+                      user: user,
                     )),
                   ),
                 ),
