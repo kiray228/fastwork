@@ -14,6 +14,9 @@ import 'package:fastwork_core/data/mrp_store.dart';
 import 'package:fastwork_core/mrp.dart';
 import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_core/data/wallet_repository.dart';
+import 'package:fastwork_core/data/user_language.dart';
+import 'package:fastwork_core/l10n/core_strings.dart';
+import 'package:fastwork_core/lang.dart';
 import 'package:fastwork_core/support.dart';
 import 'package:fastwork_core/notification.dart';
 import 'package:fastwork_core/review.dart';
@@ -21,6 +24,7 @@ import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
 import 'auth_service.dart';
 import 'code_sender.dart';
+import 'server_strings.dart';
 import 'payments/ioka.dart';
 import 'payments/kaspi.dart';
 import 'payments/http_json.dart';
@@ -133,7 +137,14 @@ class Api {
     Future<Response> Function(AppUser user) handler,
   ) async {
     final user = await _currentUser(request);
-    if (user == null) return _error('Нужен вход', status: 401);
+    if (user == null) return _error(serverTr.needLogin, status: 401);
+    // Запоминаем язык человека: на нём ему придут уведомления, которые
+    // пишутся без него, — «вас подтвердили», «смену отменили». Только если
+    // язык прислали: запрос без заголовка (скрипт, старая версия
+    // приложения) не должен переучивать сервер на русский.
+    if (request.headers.containsKey('accept-language')) {
+      await rememberLanguage(db, user.id, currentLang);
+    }
     try {
       return await handler(user);
     } on UserError catch (e) {
@@ -142,10 +153,10 @@ class Api {
     } on FormatException {
       // Кривой JSON или дата, которую не разобрать. Раньше это было
       // «сервер упал» (500), хотя ошибся тот, кто прислал запрос.
-      return _error('Не получилось разобрать запрос');
+      return _error(serverTr.badRequest);
     } on TypeError {
       // Число пришло строкой, поля нет вовсе — тоже ошибка запроса.
-      return _error('В запросе не хватает данных или они не того вида');
+      return _error(serverTr.badRequestShape);
     }
   }
 
@@ -167,7 +178,20 @@ class Api {
   // Маршруты
   // -------------------------------------------------------------------------
 
-  Router get router {
+  /// Все маршруты — на языке запроса.
+  ///
+  /// Язык приходит в заголовке `Accept-Language`, и весь запрос
+  /// выполняется внутри `withLang`: ошибки, тексты уведомлений самому себе,
+  /// строки кошелька — всё на нём. Нет заголовка — по-русски.
+  Handler get router {
+    final routes = _routes;
+    return (request) => withLang(
+          Lang.fromHeader(request.headers['accept-language']),
+          () => routes.call(request),
+        );
+  }
+
+  Router get _routes {
     final router = Router();
 
     // --- корневой адрес -----------------------------------------------------
@@ -264,29 +288,29 @@ class Api {
     router.post('/api/auth/register', (Request request) async {
       final header = request.headers['authorization'];
       if (header == null || !header.startsWith('Bearer ')) {
-        return _error('Сначала подтвердите почту', status: 401);
+        return _error(serverTr.confirmEmailFirst, status: 401);
       }
 
       final token = header.substring(7);
       final info = await auth.lookup(token);
       if (info == null) {
-        return _error('Сначала подтвердите почту', status: 401);
+        return _error(serverTr.confirmEmailFirst, status: 401);
       }
       if (info.userId != null) {
-        return _error('Аккаунт с этой почтой уже создан');
+        return _error(serverTr.accountExists);
       }
 
       final body = await _body(request);
       final phone =
           (body['phone'] as String? ?? '').replaceAll(RegExp(r'\D'), '');
-      if (phone.length < 10) return _error('Некорректный номер телефона');
+      if (phone.length < 10) return _error(serverTr.badPhone);
 
       final fullName = (body['fullName'] as String? ?? '').trim();
-      if (fullName.length < 2) return _error('Укажите имя и фамилию');
+      if (fullName.length < 2) return _error(serverTr.needFullName);
 
       final repository = DbAuthRepository(db);
       if (await repository.findByPhone(phone) != null) {
-        return _error('Этот номер уже зарегистрирован');
+        return _error(serverTr.phoneTaken);
       }
 
       final AppUser user;
@@ -363,13 +387,13 @@ class Api {
     //     -d '{"validFrom": "2027-01-01", "tenge": 4700}'
     router.post('/api/admin/mrp', (Request request) async {
       if (adminKey.isEmpty || request.headers['x-admin-key'] != adminKey) {
-        return _error('Нет доступа', status: 403);
+        return _error(serverTr.noAccess, status: 403);
       }
       final body = await _body(request);
       final validFrom = DateTime.tryParse(body['validFrom'] as String? ?? '');
       final tenge = body['tenge'] as int? ?? 0;
-      if (validFrom == null) return _error('Укажите дату validFrom');
-      if (tenge <= 0) return _error('Укажите МРП в тенге');
+      if (validFrom == null) return _error(serverTr.needValidFrom);
+      if (tenge <= 0) return _error(serverTr.needMrp);
 
       await MrpStore(db).setRate(validFrom, tenge * 100);
       return _json({'ok': true});
@@ -444,7 +468,7 @@ class Api {
     router.get('/api/shifts/<id|[0-9]+>', (Request request, String id) async {
       return _authorized(request, (user) async {
         final shift = await _shiftsFor(user).shiftById(int.parse(id));
-        if (shift == null) return _error('Смена не найдена', status: 404);
+        if (shift == null) return _error(coreTr.shiftNotFound, status: 404);
         return _json(shift.toJson());
       });
     });
@@ -509,7 +533,7 @@ class Api {
         (Request request, String id) async {
       return _authorized(request, (user) async {
         final code = await _shiftsFor(user).checkInCode(int.parse(id));
-        if (code == null) return _error('Это не ваша смена', status: 403);
+        if (code == null) return _error(serverTr.notYourShift, status: 403);
         return _json({'code': code});
       });
     });
@@ -576,7 +600,7 @@ class Api {
       return _authorized(request, (user) async {
         final body = await _body(request);
         final rating = body['rating'] as int? ?? 0;
-        if (rating < 1 || rating > 5) return _error('Оценка от 1 до 5');
+        if (rating < 1 || rating > 5) return _error(serverTr.ratingRange);
 
         await _shiftsFor(user).addReview(
           shiftId: int.parse(id),
@@ -594,7 +618,7 @@ class Api {
         // Роль проверяет сервер, а не экран. Спрятать кнопку — не защита:
         // запрос можно отправить и без приложения.
         if (!user.isManager) {
-          return _error('Только для заказчиков', status: 403);
+          return _error(serverTr.employersOnly, status: 403);
         }
 
         final body = await _body(request);
@@ -603,14 +627,14 @@ class Api {
         // Иначе в базе завелись бы категории, которых нет ни в одном
         // фильтре, и смены с ними никто бы не нашёл.
         if (!isKnownCategory(category)) {
-          return _error('Неизвестная категория работ');
+          return _error(serverTr.unknownCategory);
         }
         // Смена без оплаты не публикуется — в этом вся гарантия. Способ
         // обязателен: старое приложение, которое присылало карту прямо
         // сюда, должно обновиться.
         final method = body['method'] as String?;
         if (method == null) {
-          return _error('Обновите приложение: изменился способ оплаты',
+          return _error(serverTr.updateApp,
               status: 426);
         }
         final problem = _shiftInputError(body);
@@ -669,14 +693,14 @@ class Api {
     router.post('/api/shifts/<id|[0-9]+>', (Request request, String id) async {
       return _authorized(request, (user) async {
         if (!user.isManager) {
-          return _error('Только для заказчиков', status: 403);
+          return _error(serverTr.employersOnly, status: 403);
         }
 
         final body = await _body(request);
         // Старое приложение категорию не присылает — тогда её не трогаем.
         final category = body['category'] as String?;
         if (category != null && !isKnownCategory(category)) {
-          return _error('Неизвестная категория работ');
+          return _error(serverTr.unknownCategory);
         }
         final problem = _shiftInputError(body);
         if (problem != null) return _error(problem);
@@ -730,7 +754,7 @@ class Api {
         (Request request, String id) async {
       return _authorized(request, (user) async {
         if (!user.isManager) {
-          return _error('Только для заказчиков', status: 403);
+          return _error(serverTr.employersOnly, status: 403);
         }
         final body = await _body(request);
         final result = await _shiftsFor(user).confirmAttendance(
@@ -747,7 +771,7 @@ class Api {
         (Request request, String id) async {
       return _authorized(request, (user) async {
         if (!user.isManager) {
-          return _error('Только для заказчиков', status: 403);
+          return _error(serverTr.employersOnly, status: 403);
         }
         final body = await _body(request);
         final result = await _shiftsFor(user).markNoShow(
@@ -763,7 +787,7 @@ class Api {
     router.get('/api/favorites', (Request request) async {
       return _authorized(request, (user) async {
         if (!user.isManager) {
-          return _error('Только для заказчиков', status: 403);
+          return _error(serverTr.employersOnly, status: 403);
         }
         final people = await _shiftsFor(user).favoriteWorkers();
         return _json(people.map((p) => p.toJson()).toList());
@@ -774,7 +798,7 @@ class Api {
         (Request request, String id) async {
       return _authorized(request, (user) async {
         if (!user.isManager) {
-          return _error('Только для заказчиков', status: 403);
+          return _error(serverTr.employersOnly, status: 403);
         }
         final body = await _body(request);
         final result = await _shiftsFor(user).setFavorite(
@@ -789,11 +813,11 @@ class Api {
         (Request request, String id) async {
       return _authorized(request, (user) async {
         if (!user.isManager) {
-          return _error('Только для заказчиков', status: 403);
+          return _error(serverTr.employersOnly, status: 403);
         }
         final body = await _body(request);
         final rating = body['rating'] as int? ?? 0;
-        if (rating < 1 || rating > 5) return _error('Оценка от 1 до 5');
+        if (rating < 1 || rating > 5) return _error(serverTr.ratingRange);
 
         await _shiftsFor(user).rateWorker(
           shiftId: int.parse(id),
@@ -847,7 +871,7 @@ class Api {
         (Request request, String id) async {
       return _authorized(request, (user) async {
         final card = _card(await _body(request));
-        if (card == null) return _error('Укажите карту');
+        if (card == null) return _error(serverTr.needCard);
         try {
           final checkout = await _walletFor(user)
               .completeSandboxWithdrawal(int.parse(id), card);
@@ -904,7 +928,7 @@ class Api {
         final signature = request.headers[
             provider == 'ioka' ? 'x-signature' : 'x-webhook-signature'];
         if (!verifyHmac(secret: secret, body: raw, signature: signature)) {
-          return _error('Подпись не сходится', status: 401);
+          return _error(serverTr.badSignature, status: 401);
         }
       }
 
@@ -912,7 +936,7 @@ class Api {
       try {
         json = jsonDecode(utf8.decode(raw)) as Map<String, dynamic>;
       } catch (_) {
-        return _error('Ожидался JSON');
+        return _error(serverTr.expectedJson);
       }
       final operation = provider == 'ioka'
           ? IokaProvider.operationFromWebhook(json)
@@ -1021,9 +1045,9 @@ class Api {
 
 /// Страница «вернитесь в приложение» после оплаты у провайдера.
 String _returnPage(bool failed) => """<!DOCTYPE html>
-<html lang="ru"><head><meta charset="utf-8">
+<html lang="${currentLang.code}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>fastwork — оплата</title>
+<title>${serverTr.paymentPageTitle}</title>
 <style>
 body{margin:0;min-height:100vh;display:flex;align-items:center;
 justify-content:center;background:#EFF6F3;font-family:system-ui,
@@ -1034,8 +1058,6 @@ box-shadow:0 12px 40px rgba(15,61,46,.12)}
 p{color:#475569;line-height:1.45;margin:0}
 </style></head><body><div class="card">
 <div class="icon">${failed ? '⚠️' : '✅'}</div>
-<h1>${failed ? 'Оплата не прошла' : 'Оплата принята'}</h1>
-<p>${failed ? 'Вернитесь в приложение fastwork и попробуйте ещё раз '
-        'или выберите другой способ.' : 'Вернитесь в приложение fastwork — '
-        'смена появится в ленте, как только банк подтвердит платёж.'}</p>
+<h1>${failed ? serverTr.paymentFailed : serverTr.paymentAccepted}</h1>
+<p>${failed ? serverTr.paymentFailedHint : serverTr.paymentAcceptedHint}</p>
 </div></body></html>""";

@@ -7,6 +7,7 @@ import 'package:drift/drift.dart';
 import 'package:fastwork_core/data/database.dart';
 
 import 'code_sender.dart';
+import 'server_strings.dart';
 
 /// Ошибка, которую можно показать человеку.
 class AuthError implements Exception {
@@ -69,7 +70,7 @@ class AuthService {
   Future<String> requestCode(String rawEmail) async {
     final email = normalize(rawEmail);
     if (!looksLikeEmail(email)) {
-      throw AuthError('Проверьте адрес почты');
+      throw AuthError(serverTr.checkEmail);
     }
 
     final now = DateTime.now();
@@ -94,7 +95,7 @@ class AuthService {
 
     if (recent.read<int>('c') >= maxCodesPerHour) {
       throw AuthError(
-        'Слишком много запросов. Попробуйте через час.',
+        serverTr.tooManyCodes,
         status: 429,
       );
     }
@@ -112,7 +113,7 @@ class AuthService {
       // человеку они ни о чём не скажут, а нам понадобятся.
       stderr.writeln('Не удалось отправить код на $email: $error');
       throw AuthError(
-        'Не получилось отправить письмо. Попробуйте ещё раз через минуту.',
+        serverTr.emailNotSent,
         status: 502,
       );
     }
@@ -149,10 +150,10 @@ class AuthService {
         .getSingleOrNull();
 
     if (row == null) {
-      throw AuthError('Сначала запросите код');
+      throw AuthError(serverTr.requestCodeFirst);
     }
     if (DateTime.now().isAfter(row.expiresAt)) {
-      throw AuthError('Код устарел, запросите новый');
+      throw AuthError(serverTr.codeExpired);
     }
 
     // Попытку засчитываем ДО сравнения и одной командой: «прибавь, если
@@ -170,7 +171,7 @@ class AuthService {
       updates: {db.authCodeRows},
     );
     if (counted == 0) {
-      throw AuthError('Попытки кончились, запросите новый код');
+      throw AuthError(serverTr.attemptsOver);
     }
     final used = row.attempts + 1;
 
@@ -180,9 +181,9 @@ class AuthService {
         // иначе сжиганием кодов можно было бы обнулять счётчик запросов.
         await (db.update(db.authCodeRows)..where((c) => c.id.equals(row.id)))
             .write(AuthCodeRowsCompanion(expiresAt: Value(DateTime.now())));
-        throw AuthError('Код неверный. Попытки кончились, запросите новый');
+        throw AuthError(serverTr.codeWrongLast);
       }
-      throw AuthError('Код неверный. Осталось попыток: ${maxAttempts - used}');
+      throw AuthError(serverTr.codeWrong(maxAttempts - used));
     }
 
     // Код одноразовый: подошёл — и больше не действует. Гасим тоже
@@ -197,7 +198,7 @@ class AuthService {
       ],
       updates: {db.authCodeRows},
     );
-    if (spent == 0) throw AuthError('Код уже использован, запросите новый');
+    if (spent == 0) throw AuthError(serverTr.codeUsed);
     return email;
   }
 

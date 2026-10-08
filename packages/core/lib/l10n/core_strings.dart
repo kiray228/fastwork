@@ -237,4 +237,4 @@ abstract class CoreStrings {
 }
 
 /// Словарь того языка, на котором сейчас говорит приложение.
-CoreStrings get coreTr => CoreStrings.of(appLang);
+CoreStrings get coreTr => CoreStrings.of(currentLang);
