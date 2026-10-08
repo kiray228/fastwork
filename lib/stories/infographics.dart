@@ -1300,9 +1300,12 @@ class ThresholdScale extends StatelessWidget {
             children: [
               Icon(Icons.lock_outline_rounded, size: 18, color: _white(0.9)),
               const SizedBox(width: 6),
-              Text(
-                tr.stories.thresholdShift(threshold.toStringAsFixed(1)),
-                style: _titleStyle,
+              // Flexible — на казахском и английском подпись длиннее.
+              Flexible(
+                child: Text(
+                  tr.stories.thresholdShift(threshold.toStringAsFixed(1)),
+                  style: _titleStyle,
+                ),
               ),
             ],
           ),

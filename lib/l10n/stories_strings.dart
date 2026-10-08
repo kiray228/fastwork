@@ -134,6 +134,7 @@ abstract class StoriesStrings {
   String get docForEveryone;
   String get docMedBook;
   String get docMedBookCaption;
+  /// Метка «нужна не всем, а по требованию смены».
   String get docPerShift;
   String get docsCheckTitle;
   String get docsCheckBody;
@@ -1118,7 +1119,7 @@ class _Kk extends StoriesStrings {
   @override
   String get docMedBookCaption => 'Тамақпен жұмыс болса';
   @override
-  String get docPerShift => 'ауысымға қарай';
+  String get docPerShift => 'кейбіріне';
   @override
   String get docsCheckTitle => 'Тексеру қалай өтеді';
   @override
@@ -1616,7 +1617,7 @@ class _En extends StoriesStrings {
   @override
   String get whenMoneyBody =>
       'As soon as the employer confirms you showed up, the amount appears in '
-      'Payouts. Each shift shows when — for example, “Payout tomorrow”.';
+      'Payouts. Each shift shows when — for example, “Paid tomorrow”.';
   @override
   String get chainShift => 'Shift';
   @override
@@ -1708,7 +1709,7 @@ class _En extends StoriesStrings {
   @override
   String get docMedBookCaption => 'If you work with food';
   @override
-  String get docPerShift => 'per shift';
+  String get docPerShift => 'if needed';
   @override
   String get docsCheckTitle => 'How verification works';
   @override

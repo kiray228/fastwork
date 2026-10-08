@@ -1,7 +1,20 @@
 import 'dart:io';
 
+import 'package:fastwork/data/app_preferences.dart';
+import 'package:fastwork/data/repositories.dart';
+import 'package:fastwork/data/session.dart';
 import 'package:fastwork/l10n/strings.dart';
+import 'package:fastwork/main.dart';
+import 'package:fastwork_core/data/auth_repository.dart';
+import 'package:fastwork_core/data/fake_shift_repository.dart';
+import 'package:fastwork_core/data/support_repository.dart';
+import 'package:fastwork_core/data/wallet_repository.dart';
+import 'package:fastwork_core/terms.dart';
+import 'package:fastwork_core/user.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'support/clock.dart';
 
 /// Переводы: ни одной русской надписи мимо словаря.
 ///
@@ -49,5 +62,73 @@ void main() {
     }
     expect(S.of(Lang.kk).common.language, 'Тіл');
     expect(S.of(Lang.en).common.language, 'Language');
+  });
+
+  group('смена языка', () {
+    Future<AppPreferences> openApp(WidgetTester tester,
+        {String? deviceLanguage}) async {
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(420, 2200);
+      addTearDown(tester.view.reset);
+      addTearDown(() => appLang = Lang.ru);
+
+      final user = AppUser(
+        id: 1,
+        phone: '77001234567',
+        fullName: 'Ернар Калдыбеков',
+        city: 'Алматы',
+        rating: 4.6,
+        isVerified: false,
+        termsVersion: kTermsVersion,
+      );
+      final store = FakeShiftRepository(clock: TestClock.today().call);
+      final preferences = AppPreferences(deviceLanguage: deviceLanguage);
+      await tester.pumpWidget(FastworkApp(
+        session: AppSession()..setUser(user),
+        repos: AppRepositories(
+          shifts: store,
+          auth: FakeAuthRepository(signedIn: user),
+          documents: FakeDocumentRepository(),
+          support: FakeSupportRepository(),
+          wallet: FakeWalletRepository(store),
+        ),
+        preferences: preferences,
+      ));
+      await tester.pumpAndSettle();
+      return preferences;
+    }
+
+    testWidgets('язык телефона подхватывается сам', (tester) async {
+      await openApp(tester, deviceLanguage: 'kk');
+      expect(find.text('Менікі'), findsOneWidget);
+    });
+
+    testWidgets('незнакомый язык телефона — по-русски', (tester) async {
+      await openApp(tester, deviceLanguage: 'de');
+      expect(find.text('Мои'), findsOneWidget);
+    });
+
+    testWidgets('язык меняется в профиле сразу и экран остаётся на месте',
+        (tester) async {
+      final preferences = await openApp(tester);
+      await tester.tap(find.text('Профиль').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Язык'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('English'));
+      await tester.pumpAndSettle();
+
+      expect(preferences.language, Lang.en);
+      // Всё ещё профиль — но уже по-английски, и меню тоже.
+      expect(find.text('Language'), findsOneWidget);
+      expect(find.text('Mine'), findsOneWidget);
+      expect(find.text('Мои'), findsNothing);
+
+      await preferences.setLanguage(Lang.kk);
+      await tester.pumpAndSettle();
+      expect(find.text('Тіл'), findsOneWidget);
+      expect(find.text('Менікі'), findsOneWidget);
+    });
   });
 }
