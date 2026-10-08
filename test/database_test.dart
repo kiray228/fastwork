@@ -373,8 +373,12 @@ void main() {
       card: testCard,
     );
 
+    // Записался за час до начала. Не «в шесть утра», как остальные
+    // тесты: смена здесь начинается по настоящим часам, и ночью шесть
+    // утра — уже после её начала (так этот тест и упал в CI в 04:56).
     session.setUser(worker);
-    await shifts.apply(shiftId);
+    clock.now = now.subtract(const Duration(hours: 1));
+    expect(await shifts.apply(shiftId), BookingResult.ok);
     clock.reset(); // смена началась — пора отмечаться
     expect(await shifts.checkIn(shiftId), BookingResult.ok);
 
