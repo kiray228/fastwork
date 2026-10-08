@@ -115,7 +115,7 @@ void main() {
       await tester.tap(find.text('Все дни'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Ближайшие две недели'), findsOneWidget);
+      expect(find.text('Две недели'), findsOneWidget);
       expect(find.text('2 смены'), findsOneWidget);
       expect(find.textContaining('Завтра, '), findsOneWidget);
       expect(find.text('Подробнее'), findsNWidgets(2));

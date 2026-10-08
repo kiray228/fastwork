@@ -97,7 +97,7 @@ class _Ru extends FeedStrings {
   @override
   String get allDays => 'Все дни';
   @override
-  String get allDaysTitle => 'Ближайшие две недели';
+  String get allDaysTitle => 'Две недели';
 
   // ---- Лента: отметка «Я на месте» ----
 
@@ -218,7 +218,7 @@ class _Kk extends FeedStrings {
   @override
   String get allDays => 'Барлығы';
   @override
-  String get allDaysTitle => 'Алдағы екі апта';
+  String get allDaysTitle => 'Екі апта';
 
   // ---- Лента: отметка «Я на месте» ----
 
@@ -343,7 +343,7 @@ class _En extends FeedStrings {
   @override
   String get allDays => 'All days';
   @override
-  String get allDaysTitle => 'Next two weeks';
+  String get allDaysTitle => 'Two weeks';
 
   // ---- Лента: отметка «Я на месте» ----
 
