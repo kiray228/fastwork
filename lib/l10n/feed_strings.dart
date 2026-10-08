@@ -380,7 +380,7 @@ class _En extends FeedStrings {
   @override
   String get notifications => 'Notifications';
   @override
-  String get searchHint => 'Plumber, Magnum, Abay…';
+  String get searchHint => 'Plumber, Magnum…';
   @override
   String get clear => 'Clear';
 
