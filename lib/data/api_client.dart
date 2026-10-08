@@ -1,7 +1,8 @@
 import 'dart:convert';
 
-import 'package:fastwork_core/lang.dart';
 import 'package:http/http.dart' as http;
+
+import '../l10n/strings.dart';
 
 /// Разговор с сервером.
 ///
@@ -58,7 +59,7 @@ class ApiClient {
 
     final message = body is Map && body['error'] != null
         ? body['error'] as String
-        : 'Сервер ответил ${response.statusCode}';
+        : tr.common.serverReplied(response.statusCode);
     throw ApiException(message, response.statusCode);
   }
 

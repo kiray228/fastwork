@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/api_client.dart';
 import 'package:fastwork_core/errors.dart';
+import '../l10n/strings.dart';
 
 /// Состояние любой загрузки данных.
 ///
@@ -75,17 +76,17 @@ String describeError(Object error) {
       text.contains('failed to fetch') ||
       text.contains('clientexception') ||
       text.contains('failed host lookup')) {
-    return 'Нет связи с сервером. Проверьте интернет и попробуйте снова.';
+    return tr.common.errorNoConnection;
   }
   if (text.contains('timeout')) {
-    return 'Сервер долго не отвечает. Попробуйте ещё раз.';
+    return tr.common.errorTimeout;
   }
   if (text.contains('database') ||
       text.contains('sqlite') ||
       text.contains('drift')) {
-    return 'Не удалось прочитать данные на устройстве.';
+    return tr.common.errorLocalData;
   }
-  return 'Что-то пошло не так. Попробуйте ещё раз.';
+  return tr.common.errorUnknown;
 }
 
 /// Выполнить действие и показать понятное сообщение, если сорвалось.

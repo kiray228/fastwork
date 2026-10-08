@@ -13,6 +13,7 @@ import '../widgets/common.dart';
 import 'terms_page.dart';
 import '../data/app_preferences.dart';
 import '../widgets/language_picker.dart';
+import '../l10n/strings.dart';
 
 /// Вход и регистрация в одном экране.
 ///
@@ -111,7 +112,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
   Future<void> _requestCode() async {
     if (!_email.contains('@') || !_email.contains('.')) {
-      setState(() => error = 'Проверьте адрес почты');
+      setState(() => error = tr.auth.badEmail);
       return;
     }
 
@@ -129,7 +130,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
   Future<void> _verifyCode() async {
     if (codeController.text.trim().length != 6) {
-      setState(() => error = 'Код состоит из шести цифр');
+      setState(() => error = tr.auth.badCode);
       return;
     }
 
@@ -154,15 +155,15 @@ class _RegisterPageState extends State<RegisterPage> {
 
   Future<void> _submit() async {
     if (!_phoneOk) {
-      setState(() => error = 'Введите номер телефона полностью');
+      setState(() => error = tr.auth.phoneIncomplete);
       return;
     }
     if (!_nameOk) {
-      setState(() => error = 'Введите имя и фамилию');
+      setState(() => error = tr.auth.nameRequired);
       return;
     }
     if (isManager && companyController.text.trim().length < 2) {
-      setState(() => error = 'Укажите название компании');
+      setState(() => error = tr.auth.companyRequired);
       return;
     }
 
@@ -233,7 +234,7 @@ class _RegisterPageState extends State<RegisterPage> {
             const Center(child: Wordmark(size: 34)),
             const SizedBox(height: 12),
             Text(
-              'Подработка рядом с домом',
+              tr.auth.tagline,
               textAlign: TextAlign.center,
               style: text.bodyLarge?.copyWith(color: AppColors.muted),
             ),
@@ -315,17 +316,16 @@ class _RegisterPageState extends State<RegisterPage> {
                           step = _Step.email;
                           error = null;
                         }),
-                child: const Text('Другой адрес'),
+                child: Text(tr.auth.otherEmailButton),
               ),
             ],
 
             if (step != _Step.profile) ...[
               const SizedBox(height: 14),
-              const Text(
-                'Правила сервиса покажем на следующем шаге — перед тем, '
-                'как создать аккаунт.',
+              Text(
+                tr.auth.termsLaterHint,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                     fontSize: 11.5, color: AppColors.muted, height: 1.4),
               ),
             ],
@@ -336,28 +336,30 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   String get _title => switch (step) {
-        _Step.email => 'Вход',
-        _Step.code => 'Код из письма',
+        _Step.email => tr.auth.signInTitle,
+        _Step.code => tr.auth.codeTitle,
         // На своём устройстве анкета — это и есть вход, а не его
         // продолжение. Заголовок должен говорить то же, что и раньше.
         _Step.profile =>
-          widget.auth.requiresEmailCode ? 'Немного о вас' : 'Вход',
+          widget.auth.requiresEmailCode
+              ? tr.auth.aboutYouTitle
+              : tr.auth.signInTitle,
       };
 
   String get _subtitle => switch (step) {
-        _Step.email =>
-          'Введите почту — пришлём код. Если вы у нас впервые, аккаунт '
-              'создастся сам',
-        _Step.code => 'Отправили код на $_email. Он действует 5 минут',
+        _Step.email => tr.auth.emailSubtitle,
+        _Step.code => tr.auth.codeSubtitle(_email),
         _Step.profile => widget.auth.requiresEmailCode
-            ? 'Почта подтверждена. Осталось заполнить анкету'
-            : 'Введите номер — если вы у нас впервые, аккаунт создастся сам',
+            ? tr.auth.emailConfirmedSubtitle
+            : tr.auth.phoneSubtitle,
       };
 
   String get _buttonLabel => switch (step) {
-        _Step.email => 'Получить код',
-        _Step.code => 'Подтвердить',
-        _Step.profile => isManager ? 'Создать аккаунт' : 'Начать работать',
+        _Step.email => tr.auth.getCodeButton,
+        _Step.code => tr.auth.confirmButton,
+        _Step.profile => isManager
+            ? tr.auth.createAccountButton
+            : tr.auth.startWorkingButton,
       };
 
   VoidCallback get _action => switch (step) {
@@ -405,7 +407,7 @@ class _EmailStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _Field(
-      label: 'Почта',
+      label: tr.auth.emailLabel,
       controller: controller,
       hint: 'ernar@example.kz',
       keyboardType: TextInputType.emailAddress,
@@ -430,7 +432,7 @@ class _CodeStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _Field(
-      label: 'Код из письма',
+      label: tr.auth.codeLabel,
       controller: controller,
       hint: '000000',
       keyboardType: TextInputType.number,
@@ -479,7 +481,7 @@ class _ProfileStep extends StatelessWidget {
             Expanded(
               child: _RoleCard(
                 icon: Icons.person_search_rounded,
-                title: 'Ищу подработку',
+                title: tr.auth.roleWorker,
                 selected: !isManager,
                 onTap: () => onRole(UserRole.worker),
               ),
@@ -488,7 +490,7 @@ class _ProfileStep extends StatelessWidget {
             Expanded(
               child: _RoleCard(
                 icon: Icons.business_center_rounded,
-                title: 'Нанимаю людей',
+                title: tr.auth.roleEmployer,
                 selected: isManager,
                 onTap: () => onRole(UserRole.manager),
               ),
@@ -497,7 +499,7 @@ class _ProfileStep extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         _Field(
-          label: 'Номер телефона',
+          label: tr.auth.phoneLabel,
           controller: phoneController,
           hint: '+7 700 000 00 00',
           keyboardType: TextInputType.phone,
@@ -509,16 +511,16 @@ class _ProfileStep extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         _Field(
-          label: 'Имя и фамилия',
+          label: tr.auth.nameLabel,
           controller: nameController,
-          hint: 'Ернар Калдыбеков',
+          hint: tr.auth.nameHint,
           textCapitalization: TextCapitalization.words,
           onChanged: (_) => onChanged(),
         ),
         if (isManager) ...[
           const SizedBox(height: 16),
           _Field(
-            label: 'Название компании',
+            label: tr.auth.companyLabel,
             controller: companyController,
             hint: 'Magnum',
             textCapitalization: TextCapitalization.words,
@@ -526,9 +528,9 @@ class _ProfileStep extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 16),
-        const Text(
-          'Город',
-          style: TextStyle(
+        Text(
+          tr.auth.cityLabel,
+          style: const TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
             color: AppColors.muted,
@@ -543,7 +545,7 @@ class _ProfileStep extends StatelessWidget {
               GestureDetector(
                 onTap: () => onCity(c),
                 child: TagChip(
-                  text: c,
+                  text: tr.core.city(c),
                   color: c == city ? AppColors.brand : null,
                 ),
               ),
