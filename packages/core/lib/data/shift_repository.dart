@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../category.dart';
+import '../demo.dart';
 import '../errors.dart';
 import '../mrp.dart';
 import '../notification.dart';
@@ -32,6 +33,10 @@ enum BookingResult {
   earningsLimit, // с этой сменой доход за месяц превысит 300 МРП
   paymentRequired, // правка удорожает смену — нужна доплата
   awaitingPayment, // смена ещё не оплачена — сначала оплата
+  alreadyStarted, // смена уже началась: записаться, править и отменять поздно
+  notStarted, // отмечать выход рано — смена ещё не началась
+  timeConflict, // в это время человек уже записан на другую смену
+  alreadyFinished, // запись уже закрыта: выход подтверждён или отмечен невыход
   notFound,
 }
 
@@ -190,6 +195,10 @@ abstract class ShiftRepository {
     String? phone,
   });
 
+  /// Встать в лист ожидания заполненной смены (`join: true`) или выйти
+  /// из него. Когда место освободится, придёт уведомление.
+  Future<BookingResult> setWaitlist(int shiftId, {required bool join});
+
   /// Отметиться на смене: «я на месте».
   Future<BookingResult> checkIn(int shiftId);
 
@@ -224,6 +233,19 @@ abstract class ShiftRepository {
 
   /// Отзывы, которые получил исполнитель.
   Future<List<WorkerReview>> reviewsAbout(int workerId);
+
+  /// Заказчик добавляет исполнителя в любимые или убирает оттуда.
+  ///
+  /// Добавить можно только того, кто у этого заказчика уже отработал
+  /// смену (выход подтверждён), — иначе `notMine`.
+  Future<BookingResult> setFavorite({
+    required int workerId,
+    required bool favorite,
+  });
+
+  /// Любимые исполнители текущего заказчика. Когда он публикует смену,
+  /// им приходит приглашение.
+  Future<List<AppUser>> favoriteWorkers();
 
   /// Уведомления текущего пользователя — новые сверху.
   Future<List<AppNotification>> notifications();
@@ -308,6 +330,22 @@ List<String> sortCategories(Iterable<String> ids) {
   ];
 }
 
+/// Что показывать в ленте: смены, на которые ещё можно записаться.
+///
+/// Началась — записаться уже нельзя, и кнопка «Записаться» на ней только
+/// обманывала бы. Свою смену оставляем: человек должен видеть, куда
+/// он сегодня идёт.
+List<Shift> bookable(Iterable<Shift> shifts, DateTime now) =>
+    shifts.where((s) => s.isMine || !s.hasStartedAt(now)).toList();
+
+/// Пересекается ли смена хоть с одной из тех, на которые человек уже
+/// записан.
+///
+/// Правило общее для всех хранилищ, поэтому живёт рядом с фильтром, а не
+/// внутри одной реализации: две копии однажды разошлись бы.
+bool hasTimeConflict(Shift shift, Iterable<Shift> booked) => booked.any(
+    (other) => other.id != shift.id && other.isApplied && shift.overlaps(other));
+
 // ---------------------------------------------------------------------------
 // РЕАЛИЗАЦИЯ НА SQLite
 // ---------------------------------------------------------------------------
@@ -320,8 +358,20 @@ class DbShiftRepository implements ShiftRepository {
   /// без сервера настоящему провайдеру взяться неоткуда.
   final PaymentGateway payments;
 
-  DbShiftRepository(this.db, this.session, {PaymentGateway? payments})
-      : payments = payments ?? SandboxPaymentGateway();
+  /// Который сейчас час. Обычно это просто `DateTime.now`, но правила
+  /// хранилища зависят от времени: записаться можно до начала смены,
+  /// отметить выход — только после. Тест, который полагается на настоящие
+  /// часы, проходит утром и падает вечером. Поэтому время приходит
+  /// снаружи — тот же приём, что у `canCancelAt(now)` в модели смены.
+  final DateTime Function() clock;
+
+  DbShiftRepository(
+    this.db,
+    this.session, {
+    PaymentGateway? payments,
+    DateTime Function()? clock,
+  })  : payments = payments ?? SandboxPaymentGateway(),
+        clock = clock ?? DateTime.now;
 
   int get _workerId => session.workerId;
 
@@ -355,7 +405,10 @@ class DbShiftRepository implements ShiftRepository {
       AS my_status,
     (SELECT a3.checked_in_at FROM application_rows a3
       WHERE a3.shift_id = s.id AND a3.worker_id = $_workerId)
-      AS my_checked_in_at''';
+      AS my_checked_in_at,
+    CASE WHEN EXISTS (SELECT 1 FROM waitlist_rows wl
+      WHERE wl.shift_id = s.id AND wl.worker_id = $_workerId)
+      THEN 1 ELSE 0 END AS my_waitlisted''';
 
   /// Превращаем строку из базы в объект `Shift`, с которым работают экраны.
   Shift _toShift(QueryRow row) => Shift(
@@ -385,6 +438,7 @@ class DbShiftRepository implements ShiftRepository {
         cancelledAt: row.readNullable<DateTime>('cancelled_at'),
         isFunded: row.read<int>('funded') > 0,
         awaitingPayment: row.read<int>('awaiting') > 0,
+        onWaitlist: row.read<int>('my_waitlisted') > 0,
       );
 
   static List<String> _splitDuties(String raw) =>
@@ -415,22 +469,30 @@ class DbShiftRepository implements ShiftRepository {
       readsFrom: {db.shiftRows, db.applicationRows},
     ).get();
 
-    return applyFilter(rows.map(_toShift).toList(), filter);
+    return applyFilter(bookable(rows.map(_toShift), clock()), filter);
   }
 
   @override
   Future<Set<DateTime>> daysWithShifts() async {
     final rows = await db.query(
-      'SELECT DISTINCT s.work_date FROM shift_rows s '
+      'SELECT DISTINCT s.work_date, s.start_minutes FROM shift_rows s '
       'WHERE s.city = ? AND s.cancelled_at IS NULL AND $_publishedSql',
       variables: [Variable.withString(session.city)],
       readsFrom: {db.shiftRows},
     ).get();
 
-    return rows.map((r) {
+    // Точка под днём — обещание «здесь есть на что записаться». Смена,
+    // которая уже началась, его не выполняет: в ленте её нет, и точка
+    // над пустым списком только сбивала бы с толку.
+    final now = clock();
+    final days = <DateTime>{};
+    for (final r in rows) {
       final d = r.read<DateTime>('work_date');
-      return DateTime(d.year, d.month, d.day);
-    }).toSet();
+      final day = DateTime(d.year, d.month, d.day);
+      final starts = day.add(Duration(minutes: r.read<int>('start_minutes')));
+      if (now.isBefore(starts)) days.add(day);
+    }
+    return days;
   }
 
   @override
@@ -491,10 +553,26 @@ class DbShiftRepository implements ShiftRepository {
       // открытым с прошлого раза — и кнопка на нём ещё живая.
       if (shift.isCancelled) return BookingResult.alreadyCancelled;
       if (shift.isApplied) return BookingResult.alreadyBooked;
+      // Запись на эту смену уже закрыта: выход подтверждён (и оплачен)
+      // или отмечен невыход. Раньше здесь запись молча возвращалась в
+      // `active` — и выход можно было подтвердить и оплатить второй раз,
+      // а невыход так же молча стереть из истории.
+      if (shift.myStatus != null &&
+          shift.myStatus != ApplicationStatus.cancelled) {
+        return BookingResult.alreadyFinished;
+      }
+      // Началась — записываться поздно. Лента показывает и сегодняшние
+      // смены, и открытый с утра экран мог дожить до вечера.
+      if (shift.hasStartedAt(clock())) {
+        return BookingResult.alreadyStarted;
+      }
       if (!shift.ratingAllows(session.rating)) {
         return BookingResult.ratingTooLow;
       }
       if (!shift.hasFreeSlots) return BookingResult.noSlots;
+      if (hasTimeConflict(shift, await _activeShifts())) {
+        return BookingResult.timeConflict;
+      }
 
       // Лимит дохода проверяем здесь же, внутри транзакции записи: иначе
       // две записи подряд обе увидели бы «лимит ещё не достигнут».
@@ -513,6 +591,7 @@ class DbShiftRepository implements ShiftRepository {
             .write(const ApplicationRowsCompanion(
           status: Value(ApplicationStatus.active),
         ));
+        await _leaveWaitlist(shiftId);
         await _notifyApplied(shift);
         return BookingResult.ok;
       }
@@ -522,12 +601,67 @@ class DbShiftRepository implements ShiftRepository {
               shiftId: shiftId,
               workerId: _workerId,
               status: ApplicationStatus.active,
-              createdAt: DateTime.now(),
+              createdAt: clock(),
             ),
           );
+      // Записался — ждать больше нечего.
+      await _leaveWaitlist(shiftId);
       await _notifyApplied(shift);
       return BookingResult.ok;
     });
+  }
+
+  @override
+  Future<BookingResult> setWaitlist(int shiftId, {required bool join}) async {
+    if (!join) {
+      await _leaveWaitlist(shiftId);
+      return BookingResult.ok;
+    }
+    final shift = await shiftById(shiftId);
+    if (shift == null) return BookingResult.notFound;
+    if (shift.isCancelled) return BookingResult.alreadyCancelled;
+    if (shift.isMine) return BookingResult.alreadyBooked;
+    if (shift.hasStartedAt(clock())) return BookingResult.alreadyStarted;
+
+    await db.into(db.waitlistRows).insert(
+          WaitlistRowsCompanion.insert(
+            shiftId: shiftId,
+            workerId: _workerId,
+            createdAt: clock(),
+          ),
+          onConflict: DoNothing(
+            target: [db.waitlistRows.shiftId, db.waitlistRows.workerId],
+          ),
+        );
+    return BookingResult.ok;
+  }
+
+  Future<void> _leaveWaitlist(int shiftId) =>
+      (db.delete(db.waitlistRows)
+            ..where((w) =>
+                w.shiftId.equals(shiftId) & w.workerId.equals(_workerId)))
+          .go();
+
+  /// На смене освободилось место — сказать всем, кто его ждёт.
+  ///
+  /// Всем сразу, а не первому в очереди: записывается тот, кто успел.
+  /// Так место не простаивает, пока первый в очереди спит.
+  Future<void> _notifyWaitlist(Shift shift) async {
+    if (shift.hasStartedAt(clock()) || shift.isCancelled) return;
+    final waiting = await (db.select(db.waitlistRows)
+          ..where((w) => w.shiftId.equals(shift.id)))
+        .get();
+    for (final w in waiting) {
+      if (w.workerId == _workerId) continue;
+      await _notify(
+        userId: w.workerId,
+        kind: NotificationKind.slotFreed,
+        title: 'Освободилось место',
+        body: 'На «${shift.title}» ${_dayText(shift.workDate)} появилось '
+            'свободное место. Успейте записаться, пока его не заняли.',
+        shiftId: shift.id,
+      );
+    }
   }
 
   Future<void> _notifyApplied(Shift shift) => _notify(
@@ -549,15 +683,35 @@ class DbShiftRepository implements ShiftRepository {
     return '${date.day} ${months[date.month - 1]}';
   }
 
+  /// Смены, на которые я сейчас записан, — чтобы не записаться на две
+  /// в одно время.
+  Future<List<Shift>> _activeShifts() async {
+    final rows = await db.query(
+      '''
+      SELECT s.*, $_hiredSql, $_mineSql, $_fundedSql
+      FROM application_rows a
+      JOIN shift_rows s ON s.id = a.shift_id
+      WHERE a.worker_id = $_workerId AND a.status = 'active'
+        AND s.cancelled_at IS NULL
+      ''',
+      readsFrom: {db.shiftRows, db.applicationRows},
+    ).get();
+    return rows.map(_toShift).toList();
+  }
+
   @override
   Future<BookingResult> cancelApplication(int shiftId) async {
     final shift = await shiftById(shiftId);
     if (shift == null) return BookingResult.notFound;
+    // Снять можно только живую запись. Без этой проверки «отмена» стирала
+    // подтверждённый выход или невыход, а заказчику уходило уведомление
+    // «человек снял запись» — даже от того, кто и не записывался.
+    if (!shift.isApplied) return BookingResult.notMine;
 
     // Правило: отменить можно только до крайнего срока.
     // Проверка стоит здесь, а не на экране: экранов может стать несколько,
     // а правило должно быть одно.
-    if (!shift.canCancelAt(DateTime.now())) {
+    if (!shift.canCancelAt(clock())) {
       return BookingResult.tooLateToCancel;
     }
 
@@ -576,12 +730,13 @@ class DbShiftRepository implements ShiftRepository {
           '${_dayText(shift.workDate)}. Место снова свободно.',
       shiftId: shift.id,
     );
+    await _notifyWaitlist(shift);
     return BookingResult.ok;
   }
 
   @override
   Future<List<Shift>> myShifts({required bool archived}) async {
-    final now = DateTime.now();
+    final now = clock();
     final today = DateTime(now.year, now.month, now.day);
 
     // «Архив» — не отдельная таблица, а другое условие в том же запросе.
@@ -670,7 +825,7 @@ class DbShiftRepository implements ShiftRepository {
 
     // Правило «отметиться можно только в день смены» живёт в модели,
     // рядом с остальными правилами про время. Здесь его только спрашивают.
-    if (!shift.canCheckInAt(DateTime.now())) {
+    if (!shift.canCheckInAt(clock())) {
       return BookingResult.tooEarlyToCheckIn;
     }
 
@@ -678,7 +833,7 @@ class DbShiftRepository implements ShiftRepository {
           ..where((a) =>
               a.shiftId.equals(shiftId) & a.workerId.equals(_workerId)))
         .write(ApplicationRowsCompanion(
-      checkedInAt: Value(DateTime.now()),
+      checkedInAt: Value(clock()),
     ));
     return BookingResult.ok;
   }
@@ -700,14 +855,23 @@ class DbShiftRepository implements ShiftRepository {
     // Передумать можно только через поддержку: иначе одна кнопка
     // двигала бы деньги туда-обратно.
     if (status != ApplicationStatus.active) return BookingResult.alreadyBooked;
+    // До начала смены подтверждать нечего: человек ещё не работал.
+    if (!shift.hasStartedAt(clock())) return BookingResult.notStarted;
 
-    await db.transaction(() async {
-      await (db.update(db.applicationRows)
+    final changed = await db.transaction(() async {
+      // Условие `status = active` прямо в UPDATE, а не только проверкой
+      // выше. Двойное нажатие шлёт два запроса почти одновременно: оба
+      // успели бы увидеть `active`, и деньги ушли бы дважды. А так второй
+      // запрос не найдёт подходящей строки — и ничего не начислит.
+      final updated = await (db.update(db.applicationRows)
             ..where((a) =>
-                a.shiftId.equals(shiftId) & a.workerId.equals(workerId)))
+                a.shiftId.equals(shiftId) &
+                a.workerId.equals(workerId) &
+                a.status.equals(ApplicationStatus.active)))
           .write(const ApplicationRowsCompanion(
         status: Value(ApplicationStatus.completed),
       ));
+      if (updated == 0) return false;
 
       // Вот он, момент гарантии: деньги, которые сервис держал, уходят
       // исполнителю. У старых смен без оплаты начислять нечего.
@@ -720,7 +884,11 @@ class DbShiftRepository implements ShiftRepository {
           title: '«${shift.title}», ${_dayText(shift.workDate)}',
         );
       }
+      return true;
     });
+    // Опередил параллельный запрос — он и начислил, и уведомил.
+    if (!changed) return BookingResult.ok;
+    await _settleIfDone(shift);
 
     await _notify(
       userId: workerId,
@@ -760,13 +928,21 @@ class DbShiftRepository implements ShiftRepository {
     if (status == null) return BookingResult.notFound;
     if (status == ApplicationStatus.noShow) return BookingResult.ok;
     if (status != ApplicationStatus.active) return BookingResult.alreadyBooked;
+    // Не вышел — значит, смена началась без него. До начала это ещё
+    // не невыход, а деньги за место заказчик забрал бы раньше времени.
+    if (!shift.hasStartedAt(clock())) return BookingResult.notStarted;
 
-    await (db.update(db.applicationRows)
+    // Тот же приём, что при подтверждении: только одна из двух
+    // одновременных отметок вернёт деньги.
+    final updated = await (db.update(db.applicationRows)
           ..where((a) =>
-              a.shiftId.equals(shiftId) & a.workerId.equals(workerId)))
+              a.shiftId.equals(shiftId) &
+              a.workerId.equals(workerId) &
+              a.status.equals(ApplicationStatus.active)))
         .write(const ApplicationRowsCompanion(
       status: Value(ApplicationStatus.noShow),
     ));
+    if (updated == 0) return BookingResult.ok;
 
     // Человек не вышел — заказчик не должен за него платить. Возвращаем
     // деньги за одно место вместе с комиссией за него.
@@ -780,6 +956,7 @@ class DbShiftRepository implements ShiftRepository {
         'Возврат за невыход: «${shift.title}»',
       );
     }
+    await _settleIfDone(shift);
 
     // Человек обязан узнать: отметка влияет на его надёжность, и если
     // заказчик ошибся, у него должен быть повод написать в поддержку.
@@ -857,13 +1034,21 @@ class DbShiftRepository implements ShiftRepository {
     required int rating,
     String? comment,
   }) async {
+    // Отзыв о месте работы — от того, кто там работал. Без этой проверки
+    // кто угодно мог бы написать отзыв к любой смене и подвинуть оценку
+    // компании в любую сторону.
+    if (await _statusOf(shiftId, _workerId) != ApplicationStatus.completed) {
+      throw const UserError(
+          'Отзыв можно оставить только о смене, которую вы отработали');
+    }
+
     await db.into(db.reviewRows).insert(
           ReviewRowsCompanion.insert(
             shiftId: shiftId,
             authorId: _workerId,
             rating: rating,
             comment: Value(comment),
-            createdAt: DateTime.now(),
+            createdAt: clock(),
           ),
           // «Вставь, а если такая строка уже есть — обнови её».
           //
@@ -875,7 +1060,7 @@ class DbShiftRepository implements ShiftRepository {
             (_) => ReviewRowsCompanion(
               rating: Value(rating),
               comment: Value(comment),
-              createdAt: Value(DateTime.now()),
+              createdAt: Value(clock()),
             ),
             target: [db.reviewRows.shiftId, db.reviewRows.authorId],
           ),
@@ -896,7 +1081,7 @@ class DbShiftRepository implements ShiftRepository {
     ).getSingle();
     if (existing.read<int>('c') > 0) return;
 
-    final now = DateTime.now();
+    final now = clock();
     DateTime day(int minus) =>
         DateTime(now.year, now.month, now.day - minus);
 
@@ -942,6 +1127,10 @@ class DbShiftRepository implements ShiftRepository {
         kind: WalletEntryKind.earning,
         amount: demo.totalPay,
         title: '«$title», ${_dayText(date)}',
+        // Начислено вечером в день смены, а не в день, когда заводили
+        // учебную историю: иначе в истории и на графике заработка обе
+        // прошлые смены оказывались «сегодняшними».
+        at: demo.endsAt,
       );
       await db.into(db.applicationRows).insert(
             ApplicationRowsCompanion.insert(
@@ -1024,7 +1213,7 @@ class DbShiftRepository implements ShiftRepository {
             cardBrand: '',
             operation: '',
             method: Value(method.id),
-            createdAt: DateTime.now(),
+            createdAt: clock(),
           ));
       return _insertCharge(
         shiftId: id,
@@ -1096,7 +1285,7 @@ class DbShiftRepository implements ShiftRepository {
   Future<void> settlePending({
     Duration within = const Duration(days: 3),
   }) async {
-    final since = DateTime.now().subtract(within);
+    final since = clock().subtract(within);
     final pending = await (db.select(db.chargeRows)
           ..where((c) =>
               c.status.equals(CheckoutStatus.pending) &
@@ -1161,6 +1350,21 @@ class DbShiftRepository implements ShiftRepository {
 
   @override
   Future<List<Shift>> shiftsCreatedBy(int managerId) async {
+    final shifts = await _createdBy(managerId);
+
+    // Смены, на которые никто не записался, закрыть некому: последней
+    // отметки не будет. Их остаток возвращаем, когда заказчик открывает
+    // свои смены, — то есть до того, как он успеет удивиться, где деньги.
+    final settled = shifts.where((s) =>
+        s.isFunded && s.workersHired == 0 && s.hasStartedAt(clock()));
+    if (settled.isEmpty) return shifts;
+    for (final shift in settled) {
+      await _settleIfDone(shift);
+    }
+    return _createdBy(managerId);
+  }
+
+  Future<List<Shift>> _createdBy(int managerId) async {
     final rows = await db.query(
       '''
       SELECT s.*, $_hiredSql, $_mineSql, $_fundedSql
@@ -1177,6 +1381,12 @@ class DbShiftRepository implements ShiftRepository {
 
   @override
   Future<List<ShiftApplicant>> applicantsFor(int shiftId) async {
+    // Список записавшихся — это телефоны и имена живых людей. Видит его
+    // только тот, кто смену создал: раньше любой вошедший мог перебрать
+    // номера смен и выгрузить чужие контакты.
+    final shift = await _loadShift(shiftId);
+    if (shift == null || shift.createdBy != _workerId) return const [];
+
     // JOIN соединяет отклики с пользователями: в откликах лежит только
     // номер работника, а имя и рейтинг — в таблице пользователей.
     // Из отклика заодно берём состояние и время отметки.
@@ -1195,7 +1405,10 @@ class DbShiftRepository implements ShiftRepository {
              ), 0) AS INTEGER) AS done_count,
              CAST(COALESCE((SELECT COUNT(*) FROM application_rows n
                WHERE n.worker_id = u.id AND n.status = 'no_show'
-             ), 0) AS INTEGER) AS missed_count
+             ), 0) AS INTEGER) AS missed_count,
+             CASE WHEN EXISTS (SELECT 1 FROM favorite_rows f
+               WHERE f.employer_id = $_workerId AND f.worker_id = u.id)
+             THEN 1 ELSE 0 END AS is_favorite
       FROM application_rows a
       JOIN user_rows u ON u.id = a.worker_id
       WHERE a.shift_id = ?
@@ -1203,7 +1416,12 @@ class DbShiftRepository implements ShiftRepository {
       ORDER BY live_rating DESC
       ''',
       variables: [Variable.withInt(shiftId)],
-      readsFrom: {db.applicationRows, db.userRows, db.workerReviewRows},
+      readsFrom: {
+        db.applicationRows,
+        db.userRows,
+        db.workerReviewRows,
+        db.favoriteRows,
+      },
     ).get();
 
     return rows
@@ -1221,13 +1439,133 @@ class DbShiftRepository implements ShiftRepository {
               ),
               status: r.read<String>('application_status'),
               checkedInAt: r.readNullable<DateTime>('checked_in_at'),
+              isFavorite: r.read<int>('is_favorite') > 0,
             ))
         .toList();
   }
 
   @override
+  Future<BookingResult> setFavorite({
+    required int workerId,
+    required bool favorite,
+  }) async {
+    if (!favorite) {
+      await (db.delete(db.favoriteRows)
+            ..where((f) =>
+                f.employerId.equals(_workerId) & f.workerId.equals(workerId)))
+          .go();
+      return BookingResult.ok;
+    }
+
+    // Любимым может быть только тот, кто у этого заказчика уже работал:
+    // выход подтверждён хотя бы на одной его смене.
+    final worked = await db.query(
+      '''
+      SELECT 1 AS one FROM application_rows a
+      JOIN shift_rows s ON s.id = a.shift_id
+      WHERE s.created_by = ? AND a.worker_id = ? AND a.status = 'completed'
+      LIMIT 1
+      ''',
+      variables: [Variable.withInt(_workerId), Variable.withInt(workerId)],
+      readsFrom: {db.applicationRows, db.shiftRows},
+    ).get();
+    if (worked.isEmpty) return BookingResult.notMine;
+
+    await db.into(db.favoriteRows).insert(
+          FavoriteRowsCompanion.insert(
+            employerId: _workerId,
+            workerId: workerId,
+            createdAt: clock(),
+          ),
+          // Второе нажатие ничего не ломает: пара уже есть — и ладно.
+          onConflict: DoNothing(
+            target: [db.favoriteRows.employerId, db.favoriteRows.workerId],
+          ),
+        );
+    return BookingResult.ok;
+  }
+
+  @override
+  Future<List<AppUser>> favoriteWorkers() async {
+    final rows = await db.query(
+      '''
+      SELECT u.*,
+             CAST(COALESCE(
+               (SELECT AVG(w.rating) FROM worker_review_rows w
+                 WHERE w.worker_id = u.id),
+               u.rating
+             ) AS DOUBLE PRECISION) AS live_rating,
+             CAST(COALESCE((SELECT COUNT(*) FROM application_rows d
+               JOIN shift_rows ds ON ds.id = d.shift_id
+               WHERE d.worker_id = u.id AND d.status = 'completed'
+                 AND ds.created_by = f.employer_id
+             ), 0) AS INTEGER) AS together_count
+      FROM favorite_rows f
+      JOIN user_rows u ON u.id = f.worker_id
+      WHERE f.employer_id = ?
+      ORDER BY u.full_name
+      ''',
+      variables: [Variable.withInt(_workerId)],
+      readsFrom: {
+        db.favoriteRows,
+        db.userRows,
+        db.applicationRows,
+        db.shiftRows,
+        db.workerReviewRows,
+      },
+    ).get();
+
+    // `completedShifts` здесь — сколько смен человек отработал именно у
+    // этого заказчика: в списке любимых важна общая история, а не
+    // весь опыт человека.
+    return rows
+        .map((r) => AppUser(
+              id: r.read<int>('id'),
+              phone: r.read<String>('phone'),
+              fullName: r.read<String>('full_name'),
+              city: r.read<String>('city'),
+              rating: r.read<double>('live_rating'),
+              isVerified: r.read<bool>('is_verified'),
+              role: r.read<String>('role'),
+              completedShifts: r.read<int>('together_count'),
+            ))
+        .toList();
+  }
+
+  /// Позвать любимых исполнителей на только что опубликованную смену.
+  ///
+  /// Только тех, кто живёт в городе смены: приглашение в другой город
+  /// было бы рассылкой, а не заботой.
+  Future<void> _inviteFavorites(Shift shift) async {
+    final employer = shift.createdBy;
+    if (employer == null) return;
+    final rows = await db.query(
+      '''
+      SELECT f.worker_id FROM favorite_rows f
+      JOIN user_rows u ON u.id = f.worker_id
+      WHERE f.employer_id = ? AND u.city = ?
+      ''',
+      variables: [Variable.withInt(employer), Variable.withString(shift.city)],
+      readsFrom: {db.favoriteRows, db.userRows},
+    ).get();
+
+    for (final r in rows) {
+      await _notify(
+        userId: r.read<int>('worker_id'),
+        kind: NotificationKind.invited,
+        title: '${shift.company} зовёт вас снова',
+        body: 'Вы в списке любимых исполнителей. Новая смена: '
+            '«${shift.title}» ${_dayText(shift.workDate)}, '
+            '${formatTime(shift.startMinutes)}–${formatTime(shift.endMinutes)}, '
+            '${formatMoney(shift.totalPay)}. Записывайтесь, пока есть места.',
+        shiftId: shift.id,
+      );
+    }
+  }
+
+  @override
   Future<List<PendingRating>> workersToRate(int managerId) async {
-    final now = DateTime.now();
+    final now = clock();
     final today = DateTime(now.year, now.month, now.day);
 
     // Запрос из трёх таблиц сразу:
@@ -1293,6 +1631,18 @@ class DbShiftRepository implements ShiftRepository {
     required int rating,
     String? comment,
   }) async {
+    // Оценка двигает рейтинг, а рейтинг — допуск к сменам. Поэтому
+    // ставить её может только заказчик этой смены и только тому, чей
+    // выход он подтвердил. Иначе любой заказчик мог бы «утопить»
+    // человека оценками за смены, где тот у него и не работал.
+    final shift = await _loadShift(shiftId);
+    if (shift == null || shift.createdBy != _workerId) {
+      throw const UserError('Оценить можно только исполнителя своей смены');
+    }
+    if (await _statusOf(shiftId, workerId) != ApplicationStatus.completed) {
+      throw const UserError('Оценить можно только того, чей выход подтверждён');
+    }
+
     await db.into(db.workerReviewRows).insert(
           WorkerReviewRowsCompanion.insert(
             shiftId: shiftId,
@@ -1300,7 +1650,7 @@ class DbShiftRepository implements ShiftRepository {
             authorId: _workerId,
             rating: rating,
             comment: Value(comment),
-            createdAt: DateTime.now(),
+            createdAt: clock(),
           ),
           // Передумал — оценка меняется, но не добавляется второй.
           // Цель конфликта — тот самый тройной уникальный ключ.
@@ -1308,7 +1658,7 @@ class DbShiftRepository implements ShiftRepository {
             (_) => WorkerReviewRowsCompanion(
               rating: Value(rating),
               comment: Value(comment),
-              createdAt: Value(DateTime.now()),
+              createdAt: Value(clock()),
             ),
             target: [
               db.workerReviewRows.shiftId,
@@ -1318,15 +1668,12 @@ class DbShiftRepository implements ShiftRepository {
           ),
         );
 
-    final shift = await shiftById(shiftId);
     await _notify(
       userId: workerId,
       kind: NotificationKind.rated,
       title: 'Новая оценка: $rating из 5',
-      body: shift == null
-          ? 'Заказчик оценил вашу работу.'
-          : 'Заказчик оценил работу на «${shift.title}» '
-              '${_dayText(shift.workDate)}.',
+      body: 'Заказчик оценил работу на «${shift.title}» '
+          '${_dayText(shift.workDate)}.',
       shiftId: shiftId,
     );
   }
@@ -1375,7 +1722,10 @@ class DbShiftRepository implements ShiftRepository {
       if (shift.createdBy != _workerId) return BookingResult.notMine;
       if (shift.isCancelled) return BookingResult.alreadyCancelled;
 
-      final now = DateTime.now();
+      final now = clock();
+      // Люди уже на месте и работают. Отмена сейчас сняла бы их записи
+      // и вернула заказчику всё — то есть работу никто бы не оплатил.
+      if (shift.hasStartedAt(now)) return BookingResult.alreadyStarted;
 
       await (db.update(db.shiftRows)..where((s) => s.id.equals(shiftId)))
           .write(ShiftRowsCompanion(cancelledAt: Value(now)));
@@ -1414,7 +1764,6 @@ class DbShiftRepository implements ShiftRepository {
   }
 
   @override
-  @override
   Future<ShiftEditResult> updateShift({
     required int shiftId,
     required DateTime workDate,
@@ -1437,6 +1786,11 @@ class DbShiftRepository implements ShiftRepository {
     }
     if (before.isCancelled) {
       return const ShiftEditResult(BookingResult.alreadyCancelled);
+    }
+    // Началась — условия заморожены. Иначе заказчик мог бы урезать ставку
+    // посреди смены, когда отказаться исполнителю уже нельзя.
+    if (before.hasStartedAt(clock())) {
+      return const ShiftEditResult(BookingResult.alreadyStarted);
     }
     // Неоплаченную смену не правят: за неё уже могут платить по старой
     // цене. Проще отменить и создать заново.
@@ -1461,6 +1815,17 @@ class DbShiftRepository implements ShiftRepository {
       duties: duties,
       dressCode: dressCode,
     );
+
+    // Прошлая правка могла ещё ждать доплаты. Новая её отменяет: условия
+    // теперь другие. Раньше обе доплаты оставались в силе — и заплатив
+    // обе, заказчик переплачивал разницу первой правки, а если первая
+    // приходила позже второй, она откатывала смену к старым условиям.
+    await (db.update(db.chargeRows)
+          ..where((c) =>
+              c.shiftId.equals(shiftId) &
+              c.kind.equals(_ChargeKind.topup) &
+              c.status.equals(CheckoutStatus.pending)))
+        .write(const ChargeRowsCompanion(message: Value(_superseded)));
 
     final funding = await _heldPayment(shiftId);
     // Старые смены, созданные до оплаты, правятся без денег.
@@ -1554,6 +1919,13 @@ class DbShiftRepository implements ShiftRepository {
         );
       }
     }
+
+    // Мест стало больше, а на смену кто-то ждал — самое время сказать.
+    if (edit.workersNeeded > before.workersNeeded &&
+        before.workersHired >= before.workersNeeded) {
+      final after = await _loadShift(before.id);
+      if (after != null) await _notifyWaitlist(after);
+    }
     return BookingResult.ok;
   }
 
@@ -1600,6 +1972,7 @@ class DbShiftRepository implements ShiftRepository {
     required String kind,
     required int amount,
     required String title,
+    DateTime? at,
   }) async {
     // Учебные смены «оплатил» сам сервис — у него кошелька нет.
     if (userId == 0) return;
@@ -1609,7 +1982,7 @@ class DbShiftRepository implements ShiftRepository {
           kind: kind,
           amount: amount,
           title: title,
-          createdAt: DateTime.now(),
+          createdAt: at ?? clock(),
         ));
   }
 
@@ -1672,7 +2045,7 @@ class DbShiftRepository implements ShiftRepository {
             provider: payments.provider(method).name,
             phone: Value(phone),
             payload: Value(payload),
-            createdAt: DateTime.now(),
+            createdAt: clock(),
           ));
 
   Future<ChargeRow> _charge(int id) =>
@@ -1778,7 +2151,7 @@ class DbShiftRepository implements ShiftRepository {
               c.status.equals(CheckoutStatus.pending)))
         .write(ChargeRowsCompanion(
       status: const Value(CheckoutStatus.paid),
-      paidAt: Value(DateTime.now()),
+      paidAt: Value(clock()),
       message: Value(paidWith),
     ));
     if (won == 0) return;
@@ -1798,6 +2171,14 @@ class DbShiftRepository implements ShiftRepository {
           : 'Оплата смены «${shift.title}» · $paidWith',
     );
 
+    // Доплата за правку, которую уже заменила более новая: её условия не
+    // действуют, деньги — назад.
+    if (isTopup && charge.message == _superseded) {
+      await _refundCharge(charge, charge.amount,
+          'Возврат доплаты: правку «${shift.title}» заменила новая');
+      return;
+    }
+
     // Деньги пришли, а взять их уже не за что: смену отменили, пока
     // человек платил, или её уже оплатили другой попыткой. Возвращаем
     // сразу — гарант не держит чужих денег без причины.
@@ -1816,6 +2197,9 @@ class DbShiftRepository implements ShiftRepository {
         operation: Value(charge.operation),
         method: Value(charge.method),
       ));
+      // Смена опубликована — самое время позвать тех, с кем заказчику
+      // уже понравилось работать.
+      await _inviteFavorites(shift);
       return;
     }
 
@@ -1893,13 +2277,37 @@ class DbShiftRepository implements ShiftRepository {
     );
   }
 
+  /// Смена закрыта — вернуть заказчику то, что не ушло людям.
+  ///
+  /// Закрыта — значит, началась (записаться уже никто не может) и
+  /// отмечать больше некого: у каждого записавшегося стоит «вышел» или
+  /// «не вышел». Раньше остаток возвращался только при отмене смены, а
+  /// смена, прошедшая как обычно, оставляла у сервиса деньги за места,
+  /// на которые никто не записался, — навсегда.
+  ///
+  /// Возврат по операциям, поэтому повторный вызов ничего не вернёт
+  /// второй раз: после первого оплата смены помечена возвращённой.
+  Future<void> _settleIfDone(Shift shift) async {
+    if (!shift.hasStartedAt(clock()) || shift.isCancelled) return;
+    final open = await (db.select(db.applicationRows)
+          ..where((a) =>
+              a.shiftId.equals(shift.id) &
+              a.status.equals(ApplicationStatus.active)))
+        .get();
+    if (open.isNotEmpty) return;
+    await _refundRest(
+      shift,
+      title: 'Возврат остатка: смена «${shift.title}» прошла',
+    );
+  }
+
   /// Вернуть заказчику всё, что сервис ещё держит по смене.
   ///
   /// Остаток не хранится — он считается по операциям: внесено, минус уже
   /// возвращено, минус начислено исполнителям вместе с комиссией за их
   /// места. Храни мы его отдельной колонкой, её пришлось бы править при
   /// каждом движении — и однажды забыли бы.
-  Future<void> _refundRest(Shift shift) async {
+  Future<void> _refundRest(Shift shift, {String? title}) async {
     final payment = await _heldPayment(shift.id);
     if (payment == null) return;
 
@@ -1926,7 +2334,7 @@ class DbShiftRepository implements ShiftRepository {
         shift.id,
         payment.payerId,
         rest,
-        'Возврат: смена «${shift.title}» отменена',
+        title ?? 'Возврат: смена «${shift.title}» отменена',
       );
     }
     await (db.update(db.paymentRows)..where((p) => p.id.equals(payment.id)))
@@ -1949,8 +2357,8 @@ class DbShiftRepository implements ShiftRepository {
           status: CheckoutStatus.paid,
           provider: 'demo',
           operation: const Value('demo'),
-          createdAt: DateTime.now(),
-          paidAt: Value(DateTime.now()),
+          createdAt: clock(),
+          paidAt: Value(clock()),
         ));
     await db.into(db.paymentRows).insert(PaymentRowsCompanion.insert(
           shiftId: shiftId,
@@ -1961,7 +2369,7 @@ class DbShiftRepository implements ShiftRepository {
           cardLast4: '0000',
           cardBrand: 'Демо',
           operation: 'demo',
-          createdAt: DateTime.now(),
+          createdAt: clock(),
         ));
   }
 
@@ -1985,11 +2393,13 @@ class DbShiftRepository implements ShiftRepository {
     required String title,
     required String body,
     int? shiftId,
+    bool toSelf = false,
   }) async {
     // Некому — например, смена учебная, её никто не создавал.
     if (userId == null || userId == 0) return;
     // Себе не пишем: человек и так знает, что он только что сделал.
-    if (userId == _workerId) return;
+    // Кроме напоминаний — их отправляет не человек, а расписание.
+    if (userId == _workerId && !toSelf) return;
 
     await db.into(db.notificationRows).insert(
           NotificationRowsCompanion.insert(
@@ -1998,7 +2408,7 @@ class DbShiftRepository implements ShiftRepository {
             title: title,
             body: body,
             shiftId: Value(shiftId),
-            createdAt: DateTime.now(),
+            createdAt: clock(),
           ),
         );
   }
@@ -2045,7 +2455,7 @@ class DbShiftRepository implements ShiftRepository {
   Future<void> markNotificationsRead() async {
     await (db.update(db.notificationRows)
           ..where((n) => n.userId.equals(_workerId) & n.readAt.isNull()))
-        .write(NotificationRowsCompanion(readAt: Value(DateTime.now())));
+        .write(NotificationRowsCompanion(readAt: Value(clock())));
   }
 
   Future<void> seedIfEmpty() async {
@@ -2053,47 +2463,177 @@ class DbShiftRepository implements ShiftRepository {
     if (count > 0) return;
 
     for (final demo in buildDemoShifts()) {
-      final id = await db.into(db.shiftRows).insert(
-            ShiftRowsCompanion.insert(
-              workDate: demo.workDate,
-              title: demo.title,
-              category: Value(demo.category),
-              company: demo.company,
-              address: demo.address,
-              city: Value(demo.city),
-              startMinutes: demo.startMinutes,
-              endMinutes: demo.endMinutes,
-              breakMinutes: Value(demo.breakMinutes),
-              hourlyRate: demo.hourlyRate,
-              workersNeeded: demo.workersNeeded,
-              duties: Value(demo.duties.join('\n')),
-              dressCode: Value(demo.dressCode),
-              employerComment: Value(demo.employerComment),
-              payoutDelayDays: Value(demo.payoutDelayDays),
-              cancelDeadlineHours: Value(demo.cancelDeadlineHours),
-              minRating: Value(demo.minRating),
+      await _insertDemo(demo, hiredFrom: 100);
+    }
+  }
+
+  /// Напомнить о сменах, которые начнутся в ближайшие сутки.
+  ///
+  /// Главная причина невыходов — не злой умысел, а «забыл». Конкуренты
+  /// напоминают накануне, и невыходов становится меньше. Здесь то же: всем,
+  /// кто записан на смену в ближайшие 24 часа, — одно уведомление. Второй
+  /// раз о той же смене не пишем: проверяем, не напоминали ли уже.
+  ///
+  /// Вызывается не человеком, а по расписанию — на сервере раз в час, на
+  /// телефоне при запуске. Поэтому смотрит на всех, а не на «текущего».
+  /// Возвращает, сколько напоминаний отправлено.
+  Future<int> sendReminders() async {
+    final now = clock();
+    final today = DateTime(now.year, now.month, now.day);
+    final rows = await db.query(
+      '''
+      SELECT s.*, a.worker_id AS reminder_worker
+      FROM application_rows a
+      JOIN shift_rows s ON s.id = a.shift_id
+      WHERE a.status = 'active' AND s.cancelled_at IS NULL
+        AND s.work_date >= ? AND s.work_date < ?
+        AND a.worker_id > 0
+        AND NOT EXISTS (SELECT 1 FROM notification_rows n
+          WHERE n.user_id = a.worker_id AND n.shift_id = s.id
+            AND n.kind = 'reminder')
+      ''',
+      variables: [
+        Variable.withDateTime(today),
+        Variable.withDateTime(today.add(const Duration(days: 2))),
+      ],
+      readsFrom: {db.shiftRows, db.applicationRows, db.notificationRows},
+    ).get();
+
+    var sent = 0;
+    for (final r in rows) {
+      final shift = Shift(
+        id: r.read<int>('id'),
+        workDate: r.read<DateTime>('work_date'),
+        title: r.read<String>('title'),
+        company: r.read<String>('company'),
+        address: r.read<String>('address'),
+        city: r.read<String>('city'),
+        startMinutes: r.read<int>('start_minutes'),
+        endMinutes: r.read<int>('end_minutes'),
+        hourlyRate: r.read<int>('hourly_rate'),
+        workersNeeded: r.read<int>('workers_needed'),
+        workersHired: 0,
+      );
+      // Сутки вперёд, но не начавшиеся: о смене, на которой человек уже
+      // стоит, напоминать поздно.
+      if (!now.isBefore(shift.startsAt)) continue;
+      if (shift.startsAt.difference(now) > const Duration(hours: 24)) continue;
+
+      await _notify(
+        userId: r.read<int>('reminder_worker'),
+        kind: NotificationKind.reminder,
+        title: 'Смена ${relativeDay(shift.workDate, now)} в '
+            '${formatTime(shift.startMinutes)}',
+        body: '«${shift.title}», ${shift.company}. ${shift.address}. '
+            'Придите на 10 минут раньше и отметьтесь в приложении — '
+            '«Я на месте».',
+        shiftId: shift.id,
+        // На телефоне без сервера напоминание рассылает само приложение —
+        // от имени того, кто вошёл, и ему же.
+        toSelf: true,
+      );
+      sent++;
+    }
+    return sent;
+  }
+
+  /// Держать демо-смены на неделю вперёд — в каждом городе.
+  ///
+  /// Заводит смены только на те дни и в тех городах, где демо-смен ещё
+  /// нет, поэтому вызывать можно сколько угодно: при каждом запуске,
+  /// раз в час, — дубликатов не появится. Демо-смена — смена без
+  /// заказчика (`created_by` пустой): настоящие смены этим не задеты.
+  ///
+  /// Возвращает, сколько смен заведено.
+  Future<int> keepDemoFresh() async {
+    final now = clock();
+    final today = DateTime(now.year, now.month, now.day);
+    final rows = await db.query(
+      'SELECT s.work_date, s.city, s.start_minutes FROM shift_rows s '
+      'WHERE s.created_by IS NULL AND s.work_date >= ?',
+      variables: [Variable.withDateTime(today)],
+      readsFrom: {db.shiftRows},
+    ).get();
+    // День «занят», если на нём есть демо-смена, которая ещё не началась.
+    // Утренние смены к обеду начались — и сегодня дозаводятся вечерние,
+    // чтобы лента на сегодня не пустела к середине дня.
+    final present = <String>{};
+    for (final r in rows) {
+      final d = r.read<DateTime>('work_date');
+      final starts = DateTime(d.year, d.month, d.day)
+          .add(Duration(minutes: r.read<int>('start_minutes')));
+      if (now.isBefore(starts)) {
+        present.add('${r.read<String>('city')}|${_dayKey(d)}');
+      }
+    }
+
+    var added = 0;
+    for (var d = 0; d < kDemoDays; d++) {
+      final day = DateTime(today.year, today.month, today.day + d);
+      for (final city in kCities) {
+        if (present.contains('$city|${_dayKey(day)}')) continue;
+        for (final demo in demoShiftsFor(city, day, now)) {
+          await _insertDemo(demo);
+          added++;
+        }
+      }
+    }
+    return added;
+  }
+
+  static String _dayKey(DateTime d) => '${d.year}-${d.month}-${d.day}';
+
+  /// Записать демо-смену: сама смена, её «оплата» сервисом и занятые
+  /// другими людьми места.
+  ///
+  /// Чужие места — отклики от несуществующих людей. Номера у них
+  /// отрицательные: настоящие пользователи нумеруются с единицы, и никто
+  /// из них не увидит демо-отклик как свой. (Старые демо-смены брали
+  /// номера с сотого — на живом сервере сотый человек однажды обнаружил
+  /// бы себя записанным на смену, на которую не записывался.)
+  Future<void> _insertDemo(Shift demo, {int? hiredFrom}) async {
+    final id = await db.into(db.shiftRows).insert(
+          ShiftRowsCompanion.insert(
+            workDate: demo.workDate,
+            title: demo.title,
+            category: Value(demo.category),
+            company: demo.company,
+            address: demo.address,
+            city: Value(demo.city),
+            startMinutes: demo.startMinutes,
+            endMinutes: demo.endMinutes,
+            breakMinutes: Value(demo.breakMinutes),
+            hourlyRate: demo.hourlyRate,
+            workersNeeded: demo.workersNeeded,
+            duties: Value(demo.duties.join('\n')),
+            dressCode: Value(demo.dressCode),
+            employerComment: Value(demo.employerComment),
+            payoutDelayDays: Value(demo.payoutDelayDays),
+            cancelDeadlineHours: Value(demo.cancelDeadlineHours),
+            minRating: Value(demo.minRating),
+          ),
+        );
+
+    await _fundDemo(id, demo);
+
+    // Часть мест уже занята другими работниками — заводим их отклики.
+    for (var i = 0; i < demo.workersHired; i++) {
+      await db.into(db.applicationRows).insert(
+            ApplicationRowsCompanion.insert(
+              shiftId: id,
+              workerId: hiredFrom == null ? -1 - i : hiredFrom + i,
+              status: ApplicationStatus.active,
+              createdAt: clock(),
             ),
           );
-
-      await _fundDemo(id, demo);
-
-      // Часть мест уже занята другими работниками — заводим их отклики.
-      // Номера с 100-го, чтобы не пересекаться с настоящими пользователями.
-      for (var i = 0; i < demo.workersHired; i++) {
-        await db.into(db.applicationRows).insert(
-              ApplicationRowsCompanion.insert(
-                shiftId: id,
-                workerId: 100 + i,
-                status: ApplicationStatus.active,
-                createdAt: DateTime.now(),
-              ),
-            );
-      }
     }
   }
 }
 
 /// Виды списаний по смене.
+/// Пометка на доплате, которую заменила более новая правка той же смены.
+const _superseded = 'Заменена более новой правкой';
+
 class _ChargeKind {
   _ChargeKind._();
 

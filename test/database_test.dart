@@ -11,6 +11,7 @@ import 'package:fastwork_core/user.dart';
 import 'package:fastwork_core/payment.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/clock.dart';
 import 'support/publish.dart';
 
 /// Тестовая карта: проходит всегда.
@@ -30,11 +31,15 @@ void main() {
   late AppSession session;
   late DbShiftRepository shifts;
   late DbAuthRepository auth;
+  late TestClock clock;
 
   setUp(() {
     db = AppDatabase(NativeDatabase.memory());
     session = AppSession();
-    shifts = DbShiftRepository(db, session);
+    // Шесть утра: сегодняшние смены (10:00) ещё впереди. Тест, которому
+    // нужно «после смены», переводит часы сам.
+    clock = TestClock.today();
+    shifts = DbShiftRepository(db, session, clock: clock.call);
     auth = DbAuthRepository(db);
   });
 
@@ -81,8 +86,12 @@ void main() {
     );
 
     // Записывается исполнитель — значит, в сессии должен быть он.
+    // Записывался он, конечно, до смены — за день до неё.
     session.setUser(worker);
+    clock.now = daysAgo(daysBack + 1);
     expect(await shifts.apply(shiftId), BookingResult.ok);
+    clock.now = DateTime(clock.now.year, clock.now.month,
+        clock.now.day + daysBack + 1, 6);
 
     // Смена уже прошла, и заказчик подтвердил выход. Без подтверждения
     // она не считается отработанной — ни для оценки, ни для заработка.
@@ -214,7 +223,10 @@ void main() {
     );
 
     session.setUser(await auth.refresh(workerId));
+    final today = clock.now;
+    clock.now = daysAgo(2);
     expect(await shifts.apply(secondShift), BookingResult.ok);
+    clock.now = today;
 
     session.setUser(await auth.refresh(managerId));
     await shifts.confirmAttendance(shiftId: secondShift, workerId: workerId);
@@ -361,8 +373,13 @@ void main() {
       card: testCard,
     );
 
+    // Записался за час до начала. Не «в шесть утра», как остальные
+    // тесты: смена здесь начинается по настоящим часам, и ночью шесть
+    // утра — уже после её начала (так этот тест и упал в CI в 04:56).
     session.setUser(worker);
-    await shifts.apply(shiftId);
+    clock.now = now.subtract(const Duration(hours: 1));
+    expect(await shifts.apply(shiftId), BookingResult.ok);
+    clock.reset(); // смена началась — пора отмечаться
     expect(await shifts.checkIn(shiftId), BookingResult.ok);
 
     final shift = (await shifts.shiftById(shiftId))!;
@@ -371,7 +388,11 @@ void main() {
     // Дважды отметиться нельзя.
     expect(await shifts.checkIn(shiftId), BookingResult.alreadyBooked);
 
+    // Список записавшихся — с телефонами — исполнителю не показывают.
+    expect(await shifts.applicantsFor(shiftId), isEmpty);
+
     // Заказчик видит отметку в списке записавшихся.
+    session.setUser(manager);
     final people = await shifts.applicantsFor(shiftId);
     expect(people.first.isCheckedIn, isTrue);
     expect(people.first.isConfirmed, isFalse);
@@ -494,6 +515,12 @@ void main() {
     final (shiftId, worker, manager) = await upcomingShift();
 
     session.setUser(manager);
+    // До начала смены невыход не отметить — человек ещё не опоздал.
+    expect(
+      await shifts.markNoShow(shiftId: shiftId, workerId: worker.id),
+      BookingResult.notStarted,
+    );
+    clock.setHour(23);
     expect(
       await shifts.markNoShow(shiftId: shiftId, workerId: worker.id),
       BookingResult.ok,
@@ -512,15 +539,17 @@ void main() {
 
     // Одна смена отработана, вторая — нет.
     session.setUser(manager);
+    clock.setHour(21);
     await shifts.confirmAttendance(shiftId: firstShift, workerId: worker.id);
 
+    // Вечером, после первой: две смены в одно время не взять.
     final secondShift = await shifts.publishShift(
       workDate: daysAgo(0),
       title: 'Ещё смена',
       company: 'Magnum',
       address: 'г. Алматы, ул. Абая, 2',
-      startMinutes: 600,
-      endMinutes: 1200,
+      startMinutes: 1320,
+      endMinutes: 1410,
       hourlyRate: 100000,
       workersNeeded: 1,
       createdBy: manager.id,
@@ -528,8 +557,9 @@ void main() {
       card: testCard,
     );
     session.setUser(worker);
-    await shifts.apply(secondShift);
+    expect(await shifts.apply(secondShift), BookingResult.ok);
     session.setUser(manager);
+    clock.setHour(23);
     await shifts.markNoShow(shiftId: secondShift, workerId: worker.id);
 
     final after = (await auth.refresh(worker.id))!;
@@ -544,6 +574,7 @@ void main() {
   test('о невыходе сообщают самому человеку', () async {
     final (shiftId, worker, manager) = await upcomingShift();
     session.setUser(manager);
+    clock.setHour(23);
     await shifts.markNoShow(shiftId: shiftId, workerId: worker.id);
 
     session.setUser(worker);
@@ -599,6 +630,7 @@ void main() {
   test('заказчик видит надёжность записавшегося', () async {
     final (shiftId, worker, manager) = await upcomingShift();
     session.setUser(manager);
+    clock.setHour(23);
     await shifts.markNoShow(shiftId: shiftId, workerId: worker.id);
 
     final people = await shifts.applicantsFor(shiftId);
@@ -818,5 +850,288 @@ void main() {
     final myIds = mine.map((n) => n.id).toSet();
     final theirIds = theirs.map((n) => n.id).toSet();
     expect(myIds.intersection(theirIds), isEmpty);
+  });
+
+  // ---------------------------------------------------------------------
+  // ДЕМО-СМЕНЫ
+  // ---------------------------------------------------------------------
+
+  test('демо-смены есть на неделю вперёд в каждом городе', () async {
+    clock.setHour(13);
+    final added = await shifts.keepDemoFresh();
+    expect(added, greaterThan(0));
+
+    final tomorrow = daysAgo(-1);
+    for (final city in kCities) {
+      session.setUser(AppUser(
+        id: 1,
+        phone: '77000000000',
+        fullName: 'Гость',
+        city: city,
+        rating: 5,
+        isVerified: false,
+      ));
+      expect(await shifts.shiftsOn(tomorrow), isNotEmpty, reason: city);
+      expect(await shifts.shiftsOn(daysAgo(-6)), isNotEmpty, reason: city);
+    }
+
+    // Повторный вызов ничего не дублирует — можно звать хоть каждый час.
+    expect(await shifts.keepDemoFresh(), 0);
+  });
+
+  test('сегодняшние демо-смены — только те, что ещё впереди', () async {
+    clock.setHour(13);
+    await shifts.keepDemoFresh();
+    session.setUser(AppUser(
+      id: 1,
+      phone: '77000000000',
+      fullName: 'Гость',
+      city: 'Алматы',
+      rating: 5,
+      isVerified: false,
+    ));
+    for (final s in await shifts.shiftsOn(daysAgo(0))) {
+      expect(s.startsAt.isAfter(clock.now), isTrue, reason: s.title);
+      // Чужие места заняты «никем»: настоящий человек себя там не найдёт.
+      expect(s.isApplied, isFalse);
+    }
+  });
+
+  test('точка под днём — только если на что-то ещё можно записаться',
+      () async {
+    final (shiftId, _, _) = await upcomingShift(); // сегодня в 10:00
+    expect(shiftId, isPositive);
+    expect(await shifts.daysWithShifts(), contains(daysAgo(0)));
+
+    clock.setHour(11); // смена началась
+    expect(await shifts.daysWithShifts(), isNot(contains(daysAgo(0))));
+  });
+
+  // ---------------------------------------------------------------------
+  // ЛЮБИМЫЕ ИСПОЛНИТЕЛИ
+  // ---------------------------------------------------------------------
+
+  test('в любимые — только того, кто у заказчика отработал', () async {
+    final (shiftId, worker, manager) = await upcomingShift();
+    session.setUser(manager);
+
+    // Записан, но выход не подтверждён — рано.
+    expect(
+      await shifts.setFavorite(workerId: worker.id, favorite: true),
+      BookingResult.notMine,
+    );
+
+    clock.setHour(21);
+    await shifts.confirmAttendance(shiftId: shiftId, workerId: worker.id);
+    expect(
+      await shifts.setFavorite(workerId: worker.id, favorite: true),
+      BookingResult.ok,
+    );
+    // Второе нажатие не ломает ничего.
+    expect(
+      await shifts.setFavorite(workerId: worker.id, favorite: true),
+      BookingResult.ok,
+    );
+
+    final people = await shifts.applicantsFor(shiftId);
+    expect(people.single.isFavorite, isTrue);
+    final favorites = await shifts.favoriteWorkers();
+    expect(favorites.single.id, worker.id);
+    expect(favorites.single.completedShifts, 1, reason: 'смен у этого заказчика');
+
+    await shifts.setFavorite(workerId: worker.id, favorite: false);
+    expect(await shifts.favoriteWorkers(), isEmpty);
+  });
+
+  test('новая смена приходит приглашением любимым из того же города',
+      () async {
+    final (_, workerId, managerId) = await workedShift();
+    final manager = (await auth.refresh(managerId))!;
+    session.setUser(manager);
+    expect(
+      await shifts.setFavorite(workerId: workerId, favorite: true),
+      BookingResult.ok,
+    );
+
+    final shiftId = await shifts.publishShift(
+      workDate: daysAgo(-2),
+      title: 'Услуги фасовщика',
+      company: 'Magnum',
+      address: 'г. Алматы, ул. Абая, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 2,
+      createdBy: managerId,
+      city: 'Алматы',
+      card: testCard,
+    );
+
+    session.setUser((await auth.refresh(workerId))!);
+    final invites = (await shifts.notifications())
+        .where((n) => n.kind == NotificationKind.invited)
+        .toList();
+    expect(invites, hasLength(1));
+    expect(invites.single.shiftId, shiftId);
+    expect(invites.single.title, contains('Magnum'));
+
+    // Смена в другом городе — приглашения нет.
+    session.setUser(manager);
+    await shifts.publishShift(
+      workDate: daysAgo(-2),
+      title: 'Услуги фасовщика',
+      company: 'Magnum',
+      address: 'г. Астана, ул. Кенесары, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 2,
+      createdBy: managerId,
+      city: 'Астана',
+      card: testCard,
+    );
+    session.setUser((await auth.refresh(workerId))!);
+    expect(
+      (await shifts.notifications())
+          .where((n) => n.kind == NotificationKind.invited),
+      hasLength(1),
+    );
+  });
+
+  // ---------------------------------------------------------------------
+  // ЛИСТ ОЖИДАНИЯ
+  // ---------------------------------------------------------------------
+
+  test('освободилось место — ждущим приходит уведомление', () async {
+    final manager = await auth.register(
+      phone: '77030000001',
+      fullName: 'Айгуль Досова',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      role: UserRole.manager,
+      company: 'Magnum',
+    );
+    final first = await auth.register(
+      phone: '77030000002',
+      fullName: 'Первый Исполнитель',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    final second = await auth.register(
+      phone: '77030000003',
+      fullName: 'Второй Исполнитель',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    session.setUser(manager);
+    // Через три дня: отменить запись ещё можно.
+    final shiftId = await shifts.publishShift(
+      workDate: daysAgo(-3),
+      title: 'Услуги бариста',
+      company: 'Magnum',
+      address: 'г. Алматы, ул. Абая, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 1,
+      createdBy: manager.id,
+      city: 'Алматы',
+      card: testCard,
+    );
+
+    session.setUser(first);
+    expect(await shifts.apply(shiftId), BookingResult.ok);
+
+    session.setUser(second);
+    expect(await shifts.apply(shiftId), BookingResult.noSlots);
+    expect(await shifts.setWaitlist(shiftId, join: true), BookingResult.ok);
+    expect((await shifts.shiftById(shiftId))!.onWaitlist, isTrue);
+
+    session.setUser(first);
+    expect(await shifts.cancelApplication(shiftId), BookingResult.ok);
+
+    session.setUser(second);
+    final freed = (await shifts.notifications())
+        .where((n) => n.kind == NotificationKind.slotFreed);
+    expect(freed, hasLength(1));
+    expect(freed.single.shiftId, shiftId);
+
+    // Записался — из листа ожидания ушёл сам.
+    expect(await shifts.apply(shiftId), BookingResult.ok);
+    expect((await shifts.shiftById(shiftId))!.onWaitlist, isFalse);
+  });
+
+  test('больше мест после правки — ждущим тоже скажут', () async {
+    final (shiftId, _, manager) = await upcomingShift(); // 2 места
+    final other = await auth.register(
+      phone: '77030000010',
+      fullName: 'Третий Исполнитель',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    // Занимаем второе место.
+    session.setUser(other);
+    expect(await shifts.apply(shiftId), BookingResult.ok);
+    final late = await auth.register(
+      phone: '77030000011',
+      fullName: 'Опоздавший',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    session.setUser(late);
+    await shifts.setWaitlist(shiftId, join: true);
+
+    session.setUser(manager);
+    final before = (await shifts.shiftById(shiftId))!;
+    final edit = await shifts.updateShift(
+      shiftId: shiftId,
+      workDate: before.workDate,
+      title: before.title,
+      address: before.address,
+      startMinutes: before.startMinutes,
+      endMinutes: before.endMinutes,
+      hourlyRate: before.hourlyRate,
+      workersNeeded: 3,
+      method: PaymentMethod.card,
+    );
+    // Мест больше — смена дороже: новые условия вступят после доплаты.
+    expect(edit.result, BookingResult.paymentRequired);
+
+    Future<int> freedFor(AppUser user) async {
+      session.setUser(user);
+      return (await shifts.notifications())
+          .where((n) => n.kind == NotificationKind.slotFreed)
+          .length;
+    }
+
+    // До доплаты мест не прибавилось — и уведомления пока нет.
+    expect(await freedFor(late), 0);
+
+    session.setUser(manager);
+    await shifts.completeSandboxPayment(edit.checkout!.id, card: testCard);
+    expect(await freedFor(late), 1);
+  });
+
+  // ---------------------------------------------------------------------
+  // НАПОМИНАНИЯ
+  // ---------------------------------------------------------------------
+
+  test('о смене напоминают за сутки — и только один раз', () async {
+    final (shiftId, worker, _) = await upcomingShift(); // сегодня в 10:00
+
+    // Вчера в девять утра: до смены больше суток — рано.
+    clock.now = DateTime(clock.now.year, clock.now.month, clock.now.day - 1, 9);
+    expect(await shifts.sendReminders(), 0);
+
+    clock.now = clock.now.add(const Duration(hours: 2)); // вчера, 11:00
+    expect(await shifts.sendReminders(), 1);
+    expect(await shifts.sendReminders(), 0, reason: 'второй раз не пишем');
+
+    session.setUser(worker);
+    final notes = (await shifts.notifications())
+        .where((n) => n.kind == NotificationKind.reminder)
+        .toList();
+    expect(notes.single.shiftId, shiftId);
+    expect(notes.single.title, 'Смена завтра в 10:00');
   });
 }

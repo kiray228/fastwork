@@ -5,11 +5,13 @@ import 'data/app_preferences.dart';
 import 'data/repositories.dart';
 import 'data/session.dart';
 import 'documents_page.dart';
+import 'manager/favorites_page.dart';
 import 'my_reviews_page.dart';
 import 'stories/story_actions.dart';
 import 'support_ui/support_page.dart';
 import 'theme/app_colors.dart';
 import 'theme/glass.dart';
+import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
 import 'wallet_page.dart';
 import 'widgets/common.dart';
@@ -199,6 +201,15 @@ class ProfilePage extends StatelessWidget {
                     )),
                   ),
                 ),
+                if (user.isManager)
+                  _MenuRow(
+                    icon: Icons.favorite_border_rounded,
+                    title: 'Любимые исполнители',
+                    trailing: 'Позвать снова',
+                    onTap: () => Navigator.of(context).push(
+                      appRoute(FavoritesPage(repository: repos.shifts)),
+                    ),
+                  ),
                 if (!user.isManager)
                   _MenuRow(
                     icon: Icons.badge_outlined,
@@ -402,7 +413,8 @@ class _Stats extends StatelessWidget {
           child: _StatTile(
             icon: Icons.work_history_rounded,
             value: '${user.completedShifts}',
-            label: 'Смен',
+            // «2 смены», а не «2 смен»: подпись согласуется с числом.
+            label: plural(user.completedShifts, 'Смена', 'Смены', 'Смен'),
             color: AppColors.brand,
           ),
         ),

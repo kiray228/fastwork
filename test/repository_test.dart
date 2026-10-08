@@ -2,15 +2,35 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fastwork_core/data/fake_shift_repository.dart';
 import 'package:fastwork_core/data/shift_filter.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
+import 'package:fastwork_core/shift.dart';
+
+import 'support/clock.dart';
 
 /// Проверяем правила записи на смены — без экранов, только логика.
 /// Такие тесты самые быстрые и самые полезные: они про суть, а не про вид.
 void main() {
   late FakeShiftRepository repo;
+  late TestClock clock;
 
   // Рейтинг 5.0 — чтобы пройти по всем сменам. Допуск по рейтингу
   // проверяем отдельным тестом ниже.
-  setUp(() => repo = FakeShiftRepository(userRating: 5.0));
+  //
+  // Часы стоят на шести утра: сегодняшние смены ещё не начались, и на
+  // них можно записаться в любое время запуска тестов.
+  setUp(() {
+    clock = TestClock.today();
+    repo = FakeShiftRepository(userRating: 5.0, clock: clock.call);
+  });
+
+  /// Записаться на прошедшую смену №6 — «в прошлом», за день до неё, —
+  /// и вернуть часы в сегодня. Так получается смена, которая уже прошла
+  /// и ждёт подтверждения заказчика.
+  Future<void> bookPastShift() async {
+    final saved = clock.now;
+    clock.now = saved.subtract(const Duration(days: 4));
+    expect(await repo.apply(6), BookingResult.ok);
+    clock.now = saved;
+  }
 
   // Смена №1 — сегодня в 10:00, №5 — через три дня в 11:00.
   // Отменить можно за 10 часов до начала, поэтому сегодняшнюю смену
@@ -86,14 +106,14 @@ void main() {
   });
 
   test('смена с порогом рейтинга закрыта для новичка', () async {
-    final novice = FakeShiftRepository(userRating: 4.0);
+    final novice = FakeShiftRepository(userRating: 4.0, clock: clock.call);
 
     // Смена №5 доступна только с рейтингом 4.5.
     expect(await novice.apply(5), BookingResult.ratingTooLow);
     expect((await novice.shiftById(5))!.isApplied, isFalse);
 
     // С рейтингом 4.5 та же смена открыта.
-    final senior = FakeShiftRepository(userRating: 4.5);
+    final senior = FakeShiftRepository(userRating: 4.5, clock: clock.call);
     expect(await senior.apply(5), BookingResult.ok);
   });
 
@@ -136,7 +156,7 @@ void main() {
   test('в заработок идёт только подтверждённая смена', () async {
     expect(await repo.completedShifts(), isEmpty);
 
-    await repo.apply(6); // смена три дня назад
+    await bookPastShift(); // смена три дня назад
     // Дата прошла, но заказчик выход не подтвердил — значит, не работал.
     expect(await repo.completedShifts(), isEmpty);
 
@@ -163,7 +183,7 @@ void main() {
   });
 
   test('подтверждение заказчика закрывает смену', () async {
-    await repo.apply(6);
+    await bookPastShift();
 
     final before = (await repo.shiftById(6))!;
     expect(before.isApplied, isTrue);
@@ -221,5 +241,77 @@ void main() {
 
     expect(days.contains(today), isTrue);
     expect(days.contains(today.add(const Duration(days: 2))), isFalse);
+  });
+
+  test('на начавшуюся смену записаться нельзя', () async {
+    clock.setHour(11); // смена №1 идёт с 10:00
+    expect(await repo.apply(1), BookingResult.alreadyStarted);
+    expect((await repo.shiftById(1))!.isApplied, isFalse);
+  });
+
+  test('на две смены в одно время записаться нельзя', () async {
+    // Смена №1 — склад 10:00–22:00. Добавим вторую сегодня с 12:00.
+    final repo = FakeShiftRepository(
+      userRating: 5.0,
+      clock: clock.call,
+      shifts: [
+        ...buildDemoShifts(),
+        Shift(
+          id: 70,
+          workDate: clock.now,
+          title: 'Услуги официанта',
+          company: 'Del Papa',
+          address: 'г. Алматы, ул. Кабанбай батыра, 83',
+          startMinutes: 720,
+          endMinutes: 1080,
+          hourlyRate: 100000,
+          workersNeeded: 2,
+          workersHired: 0,
+        ),
+      ],
+    );
+
+    expect(await repo.apply(1), BookingResult.ok);
+    expect(await repo.apply(70), BookingResult.timeConflict);
+
+    // Сняли первую запись — вторая смена снова доступна.
+    clock.now = clock.now.subtract(const Duration(days: 1));
+    expect(await repo.cancelApplication(1), BookingResult.ok);
+    expect(await repo.apply(70), BookingResult.ok);
+  });
+
+  test('подтверждённую смену не «перезаписать» ради второй выплаты',
+      () async {
+    await bookPastShift();
+    await repo.confirmAttendance(shiftId: 6, workerId: 1);
+
+    // Раньше повторная запись возвращала отклик в `active`, и выход
+    // можно было подтвердить — и оплатить — ещё раз.
+    clock.now = clock.now.subtract(const Duration(days: 4));
+    expect(await repo.apply(6), BookingResult.alreadyFinished);
+    expect((await repo.shiftById(6))!.isCompleted, isTrue);
+  });
+
+  test('выход до начала смены не подтвердить', () async {
+    expect(await repo.apply(1), BookingResult.ok);
+    expect(
+      await repo.confirmAttendance(shiftId: 1, workerId: 1),
+      BookingResult.notStarted,
+    );
+    expect(
+      await repo.markNoShow(shiftId: 1, workerId: 1),
+      BookingResult.notStarted,
+    );
+
+    clock.setHour(23);
+    expect(
+      await repo.confirmAttendance(shiftId: 1, workerId: 1),
+      BookingResult.ok,
+    );
+  });
+
+  test('снять можно только свою живую запись', () async {
+    // Не записывался — снимать нечего.
+    expect(await repo.cancelApplication(5), BookingResult.notMine);
   });
 }

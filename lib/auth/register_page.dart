@@ -245,6 +245,7 @@ class _RegisterPageState extends State<RegisterPage> {
             if (step == _Step.profile) ...[
               const SizedBox(height: 18),
               TermsCheckbox(
+                forEmployer: isManager,
                 value: acceptedTerms,
                 onChanged: (v) => setState(() {
                   acceptedTerms = v;

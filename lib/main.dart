@@ -64,6 +64,12 @@ Future<AppRepositories> _localRepositories(AppSession session) async {
     final payments = SandboxPaymentGateway();
     final dbShifts = DbShiftRepository(database, session, payments: payments);
     await dbShifts.seedIfEmpty();
+    // Смены на неделю вперёд во всех городах — от сегодняшнего дня, а не
+    // от дня установки: иначе через неделю лента опустела бы.
+    await dbShifts.keepDemoFresh();
+    // Напомнить о сменах на ближайшие сутки — сервера нет, и разослать
+    // напоминания больше некому, кроме самого приложения при запуске.
+    await dbShifts.sendReminders();
     return AppRepositories(
       shifts: dbShifts,
       auth: DbAuthRepository(database),

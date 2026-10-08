@@ -30,7 +30,8 @@ class ShiftCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: SurfaceCard(
-        onTap: shift.hasFreeSlots && allowed ? onTap : null,
+        // Заполненную смену тоже можно открыть: там лист ожидания.
+        onTap: allowed ? onTap : null,
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -159,13 +160,20 @@ class ShiftCard extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: shift.hasFreeSlots && allowed ? onTap : null,
+                onPressed: allowed ? onTap : null,
+                style: shift.hasFreeSlots || shift.isMine
+                    ? null
+                    : FilledButton.styleFrom(
+                        backgroundColor: AppColors.muted.withValues(alpha: 0.18),
+                        foregroundColor:
+                            isDark ? AppColors.darkBody : AppColors.body,
+                      ),
                 child: Text(
                   !allowed
                       ? 'Рейтинг ниже требуемого'
-                      : shift.hasFreeSlots
+                      : shift.hasFreeSlots || shift.isMine
                           ? 'Подробнее'
-                          : 'Мест нет',
+                          : 'Мест нет · Ждать места',
                 ),
               ),
             ),

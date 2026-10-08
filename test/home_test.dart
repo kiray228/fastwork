@@ -15,10 +15,15 @@ import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/support.dart';
 import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_core/user.dart';
+import 'support/clock.dart';
 
 /// Что появилось вокруг историй: ближайшая смена в ленте, тема, «Поделиться»,
 /// срок медкнижки, русский календарь.
 void main() {
+  // Часы хранилища — шесть утра сегодня: демо-смены на 10:00 ещё впереди,
+  // и записаться на них можно, когда бы тесты ни запускали.
+  DateTime Function() morning() => TestClock.today().call;
+
   AppUser testUser({String role = UserRole.worker, int completed = 0}) =>
       AppUser(
         id: 1,
@@ -43,7 +48,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     final user = testUser(role: role);
-    final store = shifts ?? FakeShiftRepository();
+    final store = shifts ?? FakeShiftRepository(clock: morning());
     final preferences = AppPreferences();
     await tester.pumpWidget(FastworkApp(
       session: AppSession()..setUser(user),
@@ -85,7 +90,7 @@ void main() {
         );
 
     testWidgets('ближайшая смена видна прямо в ленте', (tester) async {
-      final shifts = FakeShiftRepository(
+      final shifts = FakeShiftRepository(clock: morning(), 
         shifts: [shiftOn(today.add(const Duration(days: 1)))],
       );
       await shifts.apply(1);
@@ -104,7 +109,7 @@ void main() {
       final shifts = FakeShiftRepository(
         shifts: [shiftOn(today, start: start, end: (start + 240) % 1440)],
       );
-      await shifts.apply(1);
+      await applyBeforeStart(shifts, 1);
       await openApp(tester, shifts: shifts);
 
       await tester.tap(find.text('Я на месте'));

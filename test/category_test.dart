@@ -12,6 +12,7 @@ import 'package:fastwork_core/payment.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/publish.dart';
+import 'support/clock.dart';
 
 /// Тестовая карта: проходит всегда.
 final testCard = tokenizeSandboxCard(kSandboxCardNumber);
@@ -50,7 +51,8 @@ void main() {
     late FakeShiftRepository repo;
     final today = DateTime.now();
 
-    setUp(() => repo = FakeShiftRepository(userRating: 5.0));
+    setUp(() => repo = FakeShiftRepository(
+        userRating: 5.0, clock: TestClock.today().call));
 
     test('фильтр по категории оставляет только её смены', () async {
       final all = await repo.shiftsOn(today);
@@ -66,7 +68,7 @@ void main() {
 
     test('поиск находит смену по названию категории', () async {
       // В названии смены слова «сантехник» нет — оно только в категории.
-      repo = FakeShiftRepository(shifts: [
+      repo = FakeShiftRepository(clock: TestClock.today().call, shifts: [
         Shift(
           id: 1,
           workDate: today,
@@ -110,7 +112,7 @@ void main() {
     setUp(() async {
       db = AppDatabase(NativeDatabase.memory());
       session = AppSession();
-      shifts = DbShiftRepository(db, session);
+      shifts = DbShiftRepository(db, session, clock: TestClock.today().call);
       final manager = await DbAuthRepository(db).register(
         phone: '77000000001',
         fullName: 'Айгуль Досова',

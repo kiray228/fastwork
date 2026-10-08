@@ -1006,8 +1006,8 @@ class LevelLadder extends StatelessWidget {
               index: kWorkerLevels.length,
               child: Text(
                 next == null
-                    ? 'У вас высший уровень — $shifts смен'
-                    : 'У вас $shifts смен. До уровня «${next.name}» — '
+                    ? 'У вас высший уровень — ${shiftsLabel(shifts)}'
+                    : 'У вас ${shiftsLabel(shifts)}. До уровня «${next.name}» — '
                         'ещё ${next.minShifts - shifts}',
                 style: _captionStyle(0.85).copyWith(fontSize: 13),
               ),

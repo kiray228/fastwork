@@ -108,14 +108,8 @@ class _CompanyPageState extends State<CompanyPage> {
     );
   }
 
-  static String _reviewsLabel(int count) {
-    final last = count % 10;
-    final lastTwo = count % 100;
-    if (lastTwo >= 11 && lastTwo <= 14) return '$count отзывов';
-    if (last == 1) return '$count отзыв';
-    if (last >= 2 && last <= 4) return '$count отзыва';
-    return '$count отзывов';
-  }
+  static String _reviewsLabel(int count) =>
+      '$count ${plural(count, 'отзыв', 'отзыва', 'отзывов')}';
 }
 
 class _ReviewTile extends StatelessWidget {

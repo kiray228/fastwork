@@ -120,10 +120,17 @@ class _BookingConfirmSheetState extends State<_BookingConfirmSheet> {
                   _Term(
                     icon: Icons.event_busy_rounded,
                     danger: true,
-                    text: 'Отменить запись можно только до '
-                        '${formatDateTime(shift.cancelDeadline)} — это за '
-                        '${shift.cancelDeadlineHours} часов до начала. '
-                        'После этого времени отмена невозможна.',
+                    // До смены меньше срока отмены — значит, отменить
+                    // эту запись не выйдет вовсе. Раньше здесь стояло
+                    // «можно до 05:00» — время, которое уже прошло.
+                    text: shift.canCancelAt(DateTime.now())
+                        ? 'Отменить запись можно только до '
+                            '${formatDateTime(shift.cancelDeadline)} — это '
+                            'за ${shift.cancelDeadlineHours} часов до '
+                            'начала. После этого времени отмена невозможна.'
+                        : 'До начала меньше ${shift.cancelDeadlineHours} '
+                            'часов — отменить эту запись будет нельзя. '
+                            'Записывайтесь, только если точно придёте.',
                   ),
                   _Term(
                     icon: Icons.trending_down_rounded,

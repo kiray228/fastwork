@@ -614,6 +614,53 @@ class WalletEntry {
 }
 
 /// Кошелёк целиком: сколько можно вывести и откуда это взялось.
+/// Заработок за одну неделю — столбик графика в «Выплатах».
+class WeekEarnings {
+  /// Понедельник этой недели.
+  final DateTime start;
+
+  /// Сколько начислено за неделю, в тиынах.
+  final int amount;
+
+  /// Сколько смен оплачено.
+  final int shifts;
+
+  const WeekEarnings(this.start, this.amount, this.shifts);
+}
+
+/// Заработок по неделям: последние [weeks] недель, текущая — последней.
+///
+/// Считается из той же истории, что и баланс, — по начислениям. Пустые
+/// недели тоже в списке: провал на графике — это и есть ответ на вопрос
+/// «почему в этом месяце меньше».
+List<WeekEarnings> weeklyEarnings(
+  List<WalletEntry> entries,
+  DateTime now, {
+  int weeks = 8,
+}) {
+  DateTime monday(DateTime d) =>
+      DateTime(d.year, d.month, d.day - (d.weekday - 1));
+  final current = monday(now);
+  final starts = [
+    for (var i = weeks - 1; i >= 0; i--)
+      DateTime(current.year, current.month, current.day - 7 * i),
+  ];
+  final amounts = List.filled(weeks, 0);
+  final counts = List.filled(weeks, 0);
+  for (final e in entries) {
+    if (e.kind != WalletEntryKind.earning) continue;
+    final week = monday(e.createdAt);
+    final index = starts.indexWhere((s) =>
+        s.year == week.year && s.month == week.month && s.day == week.day);
+    if (index < 0) continue;
+    amounts[index] += e.amount;
+    counts[index]++;
+  }
+  return [
+    for (var i = 0; i < weeks; i++) WeekEarnings(starts[i], amounts[i], counts[i]),
+  ];
+}
+
 class WalletSummary {
   /// Доступно к выводу — начисления минус выводы.
   ///

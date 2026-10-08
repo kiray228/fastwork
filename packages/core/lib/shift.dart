@@ -45,6 +45,9 @@ class Shift {
   /// в ленту она попадёт, когда провайдер подтвердит оплату.
   final bool awaitingPayment;
 
+  /// Я в листе ожидания: мест нет, но мне скажут, когда освободится.
+  final bool onWaitlist;
+
   const Shift({
     required this.id,
     required this.workDate,
@@ -71,6 +74,7 @@ class Shift {
     this.category = kOtherCategory,
     this.isFunded = false,
     this.awaitingPayment = false,
+    this.onWaitlist = false,
   });
 
   /// Категория целиком — с названием и разделом.
@@ -90,6 +94,7 @@ class Shift {
     DateTime? cancelledAt,
     bool? isFunded,
     bool? awaitingPayment,
+    bool? onWaitlist,
   }) =>
       Shift(
         id: id,
@@ -117,6 +122,7 @@ class Shift {
         cancelledAt: cancelledAt ?? this.cancelledAt,
         isFunded: isFunded ?? this.isFunded,
         awaitingPayment: awaitingPayment ?? this.awaitingPayment,
+        onWaitlist: onWaitlist ?? this.onWaitlist,
       );
 
   /// Сколько всего длится смена.
@@ -198,6 +204,23 @@ class Shift {
   /// Смена ещё впереди или идёт прямо сейчас.
   bool isAheadAt(DateTime now) => now.isBefore(endsAt);
 
+  /// Смена уже началась (или вовсе прошла).
+  ///
+  /// С этого момента условия заморожены: записаться поздно, а заказчику
+  /// поздно править и отменять — люди уже на месте и работают на тех
+  /// условиях, на которые соглашались. Зато теперь можно отмечать, кто
+  /// вышел, а кто нет: раньше говорить об опоздании не о чем.
+  bool hasStartedAt(DateTime now) => !now.isBefore(startsAt);
+
+  /// Пересекается ли эта смена по времени с другой.
+  ///
+  /// Сравниваем моменты, а не минуты: ночная смена 22:00–06:00 заходит
+  /// на следующий день, и утренняя смена завтра с ней пересекается, хотя
+  /// «06:00» меньше «22:00». Края не считаются: закончил в 14:00 — в 14:00
+  /// можно начинать следующую.
+  bool overlaps(Shift other) =>
+      startsAt.isBefore(other.endsAt) && other.startsAt.isBefore(endsAt);
+
   /// Крайний срок отмены: за `cancelDeadlineHours` до начала смены.
   DateTime get cancelDeadline =>
       startsAt.subtract(Duration(hours: cancelDeadlineHours));
@@ -227,6 +250,65 @@ class Shift {
     if (hasFreeSlots && freeSlots <= 2) result.add('Мало мест');
     return result;
   }
+}
+
+/// Сколько человек можно позвать на одну смену. Больше — уже не смена,
+/// а мероприятие, и вести его стоит через поддержку.
+const kMaxWorkersPerShift = 100;
+
+/// Ставка не меньше 100 ₸ и не больше 100 000 ₸ в час, в тиынах.
+const kMinHourlyRate = 10000;
+const kMaxHourlyRate = 10000000;
+
+/// Что не так с условиями новой (или правленой) смены. null — всё в порядке.
+///
+/// Правила одни для формы на телефоне и для сервера. Форма проверяет,
+/// чтобы сразу подсказать человеку; сервер — потому что запрос можно
+/// прислать и без формы. Раньше сервер не проверял ничего: смена с
+/// отрицательной ставкой или нулём мест принималась и превращалась в
+/// отрицательный платёж.
+String? shiftFormError({
+  required String title,
+  required String address,
+  required DateTime workDate,
+  required int startMinutes,
+  required int endMinutes,
+  required int hourlyRate,
+  required int workersNeeded,
+  required DateTime now,
+}) {
+  if (title.trim().length < 5) return 'Опишите, какие услуги нужны';
+  if (address.trim().isEmpty) return 'Укажите адрес';
+  if (hourlyRate < kMinHourlyRate) {
+    return 'Ставка должна быть не меньше ${formatMoney(kMinHourlyRate)} в час';
+  }
+  if (hourlyRate > kMaxHourlyRate) {
+    return 'Ставка не может быть больше ${formatMoney(kMaxHourlyRate)} в час';
+  }
+  if (workersNeeded < 1) return 'Нужен хотя бы один человек';
+  if (workersNeeded > kMaxWorkersPerShift) {
+    return 'На одну смену — не больше $kMaxWorkersPerShift человек';
+  }
+  bool inDay(int m) => m >= 0 && m < 1440;
+  if (!inDay(startMinutes) || !inDay(endMinutes)) {
+    return 'Время смены указано неверно';
+  }
+  final draft = Shift(
+    id: 0,
+    workDate: workDate,
+    title: title,
+    company: '',
+    address: address,
+    startMinutes: startMinutes,
+    endMinutes: endMinutes,
+    hourlyRate: hourlyRate,
+    workersNeeded: workersNeeded,
+    workersHired: 0,
+  );
+  if (draft.durationMinutes < 60) return 'Смена должна длиться хотя бы час';
+  // Смену в прошлом никто не возьмёт: записаться можно только до начала.
+  if (draft.hasStartedAt(now)) return 'Время начала уже прошло';
+  return null;
 }
 
 /// Один ли это день? Время суток нас не интересует, только дата.
@@ -275,15 +357,25 @@ String formatDate(DateTime date) =>
     '${date.day.toString().padLeft(2, '0')}.'
     '${date.month.toString().padLeft(2, '0')}.${date.year}';
 
-/// 1 -> «1 день», 3 -> «3 дня», 11 -> «11 дней».
-String daysLabel(int days) {
-  final last = days % 10;
-  final lastTwo = days % 100;
-  if (lastTwo >= 11 && lastTwo <= 14) return '$days дней';
-  if (last == 1) return '$days день';
-  if (last >= 2 && last <= 4) return '$days дня';
-  return '$days дней';
+/// Русское окончание после числа: 1 смена, 2 смены, 5 смен, 11 смен.
+///
+/// Одно правило на всё приложение. Раньше оно было переписано в трёх
+/// местах — а в профиле его не было вовсе, и там стояло «2 смен».
+String plural(int n, String one, String few, String many) {
+  final last = n % 10;
+  final lastTwo = n % 100;
+  if (lastTwo >= 11 && lastTwo <= 14) return many;
+  if (last == 1) return one;
+  if (last >= 2 && last <= 4) return few;
+  return many;
 }
+
+/// 1 -> «1 день», 3 -> «3 дня», 11 -> «11 дней».
+String daysLabel(int days) => '$days ${plural(days, 'день', 'дня', 'дней')}';
+
+/// 1 -> «1 смена», 3 -> «3 смены», 11 -> «11 смен».
+String shiftsLabel(int count) =>
+    '$count ${plural(count, 'смена', 'смены', 'смен')}';
 
 /// Смена одним сообщением — чтобы переслать другу в мессенджер.
 ///
@@ -502,6 +594,7 @@ extension ShiftJson on Shift {
         'cancelledAt': cancelledAt?.toIso8601String(),
         'isFunded': isFunded,
         'awaitingPayment': awaitingPayment,
+        'onWaitlist': onWaitlist,
       };
 }
 
@@ -537,4 +630,5 @@ Shift shiftFromJson(Map<String, dynamic> json) => Shift(
           : DateTime.parse(json['cancelledAt'] as String),
       isFunded: json['isFunded'] as bool? ?? false,
       awaitingPayment: json['awaitingPayment'] as bool? ?? false,
+      onWaitlist: json['onWaitlist'] as bool? ?? false,
     );

@@ -100,6 +100,8 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
           BookingResult.ok => 'Смена отменена',
           BookingResult.notMine => 'Это не ваша смена',
           BookingResult.alreadyCancelled => 'Смена уже отменена',
+          BookingResult.alreadyStarted =>
+            'Смена уже началась — отменить её нельзя',
           _ => 'Смену не удалось отменить',
         }),
         behavior: SnackBarBehavior.floating,
@@ -115,6 +117,21 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
           session: widget.session,
           repository: repository,
           editing: shift,
+          onCreated: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+    await _load();
+  }
+
+  /// Выставить такую же смену ещё раз — на другой день.
+  Future<void> _repeatShift(Shift shift) async {
+    await Navigator.of(context).push(
+      appRoute(
+        CreateShiftPage(
+          session: widget.session,
+          repository: repository,
+          template: shift,
           onCreated: () => Navigator.of(context).pop(),
         ),
       ),
@@ -231,6 +248,7 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
                           onTap: () => _openApplicants(value[index]),
                           onCancel: () => _cancelShift(value[index]),
                           onEdit: () => _editShift(value[index]),
+                          onRepeat: () => _repeatShift(value[index]),
                           onPay: () => _payShift(value[index]),
                         ),
                       ),
@@ -250,6 +268,7 @@ class _ManagerShiftCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onCancel;
   final VoidCallback onEdit;
+  final VoidCallback onRepeat;
   final VoidCallback onPay;
 
   const _ManagerShiftCard({
@@ -257,6 +276,7 @@ class _ManagerShiftCard extends StatelessWidget {
     required this.onTap,
     required this.onCancel,
     required this.onEdit,
+    required this.onRepeat,
     required this.onPay,
   });
 
@@ -264,9 +284,12 @@ class _ManagerShiftCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isPast = shift.workDate.isBefore(
-      DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day),
-    );
+    final now = DateTime.now();
+    final isPast = shift.isPastOn(now);
+    // Началась — условия заморожены: ни правки, ни отмены. То же правило
+    // проверяет и хранилище; здесь оно только прячет кнопки, которые всё
+    // равно ответили бы отказом.
+    final started = shift.hasStartedAt(now);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -392,9 +415,9 @@ class _ManagerShiftCard extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                // Отменить можно только смену, которая ещё впереди:
-                // прошедшую отменять поздно, отменённую — незачем.
-                if (!isPast && !shift.isCancelled) ...[
+                // Отменить можно только смену, которая ещё не началась:
+                // начавшуюся отменять поздно, отменённую — незачем.
+                if (!started && !shift.isCancelled) ...[
                   // Неоплаченную не правим: за неё могут платить по
                   // старой цене прямо сейчас.
                   if (!shift.awaitingPayment)
@@ -430,9 +453,38 @@ class _ManagerShiftCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  // Повтор — значком: три слова в строку на узком
+                  // экране не помещаются.
+                  IconButton(
+                    onPressed: onRepeat,
+                    tooltip: 'Повторить',
+                    icon: const Icon(Icons.replay_rounded, size: 18),
+                    color: AppColors.brand,
+                    visualDensity: VisualDensity.compact,
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 32),
+                    padding: EdgeInsets.zero,
+                  ),
                 ] else
-                  const Icon(Icons.chevron_right_rounded,
-                      size: 18, color: AppColors.muted),
+                  // Прошедшую и отменённую уже не правят — зато такую же
+                  // можно выставить снова одним касанием.
+                  TextButton.icon(
+                    onPressed: onRepeat,
+                    icon: const Icon(Icons.replay_rounded, size: 16),
+                    label: const Text(
+                      'Повторить',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.brand,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
               ],
             ),
           ],
@@ -505,9 +557,42 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(result == BookingResult.ok
-            ? 'Отмечено: ${applicant.user.fullName} не вышел'
-            : 'Не получилось отметить'),
+        content: Text(switch (result) {
+          BookingResult.ok => 'Отмечено: ${applicant.user.fullName} не вышел',
+          BookingResult.notStarted =>
+            'Смена ещё не началась — отмечать невыход рано',
+          _ => 'Не получилось отметить',
+        }),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    await _load();
+  }
+
+  /// Добавить в любимые или убрать оттуда.
+  ///
+  /// Любимым приходит приглашение, как только заказчик опубликует новую
+  /// смену, — так хорошие люди возвращаются, а смены набираются быстрее.
+  Future<void> _toggleFavorite(ShiftApplicant applicant) async {
+    final favorite = !applicant.isFavorite;
+    final result = await guarded(
+      context,
+      () => widget.repository.setFavorite(
+        workerId: applicant.user.id,
+        favorite: favorite,
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(switch (result) {
+          BookingResult.ok when favorite =>
+            '${applicant.user.fullName} — в любимых. Позовём на ваши '
+                'следующие смены',
+          BookingResult.ok => '${applicant.user.fullName} убран из любимых',
+          _ => 'В любимые — только тех, кто у вас уже отработал',
+        }),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -526,9 +611,13 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(result == BookingResult.ok
-            ? 'Смена засчитана: ${applicant.user.fullName}'
-            : 'Это не ваша смена'),
+        content: Text(switch (result) {
+          BookingResult.ok => 'Смена засчитана: ${applicant.user.fullName}',
+          BookingResult.notStarted =>
+            'Смена ещё не началась — засчитать её можно после начала',
+          BookingResult.notMine => 'Это не ваша смена',
+          _ => 'Не получилось засчитать',
+        }),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -579,6 +668,8 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
                     onNoShow: canMark && item.isUnmarked
                         ? () => _markNoShow(item)
                         : null,
+                    onFavorite:
+                        item.isConfirmed ? () => _toggleFavorite(item) : null,
                   ),
                 );
               },
@@ -629,10 +720,14 @@ class _ApplicantTile extends StatelessWidget {
   final VoidCallback? onConfirm;
   final VoidCallback? onNoShow;
 
+  /// В любимые — только тех, кто отработал. null — сердечка нет.
+  final VoidCallback? onFavorite;
+
   const _ApplicantTile({
     required this.applicant,
     this.onConfirm,
     this.onNoShow,
+    this.onFavorite,
   });
 
   @override
@@ -713,6 +808,19 @@ class _ApplicantTile extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (onFavorite != null)
+                  IconButton(
+                    onPressed: onFavorite,
+                    tooltip: applicant.isFavorite
+                        ? 'Убрать из любимых'
+                        : 'В любимые исполнители',
+                    icon: Icon(
+                      applicant.isFavorite
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                      color: AppColors.accent,
+                    ),
+                  ),
                 if (applicant.isConfirmed)
                   const TagChip(
                     text: 'Отработал',

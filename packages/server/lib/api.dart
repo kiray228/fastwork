@@ -134,8 +134,34 @@ class Api {
   ) async {
     final user = await _currentUser(request);
     if (user == null) return _error('Нужен вход', status: 401);
-    return handler(user);
+    try {
+      return await handler(user);
+    } on UserError catch (e) {
+      // Отказ по правилам — его текст и есть объяснение.
+      return _error(e.message);
+    } on FormatException {
+      // Кривой JSON или дата, которую не разобрать. Раньше это было
+      // «сервер упал» (500), хотя ошибся тот, кто прислал запрос.
+      return _error('Не получилось разобрать запрос');
+    } on TypeError {
+      // Число пришло строкой, поля нет вовсе — тоже ошибка запроса.
+      return _error('В запросе не хватает данных или они не того вида');
+    }
   }
+
+  /// Проверить условия смены из запроса — теми же правилами, что и форма
+  /// в приложении. null — всё в порядке.
+  static String? _shiftInputError(Map<String, dynamic> body) =>
+      shiftFormError(
+        title: body['title'] as String,
+        address: body['address'] as String,
+        workDate: DateTime.parse(body['workDate'] as String),
+        startMinutes: body['startMinutes'] as int,
+        endMinutes: body['endMinutes'] as int,
+        hourlyRate: body['hourlyRate'] as int,
+        workersNeeded: body['workersNeeded'] as int,
+        now: DateTime.now(),
+      );
 
   // -------------------------------------------------------------------------
   // Маршруты
@@ -440,6 +466,19 @@ class Api {
       });
     });
 
+    // Лист ожидания: «скажите, когда освободится место» и обратно.
+    router.post('/api/shifts/<id|[0-9]+>/waitlist',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        final body = await _body(request);
+        final result = await _shiftsFor(user).setWaitlist(
+          int.parse(id),
+          join: body['join'] as bool? ?? true,
+        );
+        return _json({'result': result.name});
+      });
+    });
+
     router.post('/api/shifts/<id|[0-9]+>/checkin',
         (Request request, String id) async {
       return _authorized(request, (user) async {
@@ -547,6 +586,8 @@ class Api {
           return _error('Обновите приложение: изменился способ оплаты',
               status: 426);
         }
+        final problem = _shiftInputError(body);
+        if (problem != null) return _error(problem);
         final PaymentCheckout checkout;
         try {
           checkout = await _shiftsFor(user).createShift(
@@ -554,14 +595,17 @@ class Api {
             phone: body['phone'] as String?,
             workDate: DateTime.parse(body['workDate'] as String),
             title: body['title'] as String,
-            company: body['company'] as String,
+            // Компания и город — из профиля заказчика, а не из запроса.
+            // Иначе кто угодно мог бы выставить смену от имени «Magnum»
+            // и собрать отзывы, которые достанутся настоящему Magnum.
+            company: user.company ?? body['company'] as String,
             address: body['address'] as String,
             startMinutes: body['startMinutes'] as int,
             endMinutes: body['endMinutes'] as int,
             hourlyRate: body['hourlyRate'] as int,
             workersNeeded: body['workersNeeded'] as int,
             createdBy: user.id,
-            city: body['city'] as String? ?? user.city,
+            city: user.city,
             category: category,
             duties: (body['duties'] as List<dynamic>? ?? []).cast<String>(),
             dressCode: body['dressCode'] as String?,
@@ -607,6 +651,8 @@ class Api {
         if (category != null && !isKnownCategory(category)) {
           return _error('Неизвестная категория работ');
         }
+        final problem = _shiftInputError(body);
+        if (problem != null) return _error(problem);
         final ShiftEditResult result;
         try {
           result = await _shiftsFor(user).updateShift(
@@ -680,6 +726,33 @@ class Api {
         final result = await _shiftsFor(user).markNoShow(
           shiftId: int.parse(id),
           workerId: body['workerId'] as int,
+        );
+        return _json({'result': result.name});
+      });
+    });
+
+    // Любимые исполнители заказчика. Адрес — номер исполнителя: «этого
+    // человека — в любимые» или «из любимых».
+    router.get('/api/favorites', (Request request) async {
+      return _authorized(request, (user) async {
+        if (!user.isManager) {
+          return _error('Только для заказчиков', status: 403);
+        }
+        final people = await _shiftsFor(user).favoriteWorkers();
+        return _json(people.map((p) => p.toJson()).toList());
+      });
+    });
+
+    router.post('/api/favorites/<id|[0-9]+>',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        if (!user.isManager) {
+          return _error('Только для заказчиков', status: 403);
+        }
+        final body = await _body(request);
+        final result = await _shiftsFor(user).setFavorite(
+          workerId: int.parse(id),
+          favorite: body['favorite'] as bool? ?? true,
         );
         return _json({'result': result.name});
       });

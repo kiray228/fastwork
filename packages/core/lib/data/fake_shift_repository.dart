@@ -27,11 +27,17 @@ class FakeShiftRepository implements ShiftRepository {
   /// Город «текущего пользователя» — по нему фильтруется лента.
   String city;
 
+  /// Который сейчас час — как у `DbShiftRepository`: тесты подставляют
+  /// свои часы и двигают их, когда нужно «дожить» до смены.
+  DateTime Function() clock;
+
   FakeShiftRepository({
     List<Shift>? shifts,
     this.userRating = 4.0,
     this.city = 'Алматы',
-  }) : _shifts = shifts ?? buildDemoShifts();
+    DateTime Function()? clock,
+  })  : _shifts = shifts ?? buildDemoShifts(),
+        clock = clock ?? DateTime.now;
 
   Shift _decorate(Shift s) {
     final status = _myStatuses[s.id];
@@ -44,11 +50,30 @@ class FakeShiftRepository implements ShiftRepository {
       myStatus: status,
       clearMyStatus: status == null,
       myCheckedInAt: _checkIns[s.id],
-      cancelledAt: _cancelled.contains(s.id) ? DateTime.now() : null,
+      cancelledAt: _cancelled.contains(s.id) ? clock() : null,
       // Демо-смены «оплатил» сервис, новые оплачены, когда прошла оплата.
       isFunded: !_refunded.contains(s.id) && !_awaiting.contains(s.id),
       awaitingPayment: _awaiting.contains(s.id),
+      onWaitlist: _waitlist.contains(s.id),
     );
+  }
+
+  /// Смены, где «я» стою в листе ожидания.
+  final Set<int> _waitlist = {};
+
+  @override
+  Future<BookingResult> setWaitlist(int shiftId, {required bool join}) async {
+    if (!join) {
+      _waitlist.remove(shiftId);
+      return BookingResult.ok;
+    }
+    final shift = await shiftById(shiftId);
+    if (shift == null) return BookingResult.notFound;
+    if (shift.isCancelled) return BookingResult.alreadyCancelled;
+    if (shift.isMine) return BookingResult.alreadyBooked;
+    if (shift.hasStartedAt(clock())) return BookingResult.alreadyStarted;
+    _waitlist.add(shiftId);
+    return BookingResult.ok;
   }
 
   @override
@@ -61,14 +86,14 @@ class FakeShiftRepository implements ShiftRepository {
             isSameDay(s.workDate, date) &&
             s.city == city &&
             _published(s))
-        .map(_decorate)
-        .toList();
-    return applyFilter(list, filter);
+        .map(_decorate);
+    return applyFilter(bookable(list, clock()), filter);
   }
 
   @override
   Future<Set<DateTime>> daysWithShifts() async => _shifts
-      .where((s) => s.city == city && _published(s))
+      .where((s) =>
+          s.city == city && _published(s) && !s.hasStartedAt(clock()))
       .map((s) => DateTime(s.workDate.year, s.workDate.month, s.workDate.day))
       .toSet();
 
@@ -102,12 +127,22 @@ class FakeShiftRepository implements ShiftRepository {
     if (shift == null) return BookingResult.notFound;
     if (shift.isCancelled) return BookingResult.alreadyCancelled;
     if (shift.isApplied) return BookingResult.alreadyBooked;
+    if (shift.myStatus != null &&
+        shift.myStatus != ApplicationStatus.cancelled) {
+      return BookingResult.alreadyFinished;
+    }
+    if (shift.hasStartedAt(clock())) return BookingResult.alreadyStarted;
     if (!shift.ratingAllows(userRating)) return BookingResult.ratingTooLow;
     if (!shift.hasFreeSlots) return BookingResult.noSlots;
+    final booked = _shifts
+        .where((s) => _myStatuses[s.id] == ApplicationStatus.active)
+        .map(_decorate);
+    if (hasTimeConflict(shift, booked)) return BookingResult.timeConflict;
     final limit = await earningsLimit(shift.workDate);
     if (!limit.allows(shift.totalPay)) return BookingResult.earningsLimit;
 
     _myStatuses[shiftId] = ApplicationStatus.active;
+    _waitlist.remove(shiftId);
     return BookingResult.ok;
   }
 
@@ -119,11 +154,11 @@ class FakeShiftRepository implements ShiftRepository {
     final shift = await shiftById(shiftId);
     if (shift == null) return BookingResult.notFound;
     if (shift.isCheckedIn) return BookingResult.alreadyBooked;
-    if (!shift.canCheckInAt(DateTime.now())) {
+    if (!shift.canCheckInAt(clock())) {
       return BookingResult.tooEarlyToCheckIn;
     }
 
-    _checkIns[shiftId] = DateTime.now();
+    _checkIns[shiftId] = clock();
     return BookingResult.ok;
   }
 
@@ -136,9 +171,10 @@ class FakeShiftRepository implements ShiftRepository {
     if (status == null) return BookingResult.notFound;
     if (status == ApplicationStatus.completed) return BookingResult.ok;
     if (status != ApplicationStatus.active) return BookingResult.alreadyBooked;
+    final shift = (await shiftById(shiftId))!;
+    if (!shift.hasStartedAt(clock())) return BookingResult.notStarted;
 
     _myStatuses[shiftId] = ApplicationStatus.completed;
-    final shift = (await shiftById(shiftId))!;
     _record(WalletEntryKind.earning, shift.totalPay, '«${shift.title}»',
         shiftId: shiftId);
     return BookingResult.ok;
@@ -181,7 +217,7 @@ class FakeShiftRepository implements ShiftRepository {
       amount: amount,
       shiftId: shiftId,
       title: title,
-      createdAt: DateTime.now(),
+      createdAt: clock(),
     ));
   }
 
@@ -191,7 +227,8 @@ class FakeShiftRepository implements ShiftRepository {
   Future<BookingResult> cancelApplication(int shiftId) async {
     final shift = await shiftById(shiftId);
     if (shift == null) return BookingResult.notFound;
-    if (!shift.canCancelAt(DateTime.now())) {
+    if (!shift.isApplied) return BookingResult.notMine;
+    if (!shift.canCancelAt(clock())) {
       return BookingResult.tooLateToCancel;
     }
 
@@ -275,7 +312,7 @@ class FakeShiftRepository implements ShiftRepository {
       authorName: 'Исполнитель',
       rating: rating,
       comment: comment,
-      createdAt: DateTime.now(),
+      createdAt: clock(),
     ));
   }
 
@@ -445,20 +482,47 @@ class FakeShiftRepository implements ShiftRepository {
 
     return [
       ShiftApplicant(
-        user: AppUser(
-          id: 1,
-          phone: '77001234567',
-          fullName: 'Ернар Калдыбеков',
-          city: 'Алматы',
-          rating: userRating,
-          isVerified: false,
-          noShows: status == ApplicationStatus.noShow ? 1 : 0,
-        ),
+        user: _me(noShows: status == ApplicationStatus.noShow ? 1 : 0),
         status: status!,
         checkedInAt: _checkIns[shiftId],
+        isFavorite: _favorites.contains(1),
       ),
     ];
   }
+
+  /// Единственный исполнитель в памяти — он же «текущий пользователь».
+  AppUser _me({int noShows = 0}) => AppUser(
+        id: 1,
+        phone: '77001234567',
+        fullName: 'Ернар Калдыбеков',
+        city: 'Алматы',
+        rating: userRating,
+        isVerified: false,
+        noShows: noShows,
+      );
+
+  /// Номера любимых исполнителей.
+  final Set<int> _favorites = {};
+
+  @override
+  Future<BookingResult> setFavorite({
+    required int workerId,
+    required bool favorite,
+  }) async {
+    if (!favorite) {
+      _favorites.remove(workerId);
+      return BookingResult.ok;
+    }
+    final worked =
+        _myStatuses.values.any((s) => s == ApplicationStatus.completed);
+    if (!worked) return BookingResult.notMine;
+    _favorites.add(workerId);
+    return BookingResult.ok;
+  }
+
+  @override
+  Future<List<AppUser>> favoriteWorkers() async =>
+      [if (_favorites.contains(1)) _me()];
 
   /// Оценки исполнителей, поставленные заказчиком.
   final List<WorkerReview> _workerReviews = [];
@@ -467,7 +531,7 @@ class FakeShiftRepository implements ShiftRepository {
 
   @override
   Future<List<PendingRating>> workersToRate(int managerId) async {
-    final now = DateTime.now();
+    final now = clock();
     final today = DateTime(now.year, now.month, now.day);
 
     return _shifts
@@ -503,7 +567,7 @@ class FakeShiftRepository implements ShiftRepository {
       company: shift?.company ?? '',
       rating: rating,
       comment: comment,
-      createdAt: DateTime.now(),
+      createdAt: clock(),
     ));
   }
 
@@ -523,6 +587,8 @@ class FakeShiftRepository implements ShiftRepository {
     if (_shifts[index].isCancelled) return BookingResult.alreadyCancelled;
 
     final shift = _decorate(_shifts[index]);
+    if (shift.isCancelled) return BookingResult.alreadyCancelled;
+    if (shift.hasStartedAt(clock())) return BookingResult.alreadyStarted;
     var rest = shift.awaitingPayment
         ? 0
         : _paidFor(shift) - (_noShowRefunds[shiftId] ?? 0);
@@ -552,9 +618,10 @@ class FakeShiftRepository implements ShiftRepository {
     if (status == null) return BookingResult.notFound;
     if (status == ApplicationStatus.noShow) return BookingResult.ok;
     if (status != ApplicationStatus.active) return BookingResult.alreadyBooked;
+    final shift = (await shiftById(shiftId))!;
+    if (!shift.hasStartedAt(clock())) return BookingResult.notStarted;
 
     _myStatuses[shiftId] = ApplicationStatus.noShow;
-    final shift = (await shiftById(shiftId))!;
     final slot = ShiftCost(slotPay: shift.totalPay, slots: 1).total;
     await payments.card.refund(operation: 'fake', amount: slot);
     _noShowRefunds[shiftId] = (_noShowRefunds[shiftId] ?? 0) + slot;
@@ -585,6 +652,9 @@ class FakeShiftRepository implements ShiftRepository {
     final before = _decorate(_shifts[index]);
     if (before.isCancelled) {
       return const ShiftEditResult(BookingResult.alreadyCancelled);
+    }
+    if (before.hasStartedAt(clock())) {
+      return const ShiftEditResult(BookingResult.alreadyStarted);
     }
     if (before.awaitingPayment) {
       return const ShiftEditResult(BookingResult.awaitingPayment);
@@ -662,7 +732,7 @@ class FakeShiftRepository implements ShiftRepository {
 
   @override
   Future<void> markNotificationsRead() async {
-    final now = DateTime.now();
+    final now = clock();
     for (var i = 0; i < _notifications.length; i++) {
       final n = _notifications[i];
       if (n.isUnread) {
@@ -681,7 +751,7 @@ class FakeShiftRepository implements ShiftRepository {
 
   @override
   Future<List<Shift>> myShifts({required bool archived}) async {
-    final now = DateTime.now();
+    final now = clock();
     final today = DateTime(now.year, now.month, now.day);
 
     return _shifts.where((s) {

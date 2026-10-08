@@ -1,0 +1,77 @@
+# Проверка каждой ветки и каждого pull request.
+#
+# Сайт и APK собираются только из main, и только если проходят тесты.
+# Но узнавать о сломанном тесте в момент слияния поздно: правка уже
+# одобрена, и чинить её приходится второпях. Здесь то же самое — анализ
+# кода и все тесты — запускается на каждый пуш в любую ветку, и pull
+# request показывает зелёную галочку или красный крестик ещё до слияния.
+#
+# Заодно проверяются сервер и ядро: их тесты не запускает ни одна из
+# сборок, потому что ни сайт, ни APK их не собирают.
+
+name: Проверить
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: Приложение
+    runs-on: ubuntu-latest
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Поставить Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.4
+          channel: stable
+          cache: true
+
+      - name: Скачать зависимости
+        run: flutter pub get
+
+      - name: Анализ кода
+        # Предупреждение — тоже ошибка: на них и держится порядок.
+        # Только своё: ядро и сервер со своими зависимостями проверяет
+        # вторая задача, а здесь их пакеты не скачаны.
+        run: flutter analyze --fatal-infos lib test
+
+      - name: Тесты приложения
+        run: flutter test
+
+  server:
+    name: Ядро и сервер
+    runs-on: ubuntu-latest
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Поставить Flutter
+        # Flutter везёт с собой Dart той же версии, что и у приложения.
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.4
+          channel: stable
+          cache: true
+
+      - name: Анализ ядра
+        working-directory: packages/core
+        run: |
+          dart pub get
+          dart analyze --fatal-infos
+
+      - name: Анализ и тесты сервера
+        working-directory: packages/server
+        run: |
+          dart pub get
+          dart analyze --fatal-infos
+          dart test
