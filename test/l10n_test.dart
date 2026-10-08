@@ -12,7 +12,8 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('русские строки живут только в словарях', () {
     final offenders = <String>[];
-    final literal = RegExp(r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*\"""");
+    // Строка в одинарных или в двойных кавычках.
+    final literal = RegExp(r"'(?:[^'\\]|\\.)*'" '|' r'"(?:[^"\\]|\\.)*"');
     final cyrillic = RegExp('[А-Яа-яЁё]');
 
     final files = Directory('lib')
