@@ -14,6 +14,7 @@ import '../widgets/async_state.dart';
 import '../widgets/category_icon.dart';
 import '../widgets/common.dart';
 import '../widgets/payment_sheet.dart';
+import '../l10n/strings.dart';
 
 /// Создание смены заказчиком — и правка уже созданной.
 ///
@@ -80,7 +81,9 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
     super.initState();
     final shift = widget.editing ?? widget.template;
 
-    titleController = TextEditingController(text: shift?.title ?? 'Услуги ');
+    titleController = TextEditingController(
+      text: shift?.title ?? tr.manager.titlePrefill,
+    );
     addressController = TextEditingController(text: shift?.address ?? '');
     rateController = TextEditingController(
       text: shift == null ? '1100' : '${shift.hourlyRate ~/ 100}',
@@ -122,7 +125,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
         id: 0,
         workDate: date,
         title: titleController.text,
-        company: widget.session.user?.company ?? 'Компания',
+        company: widget.session.user?.company ?? tr.manager.companyFallback,
         address: addressController.text,
         startMinutes: _startMinutes,
         endMinutes: _endMinutes,
@@ -186,7 +189,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
     }
     final chosen = category;
     if (chosen == null) {
-      setState(() => error = 'Выберите категорию работ');
+      setState(() => error = tr.manager.needCategory);
       return;
     }
 
@@ -224,13 +227,11 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
         // Смена подорожала — сначала доплата. Новые условия вступят в
         // силу, когда провайдер подтвердит деньги.
         final paid = await _checkout(
-          title: 'Доплата за смену',
-          note: 'Смена подорожала. Новые условия появятся в ленте, как '
-              'только пройдёт доплата: сервис держит оплату за все места '
-              'заранее.',
-          lines: [PaymentLine('Разница в стоимости', extra)],
+          title: tr.manager.surchargeTitle,
+          note: tr.manager.surchargeNote,
+          lines: [PaymentLine(tr.manager.priceDifference, extra)],
           total: extra,
-          actionLabel: 'Доплатить ${formatMoney(extra)}',
+          actionLabel: tr.manager.surchargeAmount(formatMoney(extra)),
           start: (method, phone, _) async {
             final edit = await save(method, phone);
             if (edit.checkout != null) return edit.checkout!;
@@ -249,8 +250,8 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
         );
         if (!mounted || paid == null) return;
         if (!paid.isPaid) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Правка применится, когда пройдёт доплата'),
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(tr.manager.editAwaitsSurcharge),
           ));
           widget.onCreated();
           return;
@@ -274,7 +275,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Изменения сохранены')),
+        SnackBar(content: Text(tr.manager.changesSaved)),
       );
       widget.onCreated();
       return;
@@ -284,19 +285,17 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
     // должны быть у него раньше, чем на смену кто-то запишется.
     final cost = ShiftCost.of(_preview);
     final result = await _checkout(
-      title: 'Оплата смены',
-      note: 'Деньги останутся у сервиса и уйдут исполнителям только после '
-          'того, как вы подтвердите их выход. За невышедших и при отмене '
-          'смены деньги вернутся.',
+      title: tr.manager.paymentTitle,
+      note: tr.manager.payNewNote,
       lines: [
         PaymentLine(
-          'Вознаграждение: ${cost.slots} × ${formatMoney(cost.slotPay)}',
+          tr.manager.rewardLine(cost.slots, formatMoney(cost.slotPay)),
           cost.pay,
         ),
-        PaymentLine('Комиссия сервиса $kPlatformFeePercent%', cost.fee),
+        PaymentLine(tr.manager.serviceFee(kPlatformFeePercent), cost.fee),
       ],
       total: cost.total,
-      actionLabel: 'Оплатить ${formatMoney(cost.total)}',
+      actionLabel: tr.manager.payAmount(formatMoney(cost.total)),
       // Первая попытка создаёт смену, повторная оплачивает уже созданную —
       // иначе каждая неудачная карта заводила бы по смене.
       start: (method, phone, previous) => previous?.shiftId == null
@@ -305,7 +304,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
               phone: phone,
               workDate: DateTime(date.year, date.month, date.day),
               title: title,
-              company: widget.session.user?.company ?? 'Компания',
+              company: widget.session.user?.company ?? tr.manager.companyFallback,
               address: address,
               startMinutes: _startMinutes,
               endMinutes: _endMinutes,
@@ -329,9 +328,8 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(result.isPaid
-          ? 'Смена опубликована'
-          : 'Смена сохранена и появится в ленте, когда пройдёт оплата. '
-              'Оплатить можно в «Моих сменах»'),
+          ? tr.manager.shiftPublished
+          : tr.manager.savedAwaitingPayment),
     ));
     widget.onCreated();
   }
@@ -363,15 +361,12 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
   static String _editError(BookingResult result, Shift existing) =>
       switch (result) {
         BookingResult.fewerThanHired =>
-          'Уже набрано ${existing.workersHired} чел. — '
-              'мест не может быть меньше',
-        BookingResult.notMine => 'Это не ваша смена',
-        BookingResult.alreadyCancelled => 'Смена отменена',
-        BookingResult.awaitingPayment =>
-          'Смена ещё не оплачена — сначала оплатите её',
-        BookingResult.alreadyStarted =>
-          'Смена уже началась — менять условия поздно',
-        _ => 'Не получилось сохранить',
+          tr.manager.editFewerThanHired(existing.workersHired),
+        BookingResult.notMine => tr.manager.notYourShift,
+        BookingResult.alreadyCancelled => tr.manager.editShiftCancelled,
+        BookingResult.awaitingPayment => tr.manager.editNotPaid,
+        BookingResult.alreadyStarted => tr.manager.editTooLate,
+        _ => tr.manager.saveFailed,
       };
 
   @override
@@ -381,10 +376,10 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(isEditing
-            ? 'Изменить смену'
+            ? tr.manager.editShiftTitle
             : widget.template != null
-                ? 'Повторить смену'
-                : 'Новая смена'),
+                ? tr.manager.repeatShiftTitle
+                : tr.manager.newShiftTitle),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
@@ -393,23 +388,23 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _Label('Категория работ'),
+                _Label(tr.manager.categoryLabel),
                 _CategoryPicker(
                   category: category,
                   onTap: _pickCategory,
                 ),
                 const SizedBox(height: 14),
-                _Label('Какие услуги нужны'),
+                _Label(tr.manager.servicesLabel),
                 _Input(
                   controller: titleController,
-                  hint: 'Услуги сотрудника склада',
+                  hint: tr.manager.titleHint,
                   onChanged: (_) => setState(() => error = null),
                 ),
                 const SizedBox(height: 14),
-                _Label('Адрес'),
+                _Label(tr.manager.addressLabel),
                 _Input(
                   controller: addressController,
-                  hint: 'г. Алматы, ул. Абая, 10',
+                  hint: tr.manager.addressHint,
                   onChanged: (_) => setState(() => error = null),
                 ),
               ],
@@ -420,32 +415,31 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SectionHeader(
+                SectionHeader(
                   icon: Icons.schedule_rounded,
-                  title: 'Когда',
+                  title: tr.manager.whenSection,
                 ),
                 const SizedBox(height: 12),
                 _PickerRow(
-                  label: 'Дата',
-                  value: '${date.day} ${monthsShort[date.month - 1]}, '
-                      '${weekdaysShort[date.weekday - 1]}',
+                  label: tr.manager.dateLabel,
+                  value: tr.core.dayMonthWeekday(date),
                   onTap: _pickDate,
                 ),
                 _PickerRow(
-                  label: 'Начало',
+                  label: tr.manager.startLabel,
                   value: formatTime(_startMinutes),
                   onTap: () => _pickTime(isStart: true),
                 ),
                 _PickerRow(
-                  label: 'Конец',
+                  label: tr.manager.endLabel,
                   value: formatTime(_endMinutes),
                   onTap: () => _pickTime(isStart: false),
                 ),
                 if (preview.crossesMidnight)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
                     child: TagChip(
-                      text: 'Ночная смена — закончится на следующий день',
+                      text: tr.manager.nightShift,
                       icon: Icons.nightlight_round,
                       color: AppColors.accent,
                     ),
@@ -458,9 +452,9 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SectionHeader(
+                SectionHeader(
                   icon: Icons.payments_outlined,
-                  title: 'Оплата и люди',
+                  title: tr.manager.paySection,
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -469,7 +463,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _Label('Ставка, ₸/час'),
+                          _Label(tr.manager.rateLabel),
                           _Input(
                             controller: rateController,
                             hint: '1100',
@@ -485,7 +479,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _Label('Человек'),
+                          _Label(tr.manager.workersLabel),
                           _Input(
                             controller: workersController,
                             hint: '3',
@@ -508,19 +502,22 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SectionHeader(
+                SectionHeader(
                   icon: Icons.checklist_rounded,
-                  title: 'Обязанности',
+                  title: tr.manager.dutiesSection,
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  'По одному пункту в строке',
-                  style: TextStyle(fontSize: 12.5, color: AppColors.muted),
+                Text(
+                  tr.manager.dutiesHelp,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.muted,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 _Input(
                   controller: dutiesController,
-                  hint: 'Разгружать машины\nСортировать товар',
+                  hint: tr.manager.dutiesHint,
                   maxLines: 4,
                 ),
               ],
@@ -558,7 +555,9 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
                       color: Colors.white,
                     ),
                   )
-                : Text(isEditing ? 'Сохранить' : 'Оплатить и опубликовать'),
+                : Text(isEditing
+                    ? tr.manager.save
+                    : tr.manager.payAndPublish),
           ),
         ],
       ),
@@ -587,28 +586,28 @@ class _Summary extends StatelessWidget {
       child: Column(
         children: [
           _SummaryRow(
-            label: 'Длительность',
+            label: tr.manager.summaryDuration,
             value: formatDuration(shift.durationMinutes),
           ),
           if (shift.hasUnpaidBreak)
             _SummaryRow(
-              label: 'Оплачивается',
+              label: tr.manager.summaryPaid,
               value: formatDuration(shift.paidMinutes),
             ),
           _SummaryRow(
-            label: 'Одному человеку',
+            label: tr.manager.summaryPerPerson,
             value: formatMoney(shift.totalPay),
           ),
           _SummaryRow(
-            label: 'Всем исполнителям',
+            label: tr.manager.summaryAllWorkers,
             value: formatMoney(ShiftCost.of(shift).pay),
           ),
           _SummaryRow(
-            label: 'Комиссия сервиса $kPlatformFeePercent%',
+            label: tr.manager.serviceFee(kPlatformFeePercent),
             value: formatMoney(ShiftCost.of(shift).fee),
           ),
           _SummaryRow(
-            label: 'К оплате',
+            label: tr.manager.summaryTotal,
             value: formatMoney(ShiftCost.of(shift).total),
             bold: true,
           ),
@@ -805,7 +804,7 @@ class _CategoryPicker extends StatelessWidget {
             Expanded(
               child: Text(
                 chosen == null
-                    ? 'Выберите категорию'
+                    ? tr.manager.chooseCategory
                     : categoryById(chosen).name,
                 style: TextStyle(
                   fontSize: 14,
@@ -876,9 +875,9 @@ class _CategorySheetState extends State<_CategorySheet> {
               child: TextField(
                 autofocus: false,
                 onChanged: (value) => setState(() => query = value),
-                decoration: const InputDecoration(
-                  hintText: 'Найти категорию',
-                  prefixIcon: Icon(Icons.search_rounded, size: 20),
+                decoration: InputDecoration(
+                  hintText: tr.manager.findCategory,
+                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
                   isDense: true,
                 ),
               ),
@@ -893,7 +892,7 @@ class _CategorySheetState extends State<_CategorySheet> {
                       Padding(
                         padding: const EdgeInsets.fromLTRB(12, 14, 12, 4),
                         child: Text(
-                          group.toUpperCase(),
+                          tr.core.categoryGroup(group).toUpperCase(),
                           style: const TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w800,
@@ -925,12 +924,12 @@ class _CategorySheetState extends State<_CategorySheet> {
                         ),
                     ],
                   if (found.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(24),
+                    Padding(
+                      padding: const EdgeInsets.all(24),
                       child: Text(
-                        'Такой категории нет — выберите «Другое»',
+                        tr.manager.noSuchCategory,
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: AppColors.muted),
+                        style: const TextStyle(color: AppColors.muted),
                       ),
                     ),
                 ],

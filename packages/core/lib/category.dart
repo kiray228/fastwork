@@ -1,3 +1,5 @@
+import 'l10n/core_strings.dart';
+
 /// Категории работ.
 ///
 /// Раньше о том, что за работа, говорило только название смены — строка,
@@ -18,14 +20,19 @@ class ShiftCategory {
   /// Постоянный ключ: он хранится в базе и ходит по сети.
   final String id;
 
-  /// Как называть на экране.
-  final String name;
-
-  /// Раздел — чтобы в списке из сорока пунктов было за что зацепиться
-  /// глазом.
+  /// Ключ раздела — чтобы в списке из сорока пунктов было за что
+  /// зацепиться глазом.
   final String group;
 
-  const ShiftCategory(this.id, this.name, this.group);
+  const ShiftCategory(this.id, this.group);
+
+  /// Как называть на экране — на языке человека. Названия живут в
+  /// словарях (`l10n/`), а здесь только ключи: так одна и та же категория
+  /// зовётся «Грузчик», «Жүк тиеуші» и «Loader», оставаясь `loader`.
+  String get name => coreTr.category(id);
+
+  /// Название раздела на языке человека.
+  String get groupName => coreTr.categoryGroup(group);
 
   @override
   String toString() => name;
@@ -33,14 +40,14 @@ class ShiftCategory {
 
 /// Разделы, в том порядке, в каком их показываем.
 const kCategoryGroups = [
-  'Торговля',
-  'Склад и доставка',
-  'Общепит',
-  'Уборка',
-  'Ремонт и стройка',
-  'Производство',
-  'Мероприятия и охрана',
-  'Другое',
+  'trade',
+  'warehouse',
+  'food',
+  'cleaning',
+  'repair',
+  'production',
+  'events',
+  'other',
 ];
 
 /// Ключ категории «Другое». Её получают смены, созданные до появления
@@ -52,60 +59,60 @@ const kOtherCategory = 'other';
 /// и заказчик тонет в списке.
 const kShiftCategories = [
   // Торговля
-  ShiftCategory('seller', 'Продавец-консультант', 'Торговля'),
-  ShiftCategory('cashier', 'Кассир', 'Торговля'),
-  ShiftCategory('sales_floor', 'Работник торгового зала', 'Торговля'),
-  ShiftCategory('merchandiser', 'Мерчендайзер', 'Торговля'),
-  ShiftCategory('promoter', 'Промоутер', 'Торговля'),
-  ShiftCategory('inventory', 'Инвентаризация', 'Торговля'),
+  ShiftCategory('seller', 'trade'),
+  ShiftCategory('cashier', 'trade'),
+  ShiftCategory('sales_floor', 'trade'),
+  ShiftCategory('merchandiser', 'trade'),
+  ShiftCategory('promoter', 'trade'),
+  ShiftCategory('inventory', 'trade'),
 
   // Склад и доставка
-  ShiftCategory('loader', 'Грузчик', 'Склад и доставка'),
-  ShiftCategory('warehouse', 'Сотрудник склада', 'Склад и доставка'),
-  ShiftCategory('picker', 'Сборщик заказов', 'Склад и доставка'),
-  ShiftCategory('packer', 'Упаковщик, фасовщик', 'Склад и доставка'),
-  ShiftCategory('forklift', 'Водитель погрузчика', 'Склад и доставка'),
-  ShiftCategory('courier', 'Курьер', 'Склад и доставка'),
-  ShiftCategory('driver', 'Водитель', 'Склад и доставка'),
+  ShiftCategory('loader', 'warehouse'),
+  ShiftCategory('warehouse', 'warehouse'),
+  ShiftCategory('picker', 'warehouse'),
+  ShiftCategory('packer', 'warehouse'),
+  ShiftCategory('forklift', 'warehouse'),
+  ShiftCategory('courier', 'warehouse'),
+  ShiftCategory('driver', 'warehouse'),
 
   // Общепит
-  ShiftCategory('cook', 'Повар', 'Общепит'),
-  ShiftCategory('cook_helper', 'Помощник повара', 'Общепит'),
-  ShiftCategory('waiter', 'Официант', 'Общепит'),
-  ShiftCategory('barista', 'Бариста', 'Общепит'),
-  ShiftCategory('bartender', 'Бармен', 'Общепит'),
-  ShiftCategory('dishwasher', 'Посудомойщик', 'Общепит'),
-  ShiftCategory('baker', 'Пекарь, кондитер', 'Общепит'),
+  ShiftCategory('cook', 'food'),
+  ShiftCategory('cook_helper', 'food'),
+  ShiftCategory('waiter', 'food'),
+  ShiftCategory('barista', 'food'),
+  ShiftCategory('bartender', 'food'),
+  ShiftCategory('dishwasher', 'food'),
+  ShiftCategory('baker', 'food'),
 
   // Уборка
-  ShiftCategory('cleaner', 'Уборщик', 'Уборка'),
-  ShiftCategory('housekeeper', 'Горничная', 'Уборка'),
-  ShiftCategory('janitor', 'Дворник', 'Уборка'),
-  ShiftCategory('car_wash', 'Мойщик автомобилей', 'Уборка'),
+  ShiftCategory('cleaner', 'cleaning'),
+  ShiftCategory('housekeeper', 'cleaning'),
+  ShiftCategory('janitor', 'cleaning'),
+  ShiftCategory('car_wash', 'cleaning'),
 
   // Ремонт и стройка
-  ShiftCategory('plumber', 'Сантехник', 'Ремонт и стройка'),
-  ShiftCategory('electrician', 'Электрик', 'Ремонт и стройка'),
-  ShiftCategory('handyman', 'Разнорабочий', 'Ремонт и стройка'),
-  ShiftCategory('builder', 'Строитель, отделочник', 'Ремонт и стройка'),
-  ShiftCategory('painter', 'Маляр', 'Ремонт и стройка'),
-  ShiftCategory('welder', 'Сварщик', 'Ремонт и стройка'),
-  ShiftCategory('furniture', 'Сборщик мебели', 'Ремонт и стройка'),
+  ShiftCategory('plumber', 'repair'),
+  ShiftCategory('electrician', 'repair'),
+  ShiftCategory('handyman', 'repair'),
+  ShiftCategory('builder', 'repair'),
+  ShiftCategory('painter', 'repair'),
+  ShiftCategory('welder', 'repair'),
+  ShiftCategory('furniture', 'repair'),
 
   // Производство
-  ShiftCategory('production', 'Работник производства', 'Производство'),
+  ShiftCategory('production', 'production'),
 
   // Мероприятия и охрана
-  ShiftCategory('event_staff', 'Персонал мероприятий', 'Мероприятия и охрана'),
-  ShiftCategory('hostess', 'Хостес', 'Мероприятия и охрана'),
-  ShiftCategory('security', 'Охранник', 'Мероприятия и охрана'),
-  ShiftCategory('animator', 'Аниматор', 'Мероприятия и охрана'),
+  ShiftCategory('event_staff', 'events'),
+  ShiftCategory('hostess', 'events'),
+  ShiftCategory('security', 'events'),
+  ShiftCategory('animator', 'events'),
 
   // Другое
-  ShiftCategory('call_center', 'Оператор колл-центра', 'Другое'),
-  ShiftCategory('reception', 'Администратор, ресепшен', 'Другое'),
-  ShiftCategory('nanny', 'Няня', 'Другое'),
-  ShiftCategory(kOtherCategory, 'Другое', 'Другое'),
+  ShiftCategory('call_center', 'other'),
+  ShiftCategory('reception', 'other'),
+  ShiftCategory('nanny', 'other'),
+  ShiftCategory(kOtherCategory, 'other'),
 ];
 
 /// Категория по ключу.

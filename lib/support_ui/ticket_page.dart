@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:fastwork_core/data/support_repository.dart';
 import 'package:fastwork_core/support.dart';
+import '../l10n/strings.dart';
 import '../theme/app_colors.dart';
 import '../theme/glass.dart';
 import '../widgets/skeleton.dart';
@@ -179,7 +180,7 @@ class _Composer extends StatelessWidget {
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => onSend(),
                 decoration: InputDecoration(
-                  hintText: 'Сообщение',
+                  hintText: tr.profile.messageHint,
                   isDense: true,
                   filled: true,
                   fillColor: glassFieldFill(context),

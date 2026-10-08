@@ -22,6 +22,7 @@ import 'widgets/nav.dart';
 import 'widgets/shift_card.dart';
 import 'widgets/skeleton.dart';
 import 'widgets/stories_row.dart';
+import 'l10n/strings.dart';
 
 /// Главный экран: истории, ближайшая смена, полоса дат и список смен.
 class ShiftsPage extends StatefulWidget {
@@ -279,15 +280,12 @@ class _ShiftsPageState extends State<ShiftsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(switch (result) {
-          BookingResult.ok when code != null =>
-            'Отметка подтверждена кодом — заказчик её видит',
-          BookingResult.ok => 'Отметка принята — заказчик её видит',
-          BookingResult.alreadyBooked => 'Вы уже отметились',
-          BookingResult.wrongCode =>
-            'Код не подошёл — проверьте цифры у старшего смены',
-          BookingResult.tooEarlyToCheckIn =>
-            'Отметиться можно в день смены, не раньше чем за час до начала',
-          _ => 'Не получилось отметиться',
+          BookingResult.ok when code != null => tr.feed.checkInByCode,
+          BookingResult.ok => tr.feed.checkInAccepted,
+          BookingResult.alreadyBooked => tr.feed.alreadyCheckedIn,
+          BookingResult.wrongCode => tr.feed.wrongCheckInCode,
+          BookingResult.tooEarlyToCheckIn => tr.feed.checkInTooEarly,
+          _ => tr.feed.checkInFailed,
         }),
       ),
     );
@@ -390,16 +388,15 @@ class _ShiftsPageState extends State<ShiftsPage> {
                           ? Icons.event_busy_rounded
                           : Icons.filter_alt_off_rounded,
                       title: filter.isEmpty
-                          ? 'На этот день смен нет'
+                          ? tr.feed.emptyDayTitle
                           : filter.query.isNotEmpty
-                              ? 'По запросу ничего нет'
-                              : 'Ничего не найдено',
+                              ? tr.feed.emptyQueryTitle
+                              : tr.feed.emptyFilterTitle,
                       subtitle: filter.isEmpty
-                          ? 'Выберите другую дату — зелёная точка\n'
-                              'под числом означает, что смены есть'
+                          ? tr.feed.emptyDaySubtitle
                           : filter.query.isNotEmpty
-                              ? 'Проверьте написание\nили поищите в другой день'
-                              : 'Попробуйте убрать часть условий\nв фильтре',
+                              ? tr.feed.emptyQuerySubtitle
+                              : tr.feed.emptyFilterSubtitle,
                     ),
                   ),
                 ],
@@ -459,10 +456,10 @@ class _NextShiftBanner extends StatelessWidget {
     // строку «Ближайшая смена · послезавтра, 09:00» не влезала, и время —
     // самое важное — обрезалось многоточием.
     final status = shift.isCheckedIn
-        ? 'Вы на смене'
+        ? tr.feed.statusOnShift
         : started
-            ? 'Смена идёт'
-            : 'Ближайшая смена';
+            ? tr.feed.statusInProgress
+            : tr.feed.statusNextShift;
     final when = '${day[0].toUpperCase()}${day.substring(1)}, '
         '${formatTime(shift.startMinutes)} — ${formatTime(shift.endMinutes)}';
 
@@ -544,7 +541,7 @@ class _NextShiftBanner extends StatelessWidget {
                         ),
                       )
                     : const Icon(Icons.location_on_rounded, size: 18),
-                label: const Text('Я на месте'),
+                label: Text(tr.feed.imHere),
               ),
             ),
           ],
@@ -645,7 +642,7 @@ class _FilterButton extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              on ? 'Фильтр · $activeCount' : 'Фильтр',
+              on ? tr.feed.filterCount(activeCount) : tr.feed.filter,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -677,7 +674,7 @@ class _BellButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       onPressed: onPressed,
-      tooltip: 'Уведомления',
+      tooltip: tr.feed.notifications,
       icon: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -740,13 +737,13 @@ class _SearchField extends StatelessWidget {
           onChanged: onChanged,
           textInputAction: TextInputAction.search,
           decoration: InputDecoration(
-            hintText: 'Сантехник, Магнум, Абая…',
+            hintText: tr.feed.searchHint,
             prefixIcon: const Icon(Icons.search_rounded, size: 20),
             suffixIcon: value.text.isEmpty
                 ? null
                 : IconButton(
                     onPressed: onClear,
-                    tooltip: 'Очистить',
+                    tooltip: tr.feed.clear,
                     icon: const Icon(Icons.close_rounded, size: 18),
                   ),
             isDense: true,

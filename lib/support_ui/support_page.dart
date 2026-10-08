@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fastwork_core/data/support_repository.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/support.dart';
+import '../l10n/strings.dart';
 import '../theme/app_colors.dart';
 import '../widgets/common.dart';
 import '../widgets/nav.dart';
@@ -50,26 +51,26 @@ class _SupportPageState extends State<SupportPage> {
     final created = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Новое обращение'),
+        title: Text(tr.profile.supportNewTicket),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: subjectController,
               autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Тема',
-                hintText: 'Не пришло вознаграждение',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: tr.profile.supportSubject,
+                hintText: tr.profile.supportSubjectHint,
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: messageController,
               maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Что случилось',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: tr.profile.supportWhatHappened,
+                border: const OutlineInputBorder(),
               ),
             ),
           ],
@@ -77,11 +78,11 @@ class _SupportPageState extends State<SupportPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
+            child: Text(tr.profile.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Отправить'),
+            child: Text(tr.profile.send),
           ),
         ],
       ),
@@ -101,21 +102,20 @@ class _SupportPageState extends State<SupportPage> {
     final list = tickets;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Поддержка')),
+      appBar: AppBar(title: Text(tr.profile.supportTitle)),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _createTicket,
         backgroundColor: AppColors.brand,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add_rounded),
-        label: const Text('Написать'),
+        label: Text(tr.profile.supportWrite),
       ),
       body: switch (list) {
         null => const TileListSkeleton(count: 3),
-        [] => const EmptyState(
+        [] => EmptyState(
             icon: Icons.support_agent_rounded,
-            title: 'Обращений пока нет',
-            subtitle: 'Напишите нам, если что-то пошло не так —\n'
-                'обычно отвечаем в течение дня',
+            title: tr.profile.supportEmptyTitle,
+            subtitle: tr.profile.supportEmptySubtitle,
           ),
         final items => ListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
@@ -161,7 +161,9 @@ class _TicketTile extends StatelessWidget {
                   ),
                 ),
                 TagChip(
-                  text: ticket.isOpen ? 'Открыто' : 'Закрыто',
+                  text: ticket.isOpen
+                      ? tr.profile.ticketOpen
+                      : tr.profile.ticketClosed,
                   color: ticket.isOpen ? AppColors.brand : null,
                 ),
               ],
@@ -181,7 +183,7 @@ class _TicketTile extends StatelessWidget {
             ],
             const SizedBox(height: 8),
             Text(
-              '${ticket.messageCount} сообщ. · '
+              '${tr.profile.ticketMessages(ticket.messageCount)} · '
               '${ticket.createdAt.day} '
               '${monthsShort[ticket.createdAt.month - 1]}',
               style: const TextStyle(fontSize: 12, color: AppColors.muted),

@@ -1,5 +1,6 @@
 import 'package:fastwork_core/support.dart';
 import 'package:fastwork_core/user.dart';
+import '../l10n/strings.dart';
 import 'api_client.dart';
 import 'package:fastwork_core/data/auth_repository.dart';
 import 'package:fastwork_core/data/database.dart';
@@ -73,7 +74,7 @@ class ApiAuthRepository implements AuthRepository {
   @override
   Future<AppUser?> findByPhone(String phone) async {
     // Через сервер по телефону не входят: код приходит на почту.
-    throw UnsupportedError('Вход через сервер — по коду с почты');
+    throw UnsupportedError(tr.common.serverPhoneSignInUnsupported);
   }
 
   @override

@@ -8,6 +8,7 @@ import 'package:fastwork_core/mrp.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
 import '../widgets/category_icon.dart';
+import '../l10n/strings.dart';
 
 // Детали, из которых собраны картинки историй.
 //
@@ -813,10 +814,10 @@ class LimitMeter extends StatelessWidget {
           return StoryPanel(
             child: Row(
               children: [
-                const RingGauge(
+                RingGauge(
                   fraction: 0,
                   value: '0%',
-                  caption: 'лимита',
+                  caption: tr.stories.meterOfLimit,
                   size: 116,
                 ),
                 const SizedBox(width: 16),
@@ -824,15 +825,15 @@ class LimitMeter extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Лимит на ${formatMonth(monthOf(now))}',
+                      Text(tr.stories.meterLimitFor(formatMonth(monthOf(now))),
                           style: _captionStyle()),
                       const SizedBox(height: 4),
                       Text(formatMoney(yearLimit), style: _titleStyle),
                       const SizedBox(height: 8),
                       Text(
                         snapshot.connectionState == ConnectionState.waiting
-                            ? 'Считаем ваш месяц…'
-                            : 'Ваш прогресс — в «Выплатах»',
+                            ? tr.stories.meterCalculating
+                            : tr.stories.meterProgressInPayouts,
                         style: _captionStyle(0.7),
                       ),
                     ],
@@ -850,7 +851,7 @@ class LimitMeter extends StatelessWidget {
               RingGauge(
                 fraction: value.fraction,
                 value: '$percent%',
-                caption: 'лимита',
+                caption: tr.stories.meterOfLimit,
                 size: 116,
               ),
               const SizedBox(width: 16),
@@ -860,10 +861,10 @@ class LimitMeter extends StatelessWidget {
                   children: [
                     Text(formatMonth(value.month), style: _captionStyle()),
                     const SizedBox(height: 8),
-                    _pair('Отработано', value.earned),
-                    _pair('Записаны', value.booked),
+                    _pair(tr.stories.meterEarned, value.earned),
+                    _pair(tr.stories.meterBooked, value.booked),
                     const Divider(color: Colors.white24, height: 14),
-                    _pair('Осталось', value.remaining, strong: true),
+                    _pair(tr.stories.meterRemaining, value.remaining, strong: true),
                   ],
                 ),
               ),
@@ -1006,9 +1007,9 @@ class LevelLadder extends StatelessWidget {
               index: kWorkerLevels.length,
               child: Text(
                 next == null
-                    ? 'У вас высший уровень — ${shiftsLabel(shifts)}'
-                    : 'У вас ${shiftsLabel(shifts)}. До уровня «${next.name}» — '
-                        'ещё ${next.minShifts - shifts}',
+                    ? tr.stories.levelTop(shiftsLabel(shifts))
+                    : tr.stories.levelToNext(shiftsLabel(shifts), next.name,
+                        next.minShifts - shifts),
                 style: _captionStyle(0.85).copyWith(fontSize: 13),
               ),
             ),
@@ -1042,10 +1043,10 @@ class LevelLadder extends StatelessWidget {
               ),
               child: Text(
                 mine
-                    ? 'вы здесь'
+                    ? tr.stories.levelYouAreHere
                     : level.minShifts == 0
-                        ? 'с первой смены'
-                        : 'от ${level.minShifts} смен',
+                        ? tr.stories.levelFromFirst
+                        : tr.stories.levelFromShifts(level.minShifts),
                 maxLines: 1,
                 overflow: TextOverflow.fade,
                 softWrap: false,
@@ -1158,11 +1159,11 @@ class DoDont extends StatelessWidget {
   Widget build(BuildContext context) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CheckList(items: dos, header: 'Можно', color: color),
+          CheckList(items: dos, header: tr.stories.dos, color: color),
           const SizedBox(height: 12),
           CheckList(
             items: donts,
-            header: 'Нельзя',
+            header: tr.stories.donts,
             positive: false,
             color: color,
           ),
@@ -1299,9 +1300,12 @@ class ThresholdScale extends StatelessWidget {
             children: [
               Icon(Icons.lock_outline_rounded, size: 18, color: _white(0.9)),
               const SizedBox(width: 6),
-              Text(
-                'Смена от ${threshold.toStringAsFixed(1)}',
-                style: _titleStyle,
+              // Flexible — на казахском и английском подпись длиннее.
+              Flexible(
+                child: Text(
+                  tr.stories.thresholdShift(threshold.toStringAsFixed(1)),
+                  style: _titleStyle,
+                ),
               ),
             ],
           ),
@@ -1359,7 +1363,7 @@ class ThresholdScale extends StatelessWidget {
                         top: -30,
                         child: Column(
                           children: [
-                            _Pill(text: 'вы', color: color),
+                            _Pill(text: tr.stories.thresholdYou, color: color),
                             Container(
                               width: 2,
                               height: 10,
@@ -1377,8 +1381,8 @@ class ThresholdScale extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               open
-                  ? 'Ваш рейтинг ${mine.toStringAsFixed(1)} — смена открыта'
-                  : 'Ваш рейтинг ${mine.toStringAsFixed(1)} — пока закрыта',
+                  ? tr.stories.thresholdOpen(mine.toStringAsFixed(1))
+                  : tr.stories.thresholdClosed(mine.toStringAsFixed(1)),
               style: _captionStyle(0.9).copyWith(fontSize: 13),
             ),
           ],
@@ -1524,11 +1528,12 @@ class MiniShiftCard extends StatelessWidget {
               runSpacing: 6,
               children: [
                 _Pill(
-                  text: 'Оплата гарантирована',
+                  text: tr.stories.payGuaranteed,
                   icon: Icons.verified_user_rounded,
                   color: color,
                 ),
-                for (final tag in shift.tags) _Pill(text: tag, color: color),
+                for (final tag in shift.tags)
+                  _Pill(text: tr.core.tag(tag), color: color),
               ],
             ),
           ),

@@ -4,6 +4,7 @@ import 'package:fastwork_core/category.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/glass.dart';
+import '../l10n/strings.dart';
 import 'category_icon.dart';
 
 /// Логотип-надпись. Две части разного цвета — простой приём, который
@@ -134,8 +135,8 @@ class GuaranteeChip extends StatelessWidget {
   const GuaranteeChip({super.key});
 
   @override
-  Widget build(BuildContext context) => const TagChip(
-        text: 'Оплата гарантирована',
+  Widget build(BuildContext context) => TagChip(
+        text: tr.common.payGuaranteed,
         icon: Icons.verified_user_rounded,
         color: AppColors.success,
       );
@@ -377,7 +378,7 @@ class ErrorView extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             Text(
-              'Не получилось загрузить',
+              tr.common.loadFailedTitle,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontSize: 18,
@@ -396,7 +397,7 @@ class ErrorView extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Повторить'),
+              label: Text(tr.common.retry),
             ),
           ],
         ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'data/session.dart';
+import 'l10n/strings.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/shift.dart';
 import 'shift_detail_page.dart';
@@ -96,7 +97,7 @@ class _MyShiftsPageState extends State<MyShiftsPage> {
 
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Спасибо! Отзыв опубликован')));
+    ).showSnackBar(SnackBar(content: Text(tr.profile.reviewThanksSnack)));
   }
 
   void _switchTab(bool value) {
@@ -123,7 +124,7 @@ class _MyShiftsPageState extends State<MyShiftsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Мои подработки')),
+      appBar: AppBar(title: Text(tr.profile.myShiftsTitle)),
       body: Column(
         children: [
           _Tabs(archived: archived, onChanged: _switchTab),
@@ -143,11 +144,11 @@ class _MyShiftsPageState extends State<MyShiftsPage> {
                   icon: archived
                       ? Icons.inventory_2_outlined
                       : Icons.assignment_outlined,
-                  title: 'Пока пусто',
+                  title: tr.profile.myShiftsEmptyTitle,
                   subtitle: archived
-                      ? 'Сюда попадут завершённые\nи отменённые подработки'
-                      : 'Найдите смену в ленте\nи запишитесь на неё',
-                  actionLabel: archived ? null : 'Найти смену',
+                      ? tr.profile.myShiftsEmptyArchive
+                      : tr.profile.myShiftsEmptyActive,
+                  actionLabel: archived ? null : tr.profile.myShiftsFind,
                   onAction: archived ? null : widget.onFindShifts,
                 ),
                 Ready(:final value) => ListView.builder(
@@ -213,12 +214,12 @@ class _Tabs extends StatelessWidget {
       child: Row(
         children: [
           _TabButton(
-            label: 'В работе',
+            label: tr.profile.tabActive,
             selected: !archived,
             onTap: () => onChanged(false),
           ),
           _TabButton(
-            label: 'Архив',
+            label: tr.profile.tabArchive,
             selected: archived,
             onTap: () => onChanged(true),
           ),
@@ -290,8 +291,8 @@ class _ArchiveFooter extends StatelessWidget {
     // Раньше обе истории выглядели одинаково: «Запись отменена», и
     // выходило, будто исполнитель сам отказался.
     if (shift.isCancelled) {
-      return const TagChip(
-        text: 'Смену отменил заказчик',
+      return TagChip(
+        text: tr.profile.archiveCancelledByEmployer,
         icon: Icons.event_busy_rounded,
         color: AppColors.danger,
       );
@@ -301,24 +302,24 @@ class _ArchiveFooter extends StatelessWidget {
     // видеть отметку: она влияет на его надёжность, и если заказчик
     // ошибся, есть повод написать в поддержку.
     if (shift.isNoShow) {
-      return const TagChip(
-        text: 'Отмечен невыход',
+      return TagChip(
+        text: tr.profile.archiveNoShow,
         icon: Icons.person_off_outlined,
         color: AppColors.danger,
       );
     }
 
     if (shift.isUnconfirmedOn(now)) {
-      return const TagChip(
-        text: 'Выход не подтверждён заказчиком',
+      return TagChip(
+        text: tr.profile.archiveUnconfirmed,
         icon: Icons.help_outline_rounded,
         color: AppColors.muted,
       );
     }
 
     if (!shift.isCompleted) {
-      return const TagChip(
-        text: 'Запись отменена',
+      return TagChip(
+        text: tr.profile.archiveBookingCancelled,
         icon: Icons.close_rounded,
         color: AppColors.muted,
       );
@@ -326,8 +327,8 @@ class _ArchiveFooter extends StatelessWidget {
 
     // Отработанную смену можно оценить — но только один раз.
     if (reviewed) {
-      return const TagChip(
-        text: 'Отзыв оставлен',
+      return TagChip(
+        text: tr.profile.archiveReviewed,
         icon: Icons.check_rounded,
         color: AppColors.brand,
       );
@@ -338,7 +339,7 @@ class _ArchiveFooter extends StatelessWidget {
       child: OutlinedButton.icon(
         onPressed: onReview,
         icon: const Icon(Icons.star_outline_rounded, size: 18),
-        label: const Text('Оценить место работы'),
+        label: Text(tr.profile.archiveRateWorkplace),
         style: OutlinedButton.styleFrom(
           minimumSize: const Size.fromHeight(46),
           foregroundColor: AppColors.brand,

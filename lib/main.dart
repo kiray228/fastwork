@@ -9,6 +9,7 @@ import 'data/api_auth_repository.dart';
 import 'data/api_client.dart';
 import 'data/api_shift_repository.dart';
 import 'data/api_wallet_repository.dart';
+import 'l10n/strings.dart';
 import 'package:fastwork_core/data/auth_repository.dart';
 import 'package:fastwork_core/data/database.dart';
 import 'data/database_flutter.dart';
@@ -37,6 +38,11 @@ Future<void> main() async {
   // Нужно, если до запуска приложения мы обращаемся к диску или к системе.
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Язык — первым: на нём заговорят и хранилища (демо-смены, ошибки),
+  // и сервер, которому приложение передаёт его с каждым запросом.
+  final preferences = await AppPreferences.open();
+  appLang = preferences.language;
+
   final session = AppSession();
   final repos = apiUrl.isEmpty
       ? await _localRepositories(session)
@@ -48,7 +54,7 @@ Future<void> main() async {
   runApp(FastworkApp(
     session: session,
     repos: repos,
-    preferences: await AppPreferences.open(),
+    preferences: preferences,
     // Открыли по ссылке на смену — покажем её, как только человек войдёт.
     sharedShiftId: sharedShiftId(Uri.base),
   ));
@@ -156,6 +162,36 @@ class _FastworkAppState extends State<FastworkApp> {
   late int? pendingShift = widget.sharedShiftId;
 
   @override
+  void initState() {
+    super.initState();
+    appLang = preferences.language;
+    preferences.languageListenable.addListener(_languageChanged);
+  }
+
+  @override
+  void dispose() {
+    preferences.languageListenable.removeListener(_languageChanged);
+    super.dispose();
+  }
+
+  /// Сменили язык — перерисовать всё приложение, не теряя, где человек.
+  ///
+  /// Надписи берутся из `tr` прямо в `build`, а не через `context`, поэтому
+  /// сами по себе экраны о смене языка не узнают. Пересобираем каждый
+  /// элемент дерева — так же, как это делает горячая перезагрузка. Открытые
+  /// экраны, вкладка и прокрутка остаются на месте: меняются только слова.
+  void _languageChanged() {
+    appLang = preferences.language;
+    void rebuild(Element element) {
+      element.markNeedsBuild();
+      element.visitChildren(rebuild);
+    }
+
+    setState(() {});
+    (context as Element).visitChildren(rebuild);
+  }
+
+  @override
   Widget build(BuildContext context) {
     // Тему человек выбирает сам в профиле: «как в системе», светлая или
     // тёмная. Выбрал — приложение перекрасилось сразу, без перезапуска.
@@ -172,10 +208,10 @@ class _FastworkAppState extends State<FastworkApp> {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: themeMode,
-      // Приложение по-русски целиком, включая то, что рисует Flutter:
-      // календарь в форме смены, выбор времени, «Назад», «Вставить».
-      locale: const Locale('ru'),
-      supportedLocales: const [Locale('ru')],
+      // Язык целиком, включая то, что рисует Flutter: календарь в форме
+      // смены, выбор времени, «Назад», «Вставить».
+      locale: Locale(appLang.code),
+      supportedLocales: [for (final lang in Lang.values) Locale(lang.code)],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       // Ограничиваем ширину, чтобы на компьютере приложение выглядело как
       // телефон, а не растягивалось на весь монитор.
@@ -229,7 +265,11 @@ class _AuthGate extends StatelessWidget {
       builder: (context, _) {
         final user = session.user;
         if (user == null) {
-          return RegisterPage(session: session, auth: repos.auth);
+          return RegisterPage(
+            session: session,
+            auth: repos.auth,
+            preferences: preferences,
+          );
         }
         // Вошёл, но действующие правила не принимал — сначала они.
         if (!user.hasAcceptedTerms) {

@@ -1,4 +1,5 @@
 import 'terms.dart';
+import 'l10n/core_strings.dart';
 
 /// Пользователь приложения.
 class AppUser {
@@ -123,10 +124,14 @@ class AppUser {
 
 /// Уровень исполнителя: название и сколько смен нужно отработать.
 class WorkerLevel {
-  final String name;
+  /// Ключ уровня: `novice`, `confident`, `experienced`, `pro`.
+  final String id;
   final int minShifts;
 
-  const WorkerLevel(this.name, this.minShifts);
+  const WorkerLevel(this.id, this.minShifts);
+
+  /// Название на языке человека.
+  String get name => coreTr.level(id);
 }
 
 /// Уровни по возрастанию.
@@ -135,10 +140,10 @@ class WorkerLevel {
 /// ещё и история «Рейтинг» — и держать пороги в двух местах значило бы
 /// однажды поменять в одном и забыть про другое.
 const kWorkerLevels = [
-  WorkerLevel('Новичок', 0),
-  WorkerLevel('Уверенный', 5),
-  WorkerLevel('Опытный', 20),
-  WorkerLevel('Профи', 50),
+  WorkerLevel('novice', 0),
+  WorkerLevel('confident', 5),
+  WorkerLevel('experienced', 20),
+  WorkerLevel('pro', 50),
 ];
 
 /// Уровень для такого числа смен.

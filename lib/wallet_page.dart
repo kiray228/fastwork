@@ -13,6 +13,7 @@ import 'widgets/common.dart';
 import 'widgets/earnings_chart.dart';
 import 'widgets/payment_sheet.dart';
 import 'widgets/skeleton.dart';
+import 'l10n/strings.dart';
 
 /// Кошелёк исполнителя и платежи заказчика — один экран на обоих.
 ///
@@ -73,11 +74,11 @@ class _WalletPageState extends State<WalletPage> {
   Future<void> _withdraw(int balance) async {
     final result = await showCheckoutSheet(
       context,
-      title: 'Вывод на карту',
-      note: 'Переведём весь баланс. Комиссии за вывод нет.',
-      lines: [PaymentLine('Доступно к выводу', balance)],
+      title: tr.wallet.withdrawSheetTitle,
+      note: tr.wallet.withdrawSheetNote,
+      lines: [PaymentLine(tr.wallet.availableToWithdraw, balance)],
       total: balance,
-      actionLabel: 'Вывести ${formatMoney(balance)}',
+      actionLabel: tr.wallet.withdrawAmount(formatMoney(balance)),
       payout: true,
       start: (method, phone, previous) =>
           widget.wallet.startWithdrawal(balance),
@@ -94,14 +95,15 @@ class _WalletPageState extends State<WalletPage> {
 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(result.isPaid
-          ? 'Деньги отправлены на карту'
-          : 'Перевод в обработке — деньги придут, когда банк его проведёт'),
+          ? tr.wallet.withdrawSentSnack
+          : tr.wallet.withdrawPendingSnack),
     ));
   }
 
   @override
   Widget build(BuildContext context) {
-    final title = widget.isManager ? 'Платежи' : 'Выплаты';
+    final title =
+        widget.isManager ? tr.wallet.paymentsTitle : tr.wallet.payoutsTitle;
 
     if (state case Failed(:final error)) {
       return Scaffold(
@@ -141,8 +143,8 @@ class _WalletPageState extends State<WalletPage> {
                   alignment: Alignment.centerLeft,
                   child: HelpLink(
                     label: widget.isManager
-                        ? 'Как устроена оплата смен'
-                        : 'Как работают выплаты',
+                        ? tr.wallet.escrowHelpLink
+                        : tr.wallet.payoutsHelpLink,
                     onTap: () => openHelpStory(
                       context,
                       widget.isManager ? 'm.pay' : 'payouts',
@@ -167,7 +169,7 @@ class _WalletPageState extends State<WalletPage> {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: HelpLink(
-                      label: 'Что такое лимит $kEarningsLimitMrp МРП',
+                      label: tr.wallet.limitHelpLink(kEarningsLimitMrp),
                       onTap: () => openHelpStory(
                         context,
                         'limit',
@@ -183,18 +185,16 @@ class _WalletPageState extends State<WalletPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SectionHeader(
+                      SectionHeader(
                         icon: Icons.receipt_long_outlined,
-                        title: 'История',
+                        title: tr.wallet.historyTitle,
                       ),
                       const SizedBox(height: 14),
                       if (summary.entries.isEmpty)
                         Text(
                           widget.isManager
-                              ? 'Платежей пока нет. Они появятся, когда вы '
-                                  'оплатите первую смену.'
-                              : 'Пока начислений нет. Они появятся, когда '
-                                  'заказчик подтвердит вашу первую смену.',
+                              ? tr.wallet.managerHistoryEmpty
+                              : tr.wallet.workerHistoryEmpty,
                           style: const TextStyle(
                             fontSize: 13.5,
                             color: AppColors.muted,
@@ -241,7 +241,7 @@ class _BalanceCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Доступно к выводу',
+                  tr.wallet.availableToWithdraw,
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -263,7 +263,7 @@ class _BalanceCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Заработано всего: ${formatMoney(summary.earnedTotal)}',
+                  tr.wallet.earnedTotal(formatMoney(summary.earnedTotal)),
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -281,13 +281,13 @@ class _BalanceCard extends StatelessWidget {
                   width: double.infinity,
                   child: FilledButton(
                     onPressed: onWithdraw,
-                    child: const Text('Вывести на карту'),
+                    child: Text(tr.wallet.withdrawToCard),
                   ),
                 ),
                 if (onWithdraw == null) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Вывести можно от ${formatMoney(kMinWithdrawal)}',
+                    tr.wallet.withdrawFrom(formatMoney(kMinWithdrawal)),
                     style: const TextStyle(
                       fontSize: 12.5,
                       color: AppColors.muted,
@@ -309,33 +309,30 @@ class _EscrowExplainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SurfaceCard(
+    return SurfaceCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SectionHeader(
             icon: Icons.verified_user_outlined,
-            title: 'Сервис — гарант оплаты',
+            title: tr.wallet.escrowTitle,
           ),
-          SizedBox(height: 10),
+          const SizedBox(height: 10),
           InfoRow(
             icon: Icons.lock_outline_rounded,
-            text: 'Вы оплачиваете смену при публикации — деньги держит '
-                'сервис.',
+            text: tr.wallet.escrowPayOnPublish,
           ),
           InfoRow(
             icon: Icons.how_to_reg_outlined,
-            text: 'Исполнитель получает их, когда вы подтвердите его выход.',
+            text: tr.wallet.escrowWorkerPaid,
           ),
           InfoRow(
             icon: Icons.undo_rounded,
-            text: 'За невыход и при отмене смены деньги возвращаются '
-                'на карту.',
+            text: tr.wallet.escrowRefund,
           ),
           InfoRow(
             icon: Icons.percent_rounded,
-            text: 'Комиссия сервиса — $kPlatformFeePercent% сверх '
-                'вознаграждения.',
+            text: tr.wallet.escrowFee(kPlatformFeePercent),
           ),
         ],
       ),
@@ -363,8 +360,7 @@ class _SandboxNotice extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Тестовый режим оплаты: карты тестовые, деньги ненастоящие. '
-              'Правила удержания, начисления и возврата — настоящие.',
+              tr.wallet.sandboxNotice,
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -471,7 +467,7 @@ class EarningsLimitCard extends StatelessWidget {
         children: [
           SectionHeader(
             icon: Icons.account_balance_rounded,
-            title: 'Лимит за ${formatMonth(limit.month)}',
+            title: tr.wallet.limitTitle(formatMonth(limit.month)),
           ),
           const SizedBox(height: 14),
           Row(
@@ -489,7 +485,7 @@ class EarningsLimitCard extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                'из ${formatMoney(limit.limit)}',
+                tr.wallet.limitOf(formatMoney(limit.limit)),
                 style: const TextStyle(fontSize: 13, color: AppColors.muted),
               ),
             ],
@@ -506,10 +502,11 @@ class EarningsLimitCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'Осталось ${formatMoney(limit.remaining)}. '
-            'Лимит — $kEarningsLimitMrp МРП, один МРП в этом году '
-            '${formatMoney(limit.mrp)}. В счёт идут и отработанные смены, '
-            'и те, на которые вы записаны.',
+            tr.wallet.limitNote(
+              formatMoney(limit.remaining),
+              kEarningsLimitMrp,
+              formatMoney(limit.mrp),
+            ),
             style: const TextStyle(
               fontSize: 12.5,
               color: AppColors.muted,

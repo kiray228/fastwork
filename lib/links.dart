@@ -1,5 +1,7 @@
 import 'package:fastwork_core/shift.dart';
 
+import 'l10n/strings.dart';
+
 // Ссылки наружу: в карты и в календарь.
 //
 // Здесь только адреса — ни одной кнопки. Поэтому их можно проверить
@@ -27,13 +29,16 @@ String fullAddress(Shift shift) {
 enum MapsApp {
   // 2ГИС первым: в Казахстане им пользуются чаще остальных, и в нём
   // есть входы в здания и этажи — ровно то, что ищешь у склада.
-  twoGis('2ГИС'),
-  yandex('Яндекс Карты'),
-  google('Google Карты');
+  twoGis,
+  yandex,
+  google;
 
-  final String label;
-
-  const MapsApp(this.label);
+  /// Название карт на языке приложения.
+  String get label => switch (this) {
+        MapsApp.twoGis => tr.shift.map2Gis,
+        MapsApp.yandex => tr.shift.mapYandex,
+        MapsApp.google => tr.shift.mapGoogle,
+      };
 }
 
 /// Ссылка на поиск адреса в картах.
@@ -66,10 +71,10 @@ Uri calendarLink(Shift shift) {
 
   final details = [
     shift.company,
-    '${formatMoney(shift.totalPay)} за смену',
-    if (shift.dressCode != null) 'Форма: ${shift.dressCode}',
-    'Отменить запись можно до ${formatDateTime(shift.cancelDeadline)}.',
-    'Не забудьте отметиться в fastwork, когда придёте.',
+    tr.core.perShift(formatMoney(shift.totalPay)),
+    if (shift.dressCode != null) tr.core.dressCodeLine(shift.dressCode!),
+    tr.core.cancelUntil(formatDateTime(shift.cancelDeadline)),
+    tr.core.rememberCheckIn,
   ].join('\n');
 
   return Uri.https('calendar.google.com', '/calendar/render', {

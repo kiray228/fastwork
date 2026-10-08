@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/notification.dart';
 import 'data/session.dart';
+import 'l10n/strings.dart';
 import 'shift_detail_page.dart';
 import 'theme/app_colors.dart';
 import 'widgets/async_state.dart';
@@ -76,7 +77,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Уведомления')),
+      appBar: AppBar(title: Text(tr.profile.notificationsTitle)),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 260),
         child: switch (state) {
@@ -88,11 +89,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
                 _load();
               },
             ),
-          Ready(value: []) => const EmptyState(
+          Ready(value: []) => EmptyState(
               icon: Icons.notifications_none_rounded,
-              title: 'Уведомлений нет',
-              subtitle: 'Здесь появятся записи на ваши смены,\n'
-                  'подтверждения выхода и оценки',
+              title: tr.profile.notificationsEmptyTitle,
+              subtitle: tr.profile.notificationsEmptySubtitle,
             ),
           Ready(:final value) => RefreshIndicator(
               onRefresh: _load,
@@ -216,15 +216,12 @@ class _NotificationTile extends StatelessWidget {
 String describeWhen(DateTime moment) {
   final diff = DateTime.now().difference(moment);
 
-  if (diff.inMinutes < 1) return 'только что';
-  if (diff.inMinutes < 60) return '${diff.inMinutes} мин назад';
-  if (diff.inHours < 24) return '${diff.inHours} ч назад';
-  if (diff.inDays == 1) return 'вчера';
-  if (diff.inDays < 7) return '${diff.inDays} дн назад';
+  final t = tr.profile;
+  if (diff.inMinutes < 1) return t.whenJustNow;
+  if (diff.inMinutes < 60) return t.whenMinutesAgo(diff.inMinutes);
+  if (diff.inHours < 24) return t.whenHoursAgo(diff.inHours);
+  if (diff.inDays == 1) return t.whenYesterday;
+  if (diff.inDays < 7) return t.whenDaysAgo(diff.inDays);
 
-  const months = [
-    'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-    'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
-  ];
-  return '${moment.day} ${months[moment.month - 1]}';
+  return tr.core.dayMonth(moment);
 }

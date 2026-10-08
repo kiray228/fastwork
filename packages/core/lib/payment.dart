@@ -16,6 +16,7 @@
 
 import 'errors.dart';
 import 'shift.dart';
+import 'l10n/core_strings.dart';
 
 /// Комиссия сервиса в процентах.
 ///
@@ -134,7 +135,7 @@ String cardBrand(String digits) {
   if (RegExp(r'^(5[1-5]|2[2-7])').hasMatch(digits)) return 'Mastercard';
   if (digits.startsWith('62')) return 'UnionPay';
   if (RegExp(r'^3[47]').hasMatch(digits)) return 'Amex';
-  return 'Карта';
+  return coreTr.cardFallback;
 }
 
 /// Срок действия «ММ/ГГ» ещё не истёк.
@@ -161,14 +162,16 @@ bool expiryValid(String input, DateTime now) {
 /// карту вводят на странице провайдера, а за Kaspi приходит счёт прямо в
 /// приложение Kaspi.kz, и человек подтверждает его там.
 enum PaymentMethod {
-  card('card', 'Банковская карта'),
-  kaspi('kaspi', 'Kaspi.kz');
+  card('card'),
+  kaspi('kaspi');
 
   /// Ключ — хранится в базе и ходит по сети.
   final String id;
-  final String title;
 
-  const PaymentMethod(this.id, this.title);
+  const PaymentMethod(this.id);
+
+  /// Название на языке приложения.
+  String get title => coreTr.paymentMethod(id);
 
   /// Незнакомый ключ — карта: старые записи сделаны до появления Kaspi.
   static PaymentMethod fromId(String? id) =>
@@ -390,29 +393,37 @@ class SandboxProvider implements PaymentProvider, PayoutProvider {
   ///
   /// Карта нужна для карточной оплаты и для вывода; по карте на …0002 и
   /// по номеру Kaspi на …0002 приходит отказ — как от банка.
-  ProviderResult complete(String operation, {PaymentCard? card}) {
+  ///
+  /// [strings] — на каком языке сказать об отказе. На сервере это язык
+  /// того, кто платит; в приложении — язык приложения.
+  ProviderResult complete(
+    String operation, {
+    PaymentCard? card,
+    CoreStrings? strings,
+  }) {
+    final t = strings ?? coreTr;
     final op = _ops[operation];
     if (op == null) {
-      return const ProviderResult(ProviderState.failed,
-          message: 'Операция не найдена');
+      return ProviderResult(ProviderState.failed,
+          message: t.operationNotFound);
     }
     if (op.result.state != ProviderState.pending) return op.result;
 
     final String paidWith;
     if (method == PaymentMethod.kaspi && op.kind == 'pay') {
       if (op.phone == kSandboxDeclinedKaspiPhone) {
-        return op.result = const ProviderResult(ProviderState.failed,
-            message: 'Счёт отклонён в Kaspi.kz');
+        return op.result =
+            ProviderResult(ProviderState.failed, message: t.kaspiDeclined);
       }
       paidWith = 'Kaspi.kz';
     } else {
       if (card == null || !card.token.startsWith('sandbox_')) {
-        return op.result = const ProviderResult(ProviderState.failed,
-            message: 'Карта не принята тестовым шлюзом');
+        return op.result =
+            ProviderResult(ProviderState.failed, message: t.cardNotAccepted);
       }
       if (card.last4 == '0002') {
-        return op.result = const ProviderResult(ProviderState.failed,
-            message: 'Банк отклонил операцию. Попробуйте другую карту');
+        return op.result =
+            ProviderResult(ProviderState.failed, message: t.bankDeclined);
       }
       paidWith = card.masked;
     }

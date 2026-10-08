@@ -11,11 +11,12 @@ import 'stories/story_actions.dart';
 import 'support_ui/support_page.dart';
 import 'theme/app_colors.dart';
 import 'theme/glass.dart';
-import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
 import 'wallet_page.dart';
 import 'widgets/common.dart';
 import 'widgets/nav.dart';
+import 'l10n/strings.dart';
+import 'widgets/language_picker.dart';
 
 /// Профиль пользователя.
 class ProfilePage extends StatelessWidget {
@@ -52,7 +53,7 @@ class ProfilePage extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                 child: Text(
-                  'Оформление',
+                  tr.profile.themeTitle,
                   style: Theme.of(sheetContext)
                       .textTheme
                       .headlineSmall
@@ -78,9 +79,9 @@ class ProfilePage extends StatelessWidget {
   }
 
   static String _themeName(ThemeMode mode) => switch (mode) {
-        ThemeMode.system => 'Как в системе',
-        ThemeMode.light => 'Светлое',
-        ThemeMode.dark => 'Тёмное',
+        ThemeMode.system => tr.profile.themeSystem,
+        ThemeMode.light => tr.profile.themeLight,
+        ThemeMode.dark => tr.profile.themeDark,
       };
 
   static IconData _themeIcon(ThemeMode mode) => switch (mode) {
@@ -110,7 +111,7 @@ class ProfilePage extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                 child: Text(
-                  'Ваш город',
+                  tr.profile.cityPickerTitle,
                   style: Theme.of(sheetContext)
                       .textTheme
                       .headlineSmall
@@ -119,7 +120,7 @@ class ProfilePage extends StatelessWidget {
               ),
               for (final city in kCities)
                 ListTile(
-                  title: Text(city),
+                  title: Text(tr.core.city(city)),
                   trailing: city == current.city
                       ? const Icon(Icons.check_rounded,
                           color: AppColors.brand)
@@ -143,20 +144,17 @@ class ProfilePage extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Выйти из аккаунта?'),
-        content: const Text(
-          'Записи на смены сохранятся — войдите под тем же номером, '
-          'и они будут на месте.',
-        ),
+        title: Text(tr.profile.signOutTitle),
+        content: Text(tr.profile.signOutBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Остаться'),
+            child: Text(tr.profile.signOutStay),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(foregroundColor: AppColors.accent),
-            child: const Text('Выйти'),
+            child: Text(tr.profile.signOutConfirm),
           ),
         ],
       ),
@@ -175,7 +173,7 @@ class ProfilePage extends StatelessWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Профиль')),
+      appBar: AppBar(title: Text(tr.profile.title)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         children: [
@@ -191,8 +189,12 @@ class ProfilePage extends StatelessWidget {
               children: [
                 _MenuRow(
                   icon: Icons.payments_outlined,
-                  title: user.isManager ? 'Платежи' : 'Выплаты',
-                  trailing: user.isManager ? 'Оплата смен' : 'Вознаграждение',
+                  title: user.isManager
+                      ? tr.profile.menuPayments
+                      : tr.profile.menuPayouts,
+                  trailing: user.isManager
+                      ? tr.profile.menuPaymentsHint
+                      : tr.profile.menuPayoutsHint,
                   onTap: () => Navigator.of(context).push(
                     appRoute(WalletPage(
                       repository: repos.shifts,
@@ -204,8 +206,8 @@ class ProfilePage extends StatelessWidget {
                 if (user.isManager)
                   _MenuRow(
                     icon: Icons.favorite_border_rounded,
-                    title: 'Любимые исполнители',
-                    trailing: 'Позвать снова',
+                    title: tr.profile.menuFavorites,
+                    trailing: tr.profile.menuFavoritesHint,
                     onTap: () => Navigator.of(context).push(
                       appRoute(FavoritesPage(repository: repos.shifts)),
                     ),
@@ -213,8 +215,10 @@ class ProfilePage extends StatelessWidget {
                 if (!user.isManager)
                   _MenuRow(
                     icon: Icons.badge_outlined,
-                    title: 'Документы',
-                    trailing: user.isVerified ? 'Проверены' : 'Не проверены',
+                    title: tr.profile.documentsTitle,
+                    trailing: user.isVerified
+                        ? tr.profile.menuDocsChecked
+                        : tr.profile.menuDocsNotChecked,
                     onTap: () => Navigator.of(context).push(
                       appRoute(
                         DocumentsPage(
@@ -227,10 +231,10 @@ class ProfilePage extends StatelessWidget {
                 if (!user.isManager)
                   _MenuRow(
                     icon: Icons.star_outline_rounded,
-                    title: 'Отзывы обо мне',
+                    title: tr.profile.reviewsTitle,
                     trailing: user.hasRatedShifts
                         ? '${user.ratingCount}'
-                        : 'Пока нет',
+                        : tr.profile.menuReviewsNone,
                     onTap: () => Navigator.of(context).push(
                       appRoute(
                         MyReviewsPage(
@@ -242,9 +246,15 @@ class ProfilePage extends StatelessWidget {
                   ),
                 _MenuRow(
                   icon: Icons.place_outlined,
-                  title: 'Город',
-                  trailing: user.city,
+                  title: tr.profile.menuCity,
+                  trailing: tr.core.city(user.city),
                   onTap: () => _changeCity(context),
+                ),
+                _MenuRow(
+                  icon: Icons.translate_rounded,
+                  title: tr.common.language,
+                  trailing: preferences.language.selfName,
+                  onTap: () => pickLanguage(context, preferences),
                 ),
                 // Слушаем тему: подпись справа должна смениться сразу,
                 // даже если цвета остались прежними — например, «как в
@@ -253,7 +263,7 @@ class ProfilePage extends StatelessWidget {
                   valueListenable: preferences.themeListenable,
                   builder: (context, mode, _) => _MenuRow(
                     icon: _themeIcon(mode),
-                    title: 'Оформление',
+                    title: tr.profile.themeTitle,
                     trailing: _themeName(mode),
                     onTap: () => _changeTheme(context),
                   ),
@@ -268,8 +278,8 @@ class ProfilePage extends StatelessWidget {
               children: [
                 _MenuRow(
                   icon: Icons.auto_stories_outlined,
-                  title: 'Как работает fastwork',
-                  trailing: 'Истории',
+                  title: tr.profile.menuHowItWorks,
+                  trailing: tr.profile.menuHowItWorksHint,
                   onTap: () => openStories(
                     context,
                     session: session,
@@ -281,14 +291,14 @@ class ProfilePage extends StatelessWidget {
                 ),
                 _MenuRow(
                   icon: Icons.gavel_rounded,
-                  title: 'Правила сервиса',
+                  title: tr.profile.menuTerms,
                   onTap: () => Navigator.of(context).push(
                     appRoute(const TermsPage()),
                   ),
                 ),
                 _MenuRow(
                   icon: Icons.chat_bubble_outline_rounded,
-                  title: 'Поддержка',
+                  title: tr.profile.supportTitle,
                   onTap: () => Navigator.of(context).push(
                     appRoute(SupportPage(repository: repos.support)),
                   ),
@@ -300,7 +310,7 @@ class ProfilePage extends StatelessWidget {
           TextButton.icon(
             onPressed: () => _signOut(context),
             icon: const Icon(Icons.logout_rounded, size: 18),
-            label: const Text('Выйти из аккаунта'),
+            label: Text(tr.profile.signOutButton),
             style: TextButton.styleFrom(
               foregroundColor: AppColors.muted,
               minimumSize: const Size.fromHeight(48),
@@ -359,19 +369,19 @@ class _Header extends StatelessWidget {
           const SizedBox(height: 12),
           if (user.isManager)
             TagChip(
-              text: user.company ?? 'Заказчик',
+              text: user.company ?? tr.profile.roleEmployer,
               icon: Icons.business_rounded,
               color: AppColors.brand,
             )
           else if (user.isVerified)
-            const TagChip(
-              text: 'Верифицирован',
+            TagChip(
+              text: tr.profile.verified,
               icon: Icons.verified_rounded,
               color: AppColors.brand,
             )
           else
-            const TagChip(
-              text: 'Документы не проверены',
+            TagChip(
+              text: tr.profile.docsNotVerified,
               icon: Icons.info_outline_rounded,
               color: AppColors.accent,
             ),
@@ -404,7 +414,9 @@ class _Stats extends StatelessWidget {
             value: user.rating.toStringAsFixed(1),
             // Пока оценок нет, честнее сказать «стартовый»: это число
             // никто не заработал, оно просто стоит по умолчанию.
-            label: user.hasRatedShifts ? 'Рейтинг' : 'Стартовый',
+            label: user.hasRatedShifts
+                ? tr.profile.statRating
+                : tr.profile.statStarting,
             color: AppColors.accent,
           ),
         ),
@@ -414,7 +426,7 @@ class _Stats extends StatelessWidget {
             icon: Icons.work_history_rounded,
             value: '${user.completedShifts}',
             // «2 смены», а не «2 смен»: подпись согласуется с числом.
-            label: plural(user.completedShifts, 'Смена', 'Смены', 'Смен'),
+            label: tr.profile.statShifts(user.completedShifts),
             color: AppColors.brand,
           ),
         ),
@@ -430,13 +442,13 @@ class _Stats extends StatelessWidget {
               ? _StatTile(
                   icon: Icons.event_available_rounded,
                   value: '${user.reliabilityPercent}%',
-                  label: 'Выходов',
+                  label: tr.profile.statAttendance,
                   color: AppColors.warning,
                 )
               : _StatTile(
                   icon: Icons.emoji_events_rounded,
                   value: user.level,
-                  label: 'Уровень',
+                  label: tr.profile.statLevel,
                   color: const Color(0xFF6366F1),
                 ),
         ),

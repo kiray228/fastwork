@@ -7,6 +7,7 @@ import '../theme/app_colors.dart';
 import '../widgets/async_state.dart';
 import '../widgets/common.dart';
 import '../widgets/nav.dart';
+import '../l10n/strings.dart';
 
 /// Правила сервиса целиком — чтобы прочитать.
 class TermsPage extends StatelessWidget {
@@ -15,7 +16,7 @@ class TermsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Правила')),
+      appBar: AppBar(title: Text(tr.auth.termsPageTitle)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         children: const [TermsText()],
@@ -38,9 +39,9 @@ class TermsText extends StatelessWidget {
         children: [
           Text(kTermsTitle, style: text.titleLarge?.copyWith(fontSize: 18)),
           const SizedBox(height: 4),
-          const Text(
-            'Редакция $kTermsVersion',
-            style: TextStyle(fontSize: 12.5, color: AppColors.muted),
+          Text(
+            tr.auth.termsEdition(kTermsVersion),
+            style: const TextStyle(fontSize: 12.5, color: AppColors.muted),
           ),
           for (final section in kTermsSections) ...[
             const SizedBox(height: 16),
@@ -98,7 +99,7 @@ class _TermsGatePageState extends State<TermsGatePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Правила сервиса'),
+        title: Text(tr.auth.termsGateTitle),
         automaticallyImplyLeading: false,
       ),
       body: Column(
@@ -109,10 +110,8 @@ class _TermsGatePageState extends State<TermsGatePage> {
               children: [
                 Text(
                   wasAccepted
-                      ? 'Правила обновились. Прочитайте новую редакцию — '
-                          'без согласия с ней работать дальше нельзя.'
-                      : 'Прежде чем продолжить, прочитайте правила '
-                          'и подтвердите согласие.',
+                      ? tr.auth.termsUpdatedNote
+                      : tr.auth.termsFirstNote,
                   style: const TextStyle(
                     fontSize: 13.5,
                     color: AppColors.muted,
@@ -138,11 +137,11 @@ class _TermsGatePageState extends State<TermsGatePage> {
                   const SizedBox(height: 8),
                   FilledButton(
                     onPressed: agreed && !busy ? _accept : null,
-                    child: const Text('Принимаю'),
+                    child: Text(tr.auth.acceptButton),
                   ),
                   TextButton(
                     onPressed: busy ? null : _signOut,
-                    child: const Text('Выйти'),
+                    child: Text(tr.auth.signOutButton),
                   ),
                 ],
               ),
@@ -174,9 +173,8 @@ class TermsCheckbox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tail = forEmployer
-        ? 'и обработку персональных данных'
-        : 'включая лимит дохода 300 МРП в месяц и обработку персональных '
-            'данных';
+        ? tr.auth.checkboxTailEmployer
+        : tr.auth.checkboxTailWorker;
 
     // Подпись собрана из отдельных слов, а не из трёх кусков текста.
     // Кусками она переносилась целиком: хвост с запятой уезжал на новую
@@ -202,8 +200,8 @@ class TermsCheckbox extends StatelessWidget {
             child: Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                word('Я'),
-                word('принимаю'),
+                for (final w in tr.auth.checkboxLead.split(' '))
+                  if (w.isNotEmpty) word(w),
                 // Ссылка и знак после неё — одно целое: запятая не
                 // должна оказаться в начале следующей строки.
                 Row(
@@ -213,9 +211,9 @@ class TermsCheckbox extends StatelessWidget {
                       onTap: () => Navigator.of(context).push(
                         appRoute(const TermsPage()),
                       ),
-                      child: const Text(
-                        'правила сервиса',
-                        style: TextStyle(
+                      child: Text(
+                        tr.auth.checkboxLink,
+                        style: const TextStyle(
                           fontSize: 13.5,
                           height: 1.35,
                           fontWeight: FontWeight.w700,

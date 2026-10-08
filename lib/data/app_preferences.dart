@@ -1,8 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:fastwork_core/lang.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Настройки этого телефона: оформление и просмотренные истории.
+/// Настройки этого телефона: язык, оформление и просмотренные истории.
 ///
 /// Это не данные аккаунта. Тёмная тема, выбранная на телефоне, не должна
 /// переезжать на рабочий компьютер. И то, что человек посмотрел историю
@@ -17,11 +18,16 @@ class AppPreferences extends ChangeNotifier {
   final SharedPreferences? _store;
 
   final ValueNotifier<ThemeMode> _theme;
+  final ValueNotifier<Lang> _language;
   final Set<String> _seenStories;
 
-  AppPreferences({SharedPreferences? store})
+  /// [deviceLanguage] — язык телефона. Им говорим, пока человек не выбрал
+  /// язык сам; не передали — по-русски, как в тестах.
+  AppPreferences({SharedPreferences? store, String? deviceLanguage})
       : _store = store,
         _theme = ValueNotifier(_readThemeMode(store)),
+        _language = ValueNotifier(
+            Lang.fromCode(store?.getString(_languageKey) ?? deviceLanguage)),
         _seenStories = {...?store?.getStringList(_seenKey)};
 
   /// Открыть настройки с диска.
@@ -30,7 +36,13 @@ class AppPreferences extends ChangeNotifier {
   /// не должно: без них оно просто забудет тему до следующего запуска.
   static Future<AppPreferences> open() async {
     try {
-      return AppPreferences(store: await SharedPreferences.getInstance());
+      return AppPreferences(
+        store: await SharedPreferences.getInstance(),
+        // Телефон на казахском или английском — и приложение сразу на
+        // нём. Любой другой язык — по-русски.
+        deviceLanguage:
+            WidgetsBinding.instance.platformDispatcher.locale.languageCode,
+      );
     } catch (error) {
       debugPrint('Настройки не открылись, храним в памяти: $error');
       return AppPreferences();
@@ -38,6 +50,7 @@ class AppPreferences extends ChangeNotifier {
   }
 
   static const _themeKey = 'theme_mode';
+  static const _languageKey = 'language';
   static const _seenKey = 'seen_stories';
 
   static ThemeMode _readThemeMode(SharedPreferences? store) =>
@@ -60,6 +73,17 @@ class AppPreferences extends ChangeNotifier {
     if (value == _theme.value) return;
     _theme.value = value;
     await _store?.setString(_themeKey, value.name);
+  }
+
+  Lang get language => _language.value;
+
+  /// Язык, как и тему, слушает всё приложение целиком.
+  ValueListenable<Lang> get languageListenable => _language;
+
+  Future<void> setLanguage(Lang value) async {
+    if (value == _language.value) return;
+    _language.value = value;
+    await _store?.setString(_languageKey, value.code);
   }
 
   /// Видел ли человек историю.

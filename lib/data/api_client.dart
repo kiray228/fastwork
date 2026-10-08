@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../l10n/strings.dart';
+
 /// Разговор с сервером.
 ///
 /// Один класс на всё приложение: он знает адрес сервера, помнит токен и
@@ -24,6 +26,10 @@ class ApiClient {
   Map<String, String> get _headers => {
         'Content-Type': 'application/json; charset=utf-8',
         if (token != null) 'Authorization': 'Bearer $token',
+        // На каком языке отвечать: ошибки, письма с кодом, уведомления.
+        // Сервер запоминает язык и пишет на нём, даже когда человека нет
+        // в приложении.
+        'Accept-Language': appLang.code,
       };
 
   Uri _uri(String path, [Map<String, String>? query]) =>
@@ -53,7 +59,7 @@ class ApiClient {
 
     final message = body is Map && body['error'] != null
         ? body['error'] as String
-        : 'Сервер ответил ${response.statusCode}';
+        : tr.common.serverReplied(response.statusCode);
     throw ApiException(message, response.statusCode);
   }
 

@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:drift/drift.dart';
 
 import '../category.dart';
+import '../l10n/core_strings.dart';
 import '../demo.dart';
 import '../errors.dart';
 import '../mrp.dart';
@@ -16,6 +17,7 @@ import 'database.dart';
 import 'current_user.dart';
 import 'mrp_store.dart';
 import 'shift_filter.dart';
+import 'user_language.dart';
 
 /// Чем закончилась попытка записаться или отменить запись.
 ///
@@ -387,13 +389,22 @@ class DbShiftRepository implements ShiftRepository {
   /// снаружи — тот же приём, что у `canCancelAt(now)` в модели смены.
   final DateTime Function() clock;
 
+  /// На каком языке говорить с тем, кто действует: его отказы, его
+  /// подписи. Функция, а не значение: в приложении язык можно сменить на
+  /// ходу, и хранилище должно заметить это без пересоздания.
+  final CoreStrings Function() strings;
+
   DbShiftRepository(
     this.db,
     this.session, {
     PaymentGateway? payments,
     DateTime Function()? clock,
+    CoreStrings Function()? strings,
   })  : payments = payments ?? SandboxPaymentGateway(),
-        clock = clock ?? DateTime.now;
+        clock = clock ?? DateTime.now,
+        strings = strings ?? (() => coreTr);
+
+  CoreStrings get _t => strings();
 
   int get _workerId => session.workerId;
 
@@ -678,9 +689,7 @@ class DbShiftRepository implements ShiftRepository {
       await _notify(
         userId: w.workerId,
         kind: NotificationKind.slotFreed,
-        title: 'Освободилось место',
-        body: 'На «${shift.title}» ${_dayText(shift.workDate)} появилось '
-            'свободное место. Успейте записаться, пока его не заняли.',
+        note: (t) => t.slotFreed(shift.title, shift.workDate),
         shiftId: shift.id,
       );
     }
@@ -689,21 +698,9 @@ class DbShiftRepository implements ShiftRepository {
   Future<void> _notifyApplied(Shift shift) => _notify(
         userId: shift.createdBy,
         kind: NotificationKind.applied,
-        title: 'Новая запись на смену',
-        body: '$_myName записался на «${shift.title}» '
-            '${_dayText(shift.workDate)}.',
+        note: (t) => t.applied(_nameIn(t), shift.title, shift.workDate),
         shiftId: shift.id,
       );
-
-  /// Дата словами — «12 сентября». В уведомлении она нужна затем же,
-  /// зачем и в письме: читать «на смену 2026-09-12» неприятно.
-  static String _dayText(DateTime date) {
-    const months = [
-      'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-      'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
-    ];
-    return '${date.day} ${months[date.month - 1]}';
-  }
 
   /// Смены, на которые я сейчас записан, — чтобы не записаться на две
   /// в одно время.
@@ -747,9 +744,7 @@ class DbShiftRepository implements ShiftRepository {
     await _notify(
       userId: shift.createdBy,
       kind: NotificationKind.withdrew,
-      title: 'Человек снял запись',
-      body: '$_myName больше не выйдет на «${shift.title}» '
-          '${_dayText(shift.workDate)}. Место снова свободно.',
+      note: (t) => t.withdrew(_nameIn(t), shift.title, shift.workDate),
       shiftId: shift.id,
     );
     await _notifyWaitlist(shift);
@@ -937,7 +932,7 @@ class DbShiftRepository implements ShiftRepository {
           shiftId: shiftId,
           kind: WalletEntryKind.earning,
           amount: shift.totalPay,
-          title: '«${shift.title}», ${_dayText(shift.workDate)}',
+          title: (t) => t.earning(shift.title, shift.workDate),
         );
       }
       return true;
@@ -949,10 +944,8 @@ class DbShiftRepository implements ShiftRepository {
     await _notify(
       userId: workerId,
       kind: NotificationKind.confirmed,
-      title: 'Смена подтверждена',
-      body: 'Заказчик подтвердил выход на «${shift.title}» '
-          '${_dayText(shift.workDate)}. '
-          'Начислено ${formatMoney(shift.totalPay)}.',
+      note: (t) => t.confirmed(
+          shift.title, shift.workDate, formatMoney(shift.totalPay)),
       shiftId: shiftId,
     );
     return BookingResult.ok;
@@ -1009,7 +1002,7 @@ class DbShiftRepository implements ShiftRepository {
         shiftId,
         payment.payerId,
         cost.total,
-        'Возврат за невыход: «${shift.title}»',
+        (t) => t.refundNoShow(shift.title),
       );
     }
     await _settleIfDone(shift);
@@ -1019,10 +1012,7 @@ class DbShiftRepository implements ShiftRepository {
     await _notify(
       userId: workerId,
       kind: NotificationKind.noShow,
-      title: 'Отмечен невыход',
-      body: 'Заказчик отметил, что вы не вышли на «${shift.title}» '
-          '${_dayText(shift.workDate)}. Если это ошибка — напишите в '
-          'поддержку.',
+      note: (t) => t.noShow(shift.title, shift.workDate),
       shiftId: shiftId,
     );
     return BookingResult.ok;
@@ -1066,7 +1056,7 @@ class DbShiftRepository implements ShiftRepository {
                 id: r.read<int>('id'),
                 shiftId: r.read<int>('shift_id'),
                 authorName:
-                    r.readNullable<String>('author_name') ?? 'Исполнитель',
+                    r.readNullable<String>('author_name') ?? _t.anonymousWorker,
                 rating: r.read<int>('rating'),
                 comment: r.readNullable<String>('comment'),
                 createdAt: r.read<DateTime>('created_at'),
@@ -1155,10 +1145,8 @@ class DbShiftRepository implements ShiftRepository {
       await _notify(
         userId: userId,
         kind: NotificationKind.newShift,
-        title: 'Новая смена: ${shift.company}',
-        body: '«${shift.title}» ${_dayText(shift.workDate)}, '
-            '${formatTime(shift.startMinutes)}–${formatTime(shift.endMinutes)}, '
-            '${formatMoney(shift.totalPay)}. Вы подписаны на эту компанию.',
+        note: (t) => t.newShift(shift.company, shift.title, shift.workDate,
+            _timeOf(shift), formatMoney(shift.totalPay)),
         shiftId: shift.id,
       );
     }
@@ -1183,8 +1171,7 @@ class DbShiftRepository implements ShiftRepository {
     // кто угодно мог бы написать отзыв к любой смене и подвинуть оценку
     // компании в любую сторону.
     if (await _statusOf(shiftId, _workerId) != ApplicationStatus.completed) {
-      throw const UserError(
-          'Отзыв можно оставить только о смене, которую вы отработали');
+      throw UserError(_t.reviewOnlyWorked);
     }
 
     await db.into(db.reviewRows).insert(
@@ -1271,7 +1258,7 @@ class DbShiftRepository implements ShiftRepository {
         shiftId: id,
         kind: WalletEntryKind.earning,
         amount: demo.totalPay,
-        title: '«$title», ${_dayText(date)}',
+        title: (t) => t.earning(title, date),
         // Начислено вечером в день смены, а не в день, когда заводили
         // учебную историю: иначе в истории и на графике заработка обе
         // прошлые смены оказывались «сегодняшними».
@@ -1370,7 +1357,7 @@ class DbShiftRepository implements ShiftRepository {
       );
     });
 
-    return _startCharge(chargeId, 'Смена «$title»');
+    return _startCharge(chargeId, _t.providerShift(title));
   }
 
   @override
@@ -1381,12 +1368,12 @@ class DbShiftRepository implements ShiftRepository {
   }) async {
     final shift = await shiftById(shiftId);
     if (shift == null || shift.createdBy != _workerId) {
-      throw const PaymentDeclined('Смена не найдена');
+      throw PaymentDeclined(_t.shiftNotFound);
     }
-    if (shift.isCancelled) throw const PaymentDeclined('Смена отменена');
+    if (shift.isCancelled) throw PaymentDeclined(_t.shiftWasCancelled);
     final funding = await _funding(shiftId);
     if (funding == null || funding.status != PaymentStatus.pending) {
-      throw const PaymentDeclined('Смена уже оплачена');
+      throw PaymentDeclined(_t.shiftAlreadyPaid);
     }
 
     // Прошлую попытку не отменяем: вдруг человек всё-таки заплатил по
@@ -1400,7 +1387,7 @@ class DbShiftRepository implements ShiftRepository {
       amount: funding.amount + funding.fee,
       phone: _phoneFor(method, phone),
     );
-    return _startCharge(chargeId, 'Смена «${shift.title}»');
+    return _startCharge(chargeId, _t.providerShift(shift.title));
   }
 
   @override
@@ -1415,10 +1402,9 @@ class DbShiftRepository implements ShiftRepository {
     final charge = await _myCharge(paymentId);
     final sandbox = payments.sandboxFor(PaymentMethod.fromId(charge.method));
     if (sandbox == null || charge.provider != sandbox.name) {
-      throw const PaymentDeclined(
-          'Эта оплата идёт через платёжный сервис, а не в тестовом режиме');
+      throw PaymentDeclined(_t.paymentNotSandbox);
     }
-    sandbox.complete(charge.operation, card: card);
+    sandbox.complete(charge.operation, card: card, strings: _t);
     return _checkoutOf(await _settle(charge));
   }
 
@@ -1700,11 +1686,8 @@ class DbShiftRepository implements ShiftRepository {
       await _notify(
         userId: r.read<int>('worker_id'),
         kind: NotificationKind.invited,
-        title: '${shift.company} зовёт вас снова',
-        body: 'Вы в списке любимых исполнителей. Новая смена: '
-            '«${shift.title}» ${_dayText(shift.workDate)}, '
-            '${formatTime(shift.startMinutes)}–${formatTime(shift.endMinutes)}, '
-            '${formatMoney(shift.totalPay)}. Записывайтесь, пока есть места.',
+        note: (t) => t.invited(shift.company, shift.title, shift.workDate,
+            _timeOf(shift), formatMoney(shift.totalPay)),
         shiftId: shift.id,
       );
     }
@@ -1784,10 +1767,10 @@ class DbShiftRepository implements ShiftRepository {
     // человека оценками за смены, где тот у него и не работал.
     final shift = await _loadShift(shiftId);
     if (shift == null || shift.createdBy != _workerId) {
-      throw const UserError('Оценить можно только исполнителя своей смены');
+      throw UserError(_t.rateOnlyOwnShift);
     }
     if (await _statusOf(shiftId, workerId) != ApplicationStatus.completed) {
-      throw const UserError('Оценить можно только того, чей выход подтверждён');
+      throw UserError(_t.rateOnlyConfirmed);
     }
 
     await db.into(db.workerReviewRows).insert(
@@ -1818,9 +1801,7 @@ class DbShiftRepository implements ShiftRepository {
     await _notify(
       userId: workerId,
       kind: NotificationKind.rated,
-      title: 'Новая оценка: $rating из 5',
-      body: 'Заказчик оценил работу на «${shift.title}» '
-          '${_dayText(shift.workDate)}.',
+      note: (t) => t.rated(rating, shift.title, shift.workDate),
       shiftId: shiftId,
     );
   }
@@ -1899,9 +1880,7 @@ class DbShiftRepository implements ShiftRepository {
         await _notify(
           userId: application.workerId,
           kind: NotificationKind.shiftCancelled,
-          title: 'Смена отменена',
-          body: 'Заказчик отменил «${shift.title}» '
-              '${_dayText(shift.workDate)}. Выходить не нужно.',
+          note: (t) => t.shiftCancelled(shift.title, shift.workDate),
           shiftId: shiftId,
         );
       }
@@ -1998,7 +1977,7 @@ class DbShiftRepository implements ShiftRepository {
         payload: jsonEncode(edit.toJson()),
       );
       final checkout =
-          await _startCharge(chargeId, 'Доплата за смену «$title»');
+          await _startCharge(chargeId, _t.providerTopup(title));
       return ShiftEditResult(BookingResult.paymentRequired, checkout: checkout);
     }
 
@@ -2010,7 +1989,7 @@ class DbShiftRepository implements ShiftRepository {
           shiftId,
           funding.payerId,
           -diff,
-          'Возврат разницы: смена «$title» подешевела',
+          (t) => t.refundCheaper(title),
         );
         await _setFunding(funding.id, cost);
       }
@@ -2037,14 +2016,16 @@ class DbShiftRepository implements ShiftRepository {
       dressCode: Value(edit.dressCode),
     ));
 
-    final changes = _describeChanges(
-      before,
-      workDate: edit.workDate,
-      address: edit.address,
-      startMinutes: edit.startMinutes,
-      endMinutes: edit.endMinutes,
-      hourlyRate: edit.hourlyRate,
-    );
+    List<String> changesIn(CoreStrings t) => _describeChanges(
+          t,
+          before,
+          workDate: edit.workDate,
+          address: edit.address,
+          startMinutes: edit.startMinutes,
+          endMinutes: edit.endMinutes,
+          hourlyRate: edit.hourlyRate,
+        );
+    final changes = changesIn(_t);
 
     // Молчим, если поменяли мелочь вроде описания: уведомление о том,
     // чего человек не заметит, только приучает не читать уведомления.
@@ -2059,9 +2040,8 @@ class DbShiftRepository implements ShiftRepository {
         await _notify(
           userId: application.workerId,
           kind: NotificationKind.shiftChanged,
-          title: 'Смена изменилась',
-          body: '«${before.title}» ${_dayText(before.workDate)}: '
-              '${changes.join(', ')}.',
+          note: (t) =>
+              t.shiftChanged(before.title, before.workDate, changesIn(t)),
           shiftId: before.id,
         );
       }
@@ -2081,6 +2061,7 @@ class DbShiftRepository implements ShiftRepository {
   /// Сравниваем только то, ради чего стоит побеспокоить: день, время,
   /// ставку и адрес. Из-за правки опечатки в описании писать не будем.
   static List<String> _describeChanges(
+    CoreStrings t,
     Shift before, {
     required DateTime workDate,
     required String address,
@@ -2093,17 +2074,17 @@ class DbShiftRepository implements ShiftRepository {
     final sameDay = before.workDate.year == workDate.year &&
         before.workDate.month == workDate.month &&
         before.workDate.day == workDate.day;
-    if (!sameDay) changes.add('новый день — ${_dayText(workDate)}');
+    if (!sameDay) changes.add(t.changedDay(workDate));
 
     if (before.startMinutes != startMinutes ||
         before.endMinutes != endMinutes) {
-      changes.add('новое время — '
-          '${formatTime(startMinutes)}–${formatTime(endMinutes)}');
+      changes.add(t.changedTime(
+          '${formatTime(startMinutes)}–${formatTime(endMinutes)}'));
     }
     if (before.hourlyRate != hourlyRate) {
-      changes.add('новая ставка — ${formatMoney(hourlyRate)}/ч');
+      changes.add(t.changedRate(formatMoney(hourlyRate)));
     }
-    if (before.address != address) changes.add('новый адрес — $address');
+    if (before.address != address) changes.add(t.changedAddress(address));
 
     return changes;
   }
@@ -2113,25 +2094,38 @@ class DbShiftRepository implements ShiftRepository {
   // -------------------------------------------------------------------------
 
   /// Записать движение денег в журнал.
+  ///
+  /// Подпись строится на языке того, чья это история: исполнителю
+  /// начисляет заказчик, но читать строку «„Услуги грузчика“, 12
+  /// сентября» будет исполнитель.
   Future<void> _record({
     required int userId,
     required int? shiftId,
     required String kind,
     required int amount,
-    required String title,
+    required String Function(CoreStrings t) title,
     DateTime? at,
   }) async {
     // Учебные смены «оплатил» сам сервис — у него кошелька нет.
     if (userId == 0) return;
+    final t = await _stringsFor(userId);
     await db.into(db.walletEntryRows).insert(WalletEntryRowsCompanion.insert(
           userId: userId,
           shiftId: Value(shiftId),
           kind: kind,
           amount: amount,
-          title: title,
+          title: title(t),
           createdAt: at ?? clock(),
         ));
   }
+
+  /// На каком языке писать этому человеку — см. `stringsForUser`.
+  Future<CoreStrings> _stringsFor(int userId) =>
+      stringsForUser(db, userId, _t);
+
+  /// «10:00–22:00» — время смены для уведомлений.
+  static String _timeOf(Shift shift) =>
+      '${formatTime(shift.startMinutes)}–${formatTime(shift.endMinutes)}';
 
   /// Состояние записи человека на смену. null — записи нет.
   Future<String?> _statusOf(int shiftId, int workerId) async {
@@ -2163,12 +2157,11 @@ class DbShiftRepository implements ShiftRepository {
       ));
 
   /// Номер для счёта Kaspi. Для карты номер не нужен.
-  static String? _phoneFor(PaymentMethod method, String? phone) {
+  String? _phoneFor(PaymentMethod method, String? phone) {
     if (method != PaymentMethod.kaspi) return null;
     final normalized = normalizeKzPhone(phone ?? '');
     if (normalized == null) {
-      throw const PaymentDeclined(
-          'Укажите номер телефона, к которому привязан Kaspi.kz');
+      throw PaymentDeclined(_t.kaspiPhoneRequired);
     }
     return normalized;
   }
@@ -2204,7 +2197,7 @@ class DbShiftRepository implements ShiftRepository {
           ..where((c) => c.id.equals(id)))
         .getSingleOrNull();
     if (charge == null || charge.payerId != _workerId) {
-      throw const PaymentDeclined('Оплата не найдена');
+      throw PaymentDeclined(_t.paymentNotFound);
     }
     return charge;
   }
@@ -2242,7 +2235,7 @@ class DbShiftRepository implements ShiftRepository {
       // заказчика неоплаченной — оплатить её можно ещё раз.
       final message = error is UserError
           ? error.message
-          : 'Платёжный сервис не ответил. Попробуйте ещё раз';
+          : _t.providerNoAnswer;
       await _failCharge(chargeId, message);
       throw PaymentDeclined(message);
     }
@@ -2279,7 +2272,7 @@ class DbShiftRepository implements ShiftRepository {
       case ProviderState.pending:
         return charge;
       case ProviderState.failed:
-        await _failCharge(charge.id, result.message ?? 'Оплата не прошла');
+        await _failCharge(charge.id, result.message ?? _t.paymentFailed);
       case ProviderState.paid:
         await _onPaid(charge, result.paidWith ?? method.title);
     }
@@ -2313,16 +2306,16 @@ class DbShiftRepository implements ShiftRepository {
       shiftId: shift.id,
       kind: WalletEntryKind.charge,
       amount: -charge.amount,
-      title: isTopup
-          ? 'Доплата за смену «${shift.title}» · $paidWith'
-          : 'Оплата смены «${shift.title}» · $paidWith',
+      title: (t) => isTopup
+          ? t.chargeTopup(shift.title, paidWith)
+          : t.chargeShift(shift.title, paidWith),
     );
 
     // Доплата за правку, которую уже заменила более новая: её условия не
     // действуют, деньги — назад.
     if (isTopup && charge.message == _superseded) {
-      await _refundCharge(charge, charge.amount,
-          'Возврат доплаты: правку «${shift.title}» заменила новая');
+      await _refundCharge(
+          charge, charge.amount, (t) => t.refundSuperseded(shift.title));
       return;
     }
 
@@ -2332,7 +2325,7 @@ class DbShiftRepository implements ShiftRepository {
     final expected = isTopup ? PaymentStatus.held : PaymentStatus.pending;
     if (shift.isCancelled || funding.status != expected) {
       await _refundCharge(
-          charge, charge.amount, 'Возврат: оплата «${shift.title}» не понадобилась');
+          charge, charge.amount, (t) => t.refundUnneeded(shift.title));
       return;
     }
 
@@ -2355,8 +2348,8 @@ class DbShiftRepository implements ShiftRepository {
         jsonDecode(charge.payload ?? '{}') as Map<String, dynamic>);
     final applied = await _applyEdit(shift, edit);
     if (applied != BookingResult.ok) {
-      await _refundCharge(charge, charge.amount,
-          'Возврат доплаты: правка «${shift.title}» не применена');
+      await _refundCharge(
+          charge, charge.amount, (t) => t.refundNotApplied(shift.title));
       return;
     }
     await _setFunding(funding.id, ShiftCost.of(edit.applyTo(shift)));
@@ -2372,7 +2365,11 @@ class DbShiftRepository implements ShiftRepository {
   }
 
   /// Вернуть всю или часть одной операции.
-  Future<void> _refundCharge(ChargeRow charge, int amount, String title) async {
+  Future<void> _refundCharge(
+    ChargeRow charge,
+    int amount,
+    String Function(CoreStrings t) title,
+  ) async {
     await _providerRefund(charge, amount);
     await (db.update(db.chargeRows)..where((c) => c.id.equals(charge.id)))
         .write(ChargeRowsCompanion(refunded: Value(charge.refunded + amount)));
@@ -2395,7 +2392,7 @@ class DbShiftRepository implements ShiftRepository {
     int shiftId,
     int payerId,
     int amount,
-    String title,
+    String Function(CoreStrings t) title,
   ) async {
     final charges = await (db.select(db.chargeRows)
           ..where((c) =>
@@ -2443,10 +2440,7 @@ class DbShiftRepository implements ShiftRepository {
               a.status.equals(ApplicationStatus.active)))
         .get();
     if (open.isNotEmpty) return;
-    await _refundRest(
-      shift,
-      title: 'Возврат остатка: смена «${shift.title}» прошла',
-    );
+    await _refundRest(shift, title: (t) => t.refundRest(shift.title));
   }
 
   /// Вернуть заказчику всё, что сервис ещё держит по смене.
@@ -2455,7 +2449,10 @@ class DbShiftRepository implements ShiftRepository {
   /// возвращено, минус начислено исполнителям вместе с комиссией за их
   /// места. Храни мы его отдельной колонкой, её пришлось бы править при
   /// каждом движении — и однажды забыли бы.
-  Future<void> _refundRest(Shift shift, {String? title}) async {
+  Future<void> _refundRest(
+    Shift shift, {
+    String Function(CoreStrings t)? title,
+  }) async {
     final payment = await _heldPayment(shift.id);
     if (payment == null) return;
 
@@ -2482,7 +2479,7 @@ class DbShiftRepository implements ShiftRepository {
         shift.id,
         payment.payerId,
         rest,
-        title ?? 'Возврат: смена «${shift.title}» отменена',
+        title ?? (t) => t.refundCancelled(shift.title),
       );
     }
     await (db.update(db.paymentRows)..where((p) => p.id.equals(payment.id)))
@@ -2515,7 +2512,7 @@ class DbShiftRepository implements ShiftRepository {
           fee: cost.fee,
           status: PaymentStatus.held,
           cardLast4: '0000',
-          cardBrand: 'Демо',
+          cardBrand: 'Demo',
           operation: 'demo',
           createdAt: clock(),
         ));
@@ -2535,11 +2532,15 @@ class DbShiftRepository implements ShiftRepository {
   /// способу записаться на смену — скажем, из уведомления или с сервера —
   /// и половина событий тихо перестала бы доходить. Правило то же, что и
   /// с проверками: событие принадлежит действию, а не кнопке.
+  ///
+  /// Текст пишется сразу готовым, но на языке получателя: заказчик ставит
+  /// «вышел» по-русски, а исполнитель читает «Ауысым расталды». Поэтому
+  /// сюда передают не строки, а способ их собрать — `note`, — и он
+  /// вызывается со словарём того, кому адресовано уведомление.
   Future<void> _notify({
     required int? userId,
     required NotificationKind kind,
-    required String title,
-    required String body,
+    required Note Function(CoreStrings t) note,
     int? shiftId,
     bool toSelf = false,
   }) async {
@@ -2549,12 +2550,13 @@ class DbShiftRepository implements ShiftRepository {
     // Кроме напоминаний — их отправляет не человек, а расписание.
     if (userId == _workerId && !toSelf) return;
 
+    final text = note(await _stringsFor(userId));
     await db.into(db.notificationRows).insert(
           NotificationRowsCompanion.insert(
             userId: userId,
             kind: kind.name,
-            title: title,
-            body: body,
+            title: text.title,
+            body: text.body,
             shiftId: Value(shiftId),
             createdAt: clock(),
           ),
@@ -2562,7 +2564,7 @@ class DbShiftRepository implements ShiftRepository {
   }
 
   /// Как подписать действующего в тексте уведомления.
-  String get _myName => session.user?.fullName ?? 'Кто-то';
+  String _nameIn(CoreStrings t) => session.user?.fullName ?? t.someone;
 
   @override
   Future<List<AppNotification>> notifications() async {
@@ -2670,11 +2672,13 @@ class DbShiftRepository implements ShiftRepository {
       await _notify(
         userId: r.read<int>('reminder_worker'),
         kind: NotificationKind.reminder,
-        title: 'Смена ${relativeDay(shift.workDate, now)} в '
-            '${formatTime(shift.startMinutes)}',
-        body: '«${shift.title}», ${shift.company}. ${shift.address}. '
-            'Придите на 10 минут раньше и отметьтесь в приложении — '
-            '«Я на месте».',
+        note: (t) => t.reminder(
+          relativeDay(shift.workDate, now, strings: t),
+          formatTime(shift.startMinutes),
+          shift.title,
+          shift.company,
+          shift.address,
+        ),
         shiftId: shift.id,
         // На телефоне без сервера напоминание рассылает само приложение —
         // от имени того, кто вошёл, и ему же.
@@ -2780,7 +2784,7 @@ class DbShiftRepository implements ShiftRepository {
 
 /// Виды списаний по смене.
 /// Пометка на доплате, которую заменила более новая правка той же смены.
-const _superseded = 'Заменена более новой правкой';
+const _superseded = 'superseded';
 
 class _ChargeKind {
   _ChargeKind._();

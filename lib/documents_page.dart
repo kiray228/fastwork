@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'data/session.dart';
+import 'l10n/strings.dart';
 import 'package:fastwork_core/data/support_repository.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/support.dart';
@@ -62,7 +63,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Документ отправлен на проверку')),
+      SnackBar(content: Text(tr.profile.docSentSnack)),
     );
 
     // Проверку документов в боевом приложении делает оператор платформы
@@ -83,7 +84,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Документ проверен и принят')),
+      SnackBar(content: Text(tr.profile.docApprovedSnack)),
     );
   }
 
@@ -92,7 +93,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
     final list = docs;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Документы')),
+      appBar: AppBar(title: Text(tr.profile.documentsTitle)),
       body: list == null
           ? const TileListSkeleton(count: 2)
           : ListView(
@@ -102,11 +103,11 @@ class _DocumentsPageState extends State<DocumentsPage> {
                 Wrap(
                   children: [
                     HelpLink(
-                      label: 'Как проходит проверка',
+                      label: tr.profile.docsHowCheck,
                       onTap: () => openHelpStory(context, 'documents'),
                     ),
                     HelpLink(
-                      label: 'Кому нужна медкнижка',
+                      label: tr.profile.docsWhoNeedsMedbook,
                       onTap: () => openHelpStory(context, 'medbook'),
                     ),
                   ],
@@ -143,8 +144,7 @@ class _Explainer extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Проверенные документы открывают доступ к большему числу '
-              'заказчиков. Санитарная книжка нужна для работы с продуктами.',
+              tr.profile.docsExplainer,
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -190,22 +190,22 @@ class _DocumentCard extends StatelessWidget {
                   ),
                 ),
                 if (doc == null)
-                  const TagChip(text: 'Не загружен')
+                  TagChip(text: tr.profile.docNotUploaded)
                 else if (doc.isPending)
-                  const TagChip(
-                    text: 'На проверке',
+                  TagChip(
+                    text: tr.profile.docPending,
                     icon: Icons.hourglass_top_rounded,
                     color: AppColors.accent,
                   )
                 else if (doc.isApproved)
-                  const TagChip(
-                    text: 'Принят',
+                  TagChip(
+                    text: tr.profile.docApproved,
                     icon: Icons.check_circle_rounded,
                     color: AppColors.brand,
                   )
                 else
-                  const TagChip(
-                    text: 'Отклонён',
+                  TagChip(
+                    text: tr.profile.docRejected,
                     icon: Icons.close_rounded,
                     color: AppColors.accent,
                   ),
@@ -214,7 +214,7 @@ class _DocumentCard extends StatelessWidget {
             if (doc != null) ...[
               const SizedBox(height: 10),
               Text(
-                'Номер: ${doc.number}',
+                tr.profile.docNumber(doc.number),
                 style: const TextStyle(fontSize: 13, color: AppColors.muted),
               ),
               if (doc.expiresAt != null) ...[
@@ -228,7 +228,9 @@ class _DocumentCard extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: doc?.isPending == true ? null : onUpload,
                 icon: const Icon(Icons.upload_file_rounded, size: 18),
-                label: Text(doc == null ? 'Загрузить' : 'Загрузить заново'),
+                label: Text(
+                  doc == null ? tr.profile.docUpload : tr.profile.docReupload,
+                ),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(46),
                   foregroundColor: AppColors.brand,
@@ -281,7 +283,7 @@ class _UploadDialogState extends State<_UploadDialog> {
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      helpText: 'Действует до',
+      helpText: tr.profile.docValidUntilHelp,
       initialDate: expiresAt ?? DateTime(now.year + 1, now.month, now.day),
       firstDate: now,
       lastDate: DateTime(now.year + 5, now.month, now.day),
@@ -292,11 +294,11 @@ class _UploadDialogState extends State<_UploadDialog> {
   void _submit() {
     final number = controller.text.trim();
     if (number.isEmpty) {
-      setState(() => error = 'Введите номер документа');
+      setState(() => error = tr.profile.docNeedNumber);
       return;
     }
     if (needsDate && expiresAt == null) {
-      setState(() => error = 'Укажите, до какого числа действует медосмотр');
+      setState(() => error = tr.profile.docNeedExpiry);
       return;
     }
     Navigator.of(context).pop(_UploadInput(number, expiresAt));
@@ -307,23 +309,22 @@ class _UploadDialogState extends State<_UploadDialog> {
     final until = expiresAt;
 
     return AlertDialog(
-      title: Text(documentTypes[widget.type] ?? 'Документ'),
+      title: Text(documentTypes[widget.type] ?? tr.profile.docFallback),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Загрузка файлов пока не подключена — введите номер документа, '
-            'этого достаточно для учебной версии.',
-            style: TextStyle(fontSize: 13, color: AppColors.muted),
+          Text(
+            tr.profile.docUploadNote,
+            style: const TextStyle(fontSize: 13, color: AppColors.muted),
           ),
           const SizedBox(height: 14),
           TextField(
             controller: controller,
             autofocus: true,
-            decoration: const InputDecoration(
-              hintText: 'Номер документа',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              hintText: tr.profile.docNumberHint,
+              border: const OutlineInputBorder(),
             ),
           ),
           if (needsDate) ...[
@@ -333,8 +334,8 @@ class _UploadDialogState extends State<_UploadDialog> {
               icon: const Icon(Icons.event_rounded, size: 18),
               label: Text(
                 until == null
-                    ? 'Действует до…'
-                    : 'Действует до ${formatDate(until)}',
+                    ? tr.profile.docValidUntilPick
+                    : tr.profile.docValidUntil(formatDate(until)),
               ),
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(46),
@@ -354,9 +355,9 @@ class _UploadDialogState extends State<_UploadDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Отмена'),
+          child: Text(tr.profile.cancel),
         ),
-        TextButton(onPressed: _submit, child: const Text('Отправить')),
+        TextButton(onPressed: _submit, child: Text(tr.profile.send)),
       ],
     );
   }
@@ -376,20 +377,20 @@ class _Expiry extends StatelessWidget {
 
     final (text, color, icon) = document.isExpiredAt(now)
         ? (
-            'Срок вышел $until — пройдите медосмотр и загрузите заново',
+            tr.profile.docExpired(until),
             AppColors.danger,
             Icons.error_outline_rounded,
           )
         : document.expiresSoonAt(now)
             ? (
                 left == 0
-                    ? 'Действует до сегодня — пора на медосмотр'
-                    : 'Действует до $until — осталось ${daysLabel(left)}',
+                    ? tr.profile.docExpiresToday
+                    : tr.profile.docExpiresSoon(until, daysLabel(left)),
                 AppColors.warning,
                 Icons.schedule_rounded,
               )
             : (
-                'Действует до $until',
+                tr.profile.docValidUntil(until),
                 AppColors.muted,
                 Icons.event_available_rounded,
               );

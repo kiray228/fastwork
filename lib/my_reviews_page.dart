@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'data/session.dart';
+import 'l10n/strings.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/review.dart';
 import 'package:fastwork_core/shift.dart';
@@ -47,7 +48,7 @@ class _MyReviewsPageState extends State<MyReviewsPage> {
     final user = widget.session.user;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Отзывы обо мне')),
+      appBar: AppBar(title: Text(tr.profile.reviewsTitle)),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 260),
         child: switch (state) {
@@ -59,11 +60,10 @@ class _MyReviewsPageState extends State<MyReviewsPage> {
                 _load();
               },
             ),
-          Ready(value: []) => const EmptyState(
+          Ready(value: []) => EmptyState(
               icon: Icons.reviews_outlined,
-              title: 'Отзывов пока нет',
-              subtitle: 'Заказчики оценивают исполнителей\n'
-                  'после отработанной смены',
+              title: tr.profile.reviewsEmptyTitle,
+              subtitle: tr.profile.reviewsEmptySubtitle,
             ),
           Ready(:final value) => RefreshIndicator(
               onRefresh: _load,
@@ -132,7 +132,7 @@ class _Summary extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              _reviewCount(reviews.length),
+              tr.profile.ratingsCount(reviews.length),
               style: const TextStyle(fontSize: 13, color: AppColors.muted),
             ),
             const SizedBox(height: 14),
@@ -142,11 +142,10 @@ class _Summary extends StatelessWidget {
                 color: AppColors.brand.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Text(
-                'Рейтинг — это среднее по этим оценкам. Он влияет на то, '
-                'к каким сменам у вас есть доступ.',
+              child: Text(
+                tr.profile.reviewsRatingNote,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 12.5,
                   height: 1.35,
                   color: AppColors.brandDark,
@@ -157,15 +156,6 @@ class _Summary extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  static String _reviewCount(int n) {
-    final last = n % 10;
-    final lastTwo = n % 100;
-    if (lastTwo >= 11 && lastTwo <= 14) return '$n оценок';
-    if (last == 1) return '$n оценка';
-    if (last >= 2 && last <= 4) return '$n оценки';
-    return '$n оценок';
   }
 }
 

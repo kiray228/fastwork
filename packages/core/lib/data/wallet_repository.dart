@@ -6,6 +6,8 @@ import '../shift.dart';
 import 'current_user.dart';
 import 'database.dart';
 import 'fake_shift_repository.dart';
+import '../l10n/core_strings.dart';
+import 'user_language.dart';
 
 /// Кошелёк: что заработано, что выведено, и вывод на карту.
 ///
@@ -44,13 +46,12 @@ class WithdrawRejected extends PaymentDeclined {
 const kMinWithdrawal = 100000; // 1 000 ₸
 
 /// Проверка суммы вывода — одна на все хранилища.
-void checkWithdrawal(int amount, int balance) {
+void checkWithdrawal(int amount, int balance, {CoreStrings? strings}) {
+  final t = strings ?? coreTr;
   if (amount < kMinWithdrawal) {
-    throw WithdrawRejected('Вывести можно от ${kMinWithdrawal ~/ 100} ₸');
+    throw WithdrawRejected(t.withdrawMin(formatMoney(kMinWithdrawal)));
   }
-  if (amount > balance) {
-    throw const WithdrawRejected('На балансе меньше, чем вы хотите вывести');
-  }
+  if (amount > balance) throw WithdrawRejected(t.withdrawOverBalance);
 }
 
 class DbWalletRepository implements WalletRepository {
@@ -58,8 +59,18 @@ class DbWalletRepository implements WalletRepository {
   final CurrentUser session;
   final PaymentGateway payments;
 
-  DbWalletRepository(this.db, this.session, {PaymentGateway? payments})
-      : payments = payments ?? SandboxPaymentGateway();
+  /// Язык того, кто действует, — как у `DbShiftRepository`.
+  final CoreStrings Function() strings;
+
+  DbWalletRepository(
+    this.db,
+    this.session, {
+    PaymentGateway? payments,
+    CoreStrings Function()? strings,
+  })  : payments = payments ?? SandboxPaymentGateway(),
+        strings = strings ?? (() => coreTr);
+
+  CoreStrings get _t => strings();
 
   Future<List<WalletEntry>> _entries() async {
     final rows = await (db.select(db.walletEntryRows)
@@ -92,13 +103,13 @@ class DbWalletRepository implements WalletRepository {
     // прошли бы — и человек получил бы вдвое больше, чем заработал.
     final id = await db.transaction(() async {
       final balance = (await summary()).balance;
-      checkWithdrawal(amount, balance);
+      checkWithdrawal(amount, balance, strings: _t);
       await db.into(db.walletEntryRows).insert(
             WalletEntryRowsCompanion.insert(
               userId: session.workerId,
               kind: WalletEntryKind.withdrawal,
               amount: -amount,
-              title: 'Вывод на карту',
+              title: _t.withdrawal,
               createdAt: DateTime.now(),
             ),
           );
@@ -115,7 +126,7 @@ class DbWalletRepository implements WalletRepository {
       final started = await payments.payouts.startPayout(
         amount: amount,
         reference: 'payout-$id',
-        description: 'Вывод заработка fastwork',
+        description: _t.providerPayout,
       );
       await (db.update(db.payoutRows)..where((p) => p.id.equals(id)))
           .write(PayoutRowsCompanion(
@@ -125,7 +136,7 @@ class DbWalletRepository implements WalletRepository {
     } catch (error) {
       final message = error is UserError
           ? error.message
-          : 'Платёжный сервис не ответил. Попробуйте ещё раз';
+          : _t.providerNoAnswer;
       await _fail(await _payout(id), message);
       throw PaymentDeclined(message);
     }
@@ -144,10 +155,9 @@ class DbWalletRepository implements WalletRepository {
     final payout = await _myPayout(payoutId);
     final sandbox = payments.sandboxPayouts;
     if (sandbox == null || payout.provider != sandbox.name) {
-      throw const PaymentDeclined(
-          'Этот вывод идёт через платёжный сервис, а не в тестовом режиме');
+      throw PaymentDeclined(_t.payoutNotSandbox);
     }
-    sandbox.complete(payout.operation, card: card);
+    sandbox.complete(payout.operation, card: card, strings: _t);
     return _checkoutOf(await _settle(payout));
   }
 
@@ -186,7 +196,7 @@ class DbWalletRepository implements WalletRepository {
           ..where((p) => p.id.equals(id)))
         .getSingleOrNull();
     if (payout == null || payout.userId != session.workerId) {
-      throw const PaymentDeclined('Вывод не найден');
+      throw PaymentDeclined(_t.payoutNotFound);
     }
     return payout;
   }
@@ -217,7 +227,7 @@ class DbWalletRepository implements WalletRepository {
       case ProviderState.pending:
         return payout;
       case ProviderState.failed:
-        await _fail(payout, result.message ?? 'Перевод не прошёл');
+        await _fail(payout, result.message ?? _t.payoutFailed);
       case ProviderState.paid:
         final won = await (db.update(db.payoutRows)
               ..where((p) =>
@@ -229,6 +239,7 @@ class DbWalletRepository implements WalletRepository {
           message: Value(result.paidWith),
         ));
         if (won > 0 && result.paidWith != null) {
+          final t = await stringsForUser(db, payout.userId, _t);
           // Строку журнала не правим, а дописываем: на какую карту ушло.
           // Перевод уже учтён в балансе, поэтому сумма ноль.
           await db.into(db.walletEntryRows).insert(
@@ -236,8 +247,8 @@ class DbWalletRepository implements WalletRepository {
                   userId: payout.userId,
                   kind: WalletEntryKind.payoutDone,
                   amount: 0,
-                  title: 'Перевод ${formatMoney(payout.amount)} '
-                      'на карту ${result.paidWith} выполнен',
+                  title: t.payoutDone(
+                      formatMoney(payout.amount), result.paidWith!),
                   createdAt: DateTime.now(),
                 ),
               );
@@ -261,12 +272,13 @@ class DbWalletRepository implements WalletRepository {
       doneAt: Value(DateTime.now()),
     ));
     if (won == 0) return;
+    final t = await stringsForUser(db, payout.userId, _t);
     await db.into(db.walletEntryRows).insert(
           WalletEntryRowsCompanion.insert(
             userId: payout.userId,
             kind: WalletEntryKind.withdrawal,
             amount: payout.amount,
-            title: 'Вывод не прошёл — деньги вернулись на баланс',
+            title: t.payoutReturned,
             createdAt: DateTime.now(),
           ),
         );
@@ -292,11 +304,11 @@ class FakeWalletRepository implements WalletRepository {
     final started = await shifts.payments.payouts.startPayout(
       amount: amount,
       reference: 'payout',
-      description: 'Вывод',
+      description: coreTr.providerPayout,
     );
     final id = _payouts.length + 1;
     _payouts[id] = (amount, started.operation, CheckoutStatus.pending);
-    _entry(-amount, 'Вывод на карту');
+    _entry(-amount, coreTr.withdrawal);
     return _checkout(id);
   }
 
@@ -311,12 +323,13 @@ class FakeWalletRepository implements WalletRepository {
   ) async {
     final (amount, operation, status) = _payouts[payoutId]!;
     if (status != CheckoutStatus.pending) return _checkout(payoutId);
-    final result = shifts.payments.sandboxPayouts!.complete(operation, card: card);
+    final result =
+        shifts.payments.sandboxPayouts!.complete(operation, card: card);
     if (result.state == ProviderState.paid) {
       _payouts[payoutId] = (amount, operation, CheckoutStatus.paid);
     } else {
       _payouts[payoutId] = (amount, operation, CheckoutStatus.failed);
-      _entry(amount, 'Вывод не прошёл — деньги вернулись на баланс');
+      _entry(amount, coreTr.payoutReturned);
     }
     return _checkout(payoutId, message: result.message);
   }

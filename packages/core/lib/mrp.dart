@@ -1,3 +1,4 @@
+import 'l10n/core_strings.dart';
 // МРП — месячный расчётный показатель.
 //
 // Это не зарплата и не курс, а «единица измерения», которой государство
@@ -129,10 +130,4 @@ class EarningsLimit {
 }
 
 /// Месяц словами — «сентябрь 2026».
-String formatMonth(DateTime month) {
-  const names = [
-    'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
-    'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь',
-  ];
-  return '${names[month.month - 1]} ${month.year}';
-}
+String formatMonth(DateTime month) => coreTr.monthYear(month);

@@ -4,6 +4,7 @@ import '../errors.dart';
 import '../support.dart';
 import 'database.dart';
 import 'current_user.dart';
+import '../l10n/core_strings.dart';
 
 /// Документы исполнителя и их проверка.
 abstract class DocumentRepository {
@@ -92,7 +93,7 @@ class DbDocumentRepository implements DocumentRepository {
         approved ? DocumentStatus.approved : DocumentStatus.rejected,
       ),
     ));
-    if (changed == 0) throw const UserError('Документ не найден');
+    if (changed == 0) throw UserError(coreTr.documentNotFound);
 
     // Пользователь считается проверенным, когда одобрено удостоверение.
     final idCard = await (db.select(db.documentRows)
@@ -169,7 +170,7 @@ class DbSupportRepository implements SupportRepository {
           ..where((t) =>
               t.id.equals(ticketId) & t.userId.equals(session.workerId)))
         .getSingleOrNull();
-    if (ticket == null) throw const UserError('Обращение не найдено');
+    if (ticket == null) throw UserError(coreTr.ticketNotFound);
   }
 
   @override

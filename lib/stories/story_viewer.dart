@@ -5,6 +5,7 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../data/app_preferences.dart';
+import '../l10n/strings.dart';
 import 'story.dart';
 
 /// Открыть истории на весь экран, начиная с `initialIndex`.
@@ -319,8 +320,8 @@ class _StoryViewerState extends State<StoryViewer>
     return LayoutBuilder(
       builder: (context, constraints) => Semantics(
         customSemanticsActions: {
-          const CustomSemanticsAction(label: 'Следующий слайд'): _next,
-          const CustomSemanticsAction(label: 'Предыдущий слайд'): _previous,
+          CustomSemanticsAction(label: tr.stories.nextSlide): _next,
+          CustomSemanticsAction(label: tr.stories.previousSlide): _previous,
         },
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -498,7 +499,7 @@ class _ProgressBars extends StatelessWidget {
         );
 
     return Semantics(
-      label: 'Слайд ${current + 1} из $count',
+      label: tr.stories.slideOf(current + 1, count),
       child: ExcludeSemantics(
         child: Row(
           children: [
@@ -565,7 +566,8 @@ class _Header extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'fastwork · ${slide + 1} из ${story.slides.length}',
+                  'fastwork · '
+                  '${tr.stories.slideCounter(slide + 1, story.slides.length)}',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.7),
                     fontSize: 12,
@@ -585,7 +587,7 @@ class _Header extends StatelessWidget {
             ),
           IconButton(
             onPressed: onClose,
-            tooltip: 'Закрыть',
+            tooltip: tr.stories.close,
             icon: const Icon(
               Icons.close_rounded,
               color: Colors.white,
@@ -676,7 +678,7 @@ class _SlideBody extends StatelessWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        slide.actionLabel ?? 'Открыть',
+                        slide.actionLabel ?? tr.stories.open,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 16,

@@ -112,7 +112,7 @@ Middleware get _cors => (innerHandler) {
 const _corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Key',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Key, Accept-Language',
 };
 
 /// Раз в минуту спрашиваем провайдеров о незавершённых оплатах и выводах.

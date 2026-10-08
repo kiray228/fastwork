@@ -32,21 +32,21 @@ void main() {
 
   group('ярлыки по времени', () {
     test('«Срочно» — если начнётся в ближайшие сутки и люди нужны', () {
-      expect(shift(daysAhead: 1, start: 600).tagsAt(now), contains('Срочно'));
+      expect(shift(daysAhead: 1, start: 600).tagsAt(now), contains(ShiftTag.urgent));
       expect(shift(daysAhead: 1, start: 780).tagsAt(now),
-          isNot(contains('Срочно')),
+          isNot(contains(ShiftTag.urgent)),
           reason: 'через 25 часов — ещё не горит');
       expect(shift(daysAhead: 1, hired: 3).tagsAt(now),
-          isNot(contains('Срочно')),
+          isNot(contains(ShiftTag.urgent)),
           reason: 'набрана — срочности нет');
     });
 
     test('«Без отмены» — до начала меньше срока отмены', () {
       // Завтра в 10:00 — 22 часа: отменить можно ещё 12 часов.
-      expect(shift(daysAhead: 1).tagsAt(now), isNot(contains('Без отмены')));
+      expect(shift(daysAhead: 1).tagsAt(now), isNot(contains(ShiftTag.noCancel)));
       // Сегодня в 18:00 — 6 часов: записался — придётся идти.
       expect(shift(daysAhead: 0, start: 1080).tagsAt(now),
-          contains('Без отмены'));
+          contains(ShiftTag.noCancel));
     });
   });
 

@@ -12,6 +12,7 @@ import 'shift_detail_page.dart';
 import 'shifts_page.dart';
 import 'theme/app_colors.dart';
 import 'theme/glass.dart';
+import 'l10n/strings.dart';
 import 'widgets/nav.dart';
 
 /// Каркас приложения: нижнее меню и разделы.
@@ -166,14 +167,14 @@ class _HomeShellState extends State<HomeShell> {
             labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
             onDestinationSelected: _openTab,
             destinations: isManager
-                ? const [
+                ? [
                     NavigationDestination(
                       icon: Icon(Icons.event_note_outlined),
                       selectedIcon: Icon(
                         Icons.event_note_rounded,
                         color: AppColors.brand,
                       ),
-                      label: 'Мои смены',
+                      label: tr.common.navMyShifts,
                     ),
                     NavigationDestination(
                       icon: Icon(Icons.add_circle_outline_rounded),
@@ -181,7 +182,7 @@ class _HomeShellState extends State<HomeShell> {
                         Icons.add_circle_rounded,
                         color: AppColors.brand,
                       ),
-                      label: 'Создать',
+                      label: tr.common.navCreate,
                     ),
                     NavigationDestination(
                       icon: Icon(Icons.star_outline_rounded),
@@ -189,7 +190,7 @@ class _HomeShellState extends State<HomeShell> {
                         Icons.star_rounded,
                         color: AppColors.brand,
                       ),
-                      label: 'Оценки',
+                      label: tr.common.navRatings,
                     ),
                     NavigationDestination(
                       icon: Icon(Icons.person_outline_rounded),
@@ -197,17 +198,17 @@ class _HomeShellState extends State<HomeShell> {
                         Icons.person_rounded,
                         color: AppColors.brand,
                       ),
-                      label: 'Профиль',
+                      label: tr.common.navProfile,
                     ),
                   ]
-                : const [
+                : [
                     NavigationDestination(
                       icon: Icon(Icons.local_fire_department_outlined),
                       selectedIcon: Icon(
                         Icons.local_fire_department_rounded,
                         color: AppColors.brand,
                       ),
-                      label: 'Смены',
+                      label: tr.common.navShifts,
                     ),
                     NavigationDestination(
                       icon: Icon(Icons.work_history_outlined),
@@ -215,7 +216,7 @@ class _HomeShellState extends State<HomeShell> {
                         Icons.work_history_rounded,
                         color: AppColors.brand,
                       ),
-                      label: 'Мои',
+                      label: tr.common.navMine,
                     ),
                     NavigationDestination(
                       icon: Icon(Icons.person_outline_rounded),
@@ -223,7 +224,7 @@ class _HomeShellState extends State<HomeShell> {
                         Icons.person_rounded,
                         color: AppColors.brand,
                       ),
-                      label: 'Профиль',
+                      label: tr.common.navProfile,
                     ),
                   ],
           ),

@@ -14,6 +14,7 @@ import 'widgets/check_in_dialog.dart';
 import 'widgets/async_state.dart';
 import 'widgets/common.dart';
 import 'widgets/nav.dart';
+import 'l10n/strings.dart';
 
 /// Экран «Подробнее»: одна смена целиком.
 class ShiftDetailPage extends StatefulWidget {
@@ -80,21 +81,15 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
 
     _showResult(
       switch (result) {
-        BookingResult.ok => 'Вы записаны на смену',
-        BookingResult.noSlots => 'Не получилось: мест уже нет',
-        BookingResult.alreadyBooked => 'Вы уже записаны на эту смену',
-        BookingResult.ratingTooLow =>
-          'Ваш рейтинг ниже требуемого для этой смены',
-        BookingResult.alreadyStarted =>
-          'Смена уже началась — записаться на неё нельзя',
-        BookingResult.timeConflict =>
-          'В это время у вас уже есть смена — две сразу не успеть',
-        BookingResult.alreadyFinished =>
-          'Эта смена для вас уже закрыта — выход отмечен заказчиком',
-        BookingResult.earningsLimit =>
-          'С этой сменой доход за месяц превысит 300 МРП — '
-              'это предел для платформенной занятости',
-        _ => 'Не получилось записаться',
+        BookingResult.ok => tr.shift.bookedSnack,
+        BookingResult.noSlots => tr.shift.bookNoSlots,
+        BookingResult.alreadyBooked => tr.shift.bookAlreadyBooked,
+        BookingResult.ratingTooLow => tr.shift.bookRatingTooLow,
+        BookingResult.alreadyStarted => tr.shift.bookAlreadyStarted,
+        BookingResult.timeConflict => tr.shift.bookTimeConflict,
+        BookingResult.alreadyFinished => tr.shift.bookAlreadyFinished,
+        BookingResult.earningsLimit => tr.shift.bookEarningsLimit,
+        _ => tr.shift.bookFailed,
       },
     );
   }
@@ -121,15 +116,12 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
 
     _showResult(
       switch (result) {
-        BookingResult.ok when code != null =>
-          'Отметка подтверждена кодом — заказчик её видит',
-        BookingResult.ok => 'Отметка принята — заказчик её видит',
-        BookingResult.alreadyBooked => 'Вы уже отметились',
-        BookingResult.wrongCode =>
-          'Код не подошёл — проверьте цифры у старшего смены',
-        BookingResult.tooEarlyToCheckIn =>
-          'Отметиться можно в день смены, не раньше чем за час до начала',
-        _ => 'Не получилось отметиться',
+        BookingResult.ok when code != null => tr.shift.checkInWithCodeSnack,
+        BookingResult.ok => tr.shift.checkInOkSnack,
+        BookingResult.alreadyBooked => tr.shift.checkInAlready,
+        BookingResult.wrongCode => tr.shift.checkInWrongCode,
+        BookingResult.tooEarlyToCheckIn => tr.shift.checkInTooEarly,
+        _ => tr.shift.checkInFailed,
       },
     );
   }
@@ -142,22 +134,20 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Отменить запись?'),
+        title: Text(tr.shift.cancelDialogTitle),
         content: Text(
-          'Место освободится, и его сможет занять другой исполнитель.\n\n'
-          'Записаться заново можно будет, только если место останется '
-          'свободным.',
+          tr.shift.cancelDialogBody,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Оставить запись'),
+            child: Text(tr.shift.cancelKeep),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(foregroundColor: AppColors.accent),
-            child: const Text('Отменить'),
+            child: Text(tr.shift.cancelConfirm),
           ),
         ],
       ),
@@ -177,10 +167,9 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
 
     _showResult(
       switch (result) {
-        BookingResult.ok => 'Запись отменена',
-        BookingResult.tooLateToCancel =>
-          'Срок отмены прошёл — запись отменить нельзя',
-        _ => 'Не получилось отменить',
+        BookingResult.ok => tr.shift.cancelDone,
+        BookingResult.tooLateToCancel => tr.shift.cancelTooLate,
+        _ => tr.shift.cancelFailed,
       },
     );
   }
@@ -203,11 +192,10 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
 
     _showResult(
       switch (result) {
-        BookingResult.ok when join =>
-          'Сообщим, как только освободится место',
-        BookingResult.ok => 'Вы больше не в листе ожидания',
-        BookingResult.alreadyStarted => 'Смена уже началась',
-        _ => 'Не получилось',
+        BookingResult.ok when join => tr.shift.waitlistJoined,
+        BookingResult.ok => tr.shift.waitlistLeft,
+        BookingResult.alreadyStarted => tr.shift.waitlistStarted,
+        _ => tr.shift.waitlistFailed,
       },
     );
   }
@@ -225,7 +213,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
       mode: LaunchMode.externalApplication,
       webOnlyWindowName: '_blank',
     );
-    if (!ok && mounted) _showResult('Не получилось открыть ссылку');
+    if (!ok && mounted) _showResult(tr.shift.linkOpenFailed);
   }
 
   /// Как добраться: выбрать карты и открыть в них адрес смены.
@@ -243,7 +231,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
                 child: Text(
-                  'Как добраться',
+                  tr.shift.routeTitle,
                   style: Theme.of(sheetContext)
                       .textTheme
                       .headlineSmall
@@ -293,12 +281,12 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
 
     if (current == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Смена')),
+        appBar: AppBar(title: Text(tr.shift.title)),
         body: loaded
-            ? const EmptyState(
+            ? EmptyState(
                 icon: Icons.event_busy_rounded,
-                title: 'Смена не найдена',
-                subtitle: 'Её могли удалить, или она ещё не опубликована',
+                title: tr.shift.notFoundTitle,
+                subtitle: tr.shift.notFoundSubtitle,
               )
             : const Center(child: CircularProgressIndicator()),
       );
@@ -306,7 +294,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Смена'),
+        title: Text(tr.shift.title),
         actions: [
           IconButton(
             onPressed: () => _copy(
@@ -314,9 +302,9 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
                 current,
                 link: sharedLinksWork ? shiftLink(current.id) : null,
               ),
-              'Описание смены скопировано — вставьте его в чат',
+              tr.shift.shareCopied,
             ),
-            tooltip: 'Поделиться',
+            tooltip: tr.shift.shareTooltip,
             icon: const Icon(Icons.share_outlined),
           ),
           const SizedBox(width: 4),
@@ -344,7 +332,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
                   shift: current,
                   onCopyAddress: () => _copy(
                     current.address,
-                    'Адрес скопирован — вставьте его в карты',
+                    tr.shift.addressCopied,
                   ),
                   onRoute: () => _route(current),
                   // В календарь — только то, куда человек уже записан:
@@ -376,9 +364,9 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SectionHeader(
+                        SectionHeader(
                           icon: Icons.checklist_rounded,
-                          title: 'Обязанности',
+                          title: tr.shift.duties,
                         ),
                         const SizedBox(height: 12),
                         for (final duty in current.duties)
@@ -417,7 +405,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
                   const SizedBox(height: 14),
                   _TextSection(
                     icon: Icons.checkroom_rounded,
-                    title: 'Форма одежды',
+                    title: tr.shift.dressCode,
                     text: current.dressCode!,
                   ),
                 ],
@@ -425,7 +413,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
                   const SizedBox(height: 14),
                   _TextSection(
                     icon: Icons.info_outline_rounded,
-                    title: 'Комментарий заказчика',
+                    title: tr.shift.employerComment,
                     text: current.employerComment!,
                   ),
                 ],
@@ -476,7 +464,7 @@ class _AppliedBanner extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Вы записаны на эту смену',
+                  tr.shift.appliedBanner,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontSize: 14,
                         color: AppColors.brandDark,
@@ -488,10 +476,8 @@ class _AppliedBanner extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             canCancel
-                ? 'Отменить запись можно до '
-                    '${formatDateTime(shift.cancelDeadline)}'
-                : 'Срок отмены прошёл. Обязательно выйдите на смену — '
-                    'неявка снижает рейтинг.',
+                ? tr.shift.cancelUntil(formatDateTime(shift.cancelDeadline))
+                : tr.shift.cancelDeadlinePassed,
             style: TextStyle(
               fontSize: 12.5,
               height: 1.35,
@@ -535,16 +521,14 @@ class _RatingLockBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Этот заказчик берёт от '
-                  '${required.toStringAsFixed(1)}',
+                  tr.shift.ratingLockTitle(required.toStringAsFixed(1)),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontSize: 14,
                       ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Ваш рейтинг — ${actual.toStringAsFixed(1)}. '
-                  'Отработайте несколько смен без опозданий, и он вырастет.',
+                  tr.shift.ratingLockBody(actual.toStringAsFixed(1)),
                   style: const TextStyle(fontSize: 12.5, height: 1.35),
                 ),
               ],
@@ -672,7 +656,7 @@ class _HeroCard extends StatelessWidget {
             icon: Icons.schedule_rounded,
             text: '${formatTime(shift.startMinutes)} — '
                 '${formatTime(shift.endMinutes)}'
-                '${shift.crossesMidnight ? ' (следующий день)' : ''}'
+                '${shift.crossesMidnight ? tr.shift.nextDaySuffix : ''}'
                 ' · ${formatDuration(shift.durationMinutes)}',
           ),
           // Адрес копируется одним касанием: его почти всегда вставляют
@@ -689,9 +673,9 @@ class _HeroCard extends StatelessWidget {
                     text: shift.address,
                   ),
                 ),
-                const Tooltip(
-                  message: 'Скопировать адрес',
-                  child: Padding(
+                Tooltip(
+                  message: tr.shift.copyAddressTooltip,
+                  child: const Padding(
                     padding: EdgeInsets.all(6),
                     child: Icon(
                       Icons.copy_rounded,
@@ -709,7 +693,7 @@ class _HeroCard extends StatelessWidget {
               Expanded(
                 child: _LinkButton(
                   icon: Icons.directions_rounded,
-                  label: 'Как добраться',
+                  label: tr.shift.routeButton,
                   onTap: onRoute,
                 ),
               ),
@@ -718,7 +702,7 @@ class _HeroCard extends StatelessWidget {
                 Expanded(
                   child: _LinkButton(
                     icon: Icons.event_available_rounded,
-                    label: 'В календарь',
+                    label: tr.shift.toCalendar,
                     onTap: onCalendar!,
                   ),
                 ),
@@ -734,13 +718,13 @@ class _HeroCard extends StatelessWidget {
               if (shift.isFunded) const GuaranteeChip(),
               for (final tag in shift.tagsAt(DateTime.now()))
                 TagChip(
-                  text: tag,
-                  icon: tag == 'Срочно'
+                  text: tr.core.tag(tag),
+                  icon: tag == ShiftTag.urgent
                       ? Icons.local_fire_department_rounded
                       : null,
                   color: switch (tag) {
-                    'Срочно' => AppColors.danger,
-                    'Мало мест' => AppColors.accent,
+                    ShiftTag.urgent => AppColors.danger,
+                    ShiftTag.fewSlots => AppColors.accent,
                     _ => null,
                   },
                 ),
@@ -811,7 +795,7 @@ class _PayCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Вознаграждение',
+                  tr.shift.payTitle,
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -838,34 +822,33 @@ class _PayCard extends StatelessWidget {
             child: Column(
               children: [
                 _PayRow(
-                  label: 'Ставка',
-                  value: '${formatMoney(shift.hourlyRate)} / час',
+                  label: tr.shift.payRate,
+                  value: tr.shift.perHour(formatMoney(shift.hourlyRate)),
                 ),
                 _PayRow(
-                  label: 'Длительность смены',
+                  label: tr.shift.payDuration,
                   value: formatDuration(shift.durationMinutes),
                 ),
                 _PayRow(
-                  label: 'Оплачивается',
+                  label: tr.shift.payPaid,
                   value: formatDuration(shift.paidMinutes),
                   highlight: true,
                 ),
                 if (shift.isFunded) ...[
                   const SizedBox(height: 10),
-                  const Row(
+                  Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.verified_user_rounded,
                         size: 14,
                         color: AppColors.success,
                       ),
-                      SizedBox(width: 6),
+                      const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'Заказчик уже оплатил смену — деньги у сервиса. '
-                          'Вы получите их, когда он подтвердит ваш выход.',
-                          style: TextStyle(fontSize: 12, height: 1.3),
+                          tr.shift.payFundedNote,
+                          style: const TextStyle(fontSize: 12, height: 1.3),
                         ),
                       ),
                     ],
@@ -884,8 +867,8 @@ class _PayCard extends StatelessWidget {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          '${formatDuration(shift.breakMinutes)} перерыва '
-                          'на обед не оплачивается',
+                          tr.shift.unpaidBreak(
+                              formatDuration(shift.breakMinutes)),
                           style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.muted,
@@ -992,7 +975,10 @@ class _SlotsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionHeader(icon: Icons.groups_outlined, title: 'Набор'),
+          SectionHeader(
+            icon: Icons.groups_outlined,
+            title: tr.shift.slotsTitle,
+          ),
           const SizedBox(height: 14),
           Row(
             children: [
@@ -1022,8 +1008,8 @@ class _SlotsCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             shift.hasFreeSlots
-                ? 'Свободно мест: ${shift.freeSlots}'
-                : 'Все места заняты',
+                ? tr.shift.freeSlots(shift.freeSlots)
+                : tr.shift.allSlotsTaken,
             style: const TextStyle(fontSize: 13, color: AppColors.muted),
           ),
         ],
@@ -1065,42 +1051,42 @@ class _BottomBar extends StatelessWidget {
     final now = DateTime.now();
 
     if (shift.isCompleted) {
-      label = 'Смена отработана';
+      label = tr.shift.statusCompleted;
       action = null;
       outlined = false;
     } else if (shift.isCheckedIn) {
-      label = 'Вы отметились — ждём подтверждения';
+      label = tr.shift.statusCheckedIn;
       action = null;
       outlined = true;
     } else if (shift.canCheckInAt(now)) {
       // В день смены запись уже не отменить, зато появляется отметка.
-      label = 'Я на месте';
+      label = tr.shift.checkInButton;
       action = onCheckIn;
       outlined = false;
     } else if (shift.isApplied && canCancel) {
-      label = 'Отменить запись';
+      label = tr.shift.cancelBooking;
       action = onCancel;
       outlined = true;
     } else if (shift.isApplied) {
-      label = 'Отмена уже недоступна';
+      label = tr.shift.cancelUnavailable;
       action = null;
       outlined = false;
     } else if (!allowed) {
-      label = 'Рейтинг ниже требуемого';
+      label = tr.shift.ratingTooLowButton;
       action = null;
       outlined = false;
     } else if (shift.hasFreeSlots) {
-      label = 'Записаться на смену';
+      label = tr.shift.bookButton;
       action = onBook;
       outlined = false;
     } else if (shift.onWaitlist) {
-      label = 'Вы в листе ожидания · Выйти';
+      label = tr.shift.waitlistLeaveButton;
       action = onWaitlist;
       outlined = true;
     } else {
       // Мест нет — но кто-нибудь может отменить запись. Лучше подождать
       // с уведомлением, чем проверять смену каждый час самому.
-      label = 'Мест нет · Сообщить, когда освободится';
+      label = tr.shift.waitlistJoinButton;
       action = onWaitlist;
       outlined = true;
     }
@@ -1130,9 +1116,8 @@ class _BottomBar extends StatelessWidget {
                   Flexible(
                     child: Text(
                       shift.payoutDelayDays == 1
-                          ? 'Вознаграждение на следующий день после смены'
-                          : 'Вознаграждение через '
-                              '${daysLabel(shift.payoutDelayDays)}',
+                          ? tr.shift.payoutNextDay
+                          : tr.shift.payoutInDays(shift.payoutDelayDays),
                       style: const TextStyle(
                         fontSize: 12.5,
                         color: AppColors.muted,

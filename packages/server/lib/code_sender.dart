@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:mailer/mailer.dart';
 import 'package:mailer/mailer.dart' as mailer;
 import 'package:mailer/smtp_server.dart';
+import 'server_strings.dart';
 
 /// Кто доставляет код до человека.
 ///
@@ -103,10 +104,9 @@ class BrevoCodeSender implements CodeSender {
             'to': [
               {'email': email},
             ],
-            'subject': 'Код для входа: $code',
-            'textContent': 'Ваш код для входа в fastwork: $code\n\n'
-                'Код действует 5 минут.\n'
-                'Если вы не пытались войти — просто не отвечайте на это письмо.',
+            // Письмо — на языке, на котором человек открыл приложение.
+            'subject': serverTr.emailSubject(code),
+            'textContent': serverTr.emailBody(code),
           }),
         )
         // Без ограничения времени запрос может висеть очень долго, и
@@ -210,10 +210,8 @@ class SmtpCodeSender implements CodeSender {
     final message = Message()
       ..from = Address(from, 'fastwork')
       ..recipients.add(email)
-      ..subject = 'Код для входа: $code'
-      ..text = 'Ваш код для входа в fastwork: $code\n\n'
-          'Код действует 5 минут.\n'
-          'Если вы не пытались войти — просто не отвечайте на это письмо.';
+      ..subject = serverTr.emailSubject(code)
+      ..text = serverTr.emailBody(code);
 
     // Ограничение времени: без него запрос к заблокированному порту
     // висит минуту, и всё это время человек смотрит на крутящуюся кнопку.
