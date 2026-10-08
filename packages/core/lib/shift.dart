@@ -2,6 +2,7 @@
 // Экранов в этом файле нет — только «суть».
 
 import 'category.dart';
+import 'l10n/core_strings.dart';
 
 class Shift {
   final int id;
@@ -242,14 +243,16 @@ class Shift {
   ///
   /// Мы их не храним — они вычисляются из уже имеющихся полей. Добавится
   /// новое условие, и ярлык появится сам, без правки данных.
-  List<String> get tags {
-    final result = <String>[];
-    if (crossesMidnight) result.add('Ночная');
-    if (!hasUnpaidBreak) result.add('Без вычета обеда');
-    if (payoutDelayDays == 1) result.add('Выплата завтра');
-    if (hasFreeSlots && freeSlots <= 2) result.add('Мало мест');
-    return result;
-  }
+  ///
+  /// Ярлык — не строка, а значение перечисления: подпись к нему своя на
+  /// каждом языке, а экрану, чтобы покрасить «Мало мест» в оранжевый, не
+  /// нужно сравнивать слова.
+  List<ShiftTag> get tags => [
+        if (crossesMidnight) ShiftTag.night,
+        if (!hasUnpaidBreak) ShiftTag.noBreakDeduction,
+        if (payoutDelayDays == 1) ShiftTag.payoutTomorrow,
+        if (hasFreeSlots && freeSlots <= 2) ShiftTag.fewSlots,
+      ];
 
   /// Смена срочная: начнётся в ближайшие сутки, а люди ещё нужны.
   ///
@@ -264,12 +267,16 @@ class Shift {
   /// Ярлыки с поправкой на время: к обычным добавляются «Срочно» и
   /// «Без отмены» — до начала меньше срока отмены, и записавшись сейчас,
   /// передумать уже не выйдет. Лучше знать это до записи, а не после.
-  List<String> tagsAt(DateTime now) => [
-        if (isUrgentAt(now)) 'Срочно',
+  List<ShiftTag> tagsAt(DateTime now) => [
+        if (isUrgentAt(now)) ShiftTag.urgent,
         ...tags,
-        if (!isMine && !hasStartedAt(now) && !canCancelAt(now)) 'Без отмены',
+        if (!isMine && !hasStartedAt(now) && !canCancelAt(now))
+          ShiftTag.noCancel,
       ];
 }
+
+/// Ярлыки смены. Подписи — в словаре: `coreTr.tag(tag)`.
+enum ShiftTag { night, noBreakDeduction, payoutTomorrow, fewSlots, urgent, noCancel }
 
 /// Сколько человек можно позвать на одну смену. Больше — уже не смена,
 /// а мероприятие, и вести его стоит через поддержку.
@@ -295,23 +302,25 @@ String? shiftFormError({
   required int hourlyRate,
   required int workersNeeded,
   required DateTime now,
+  CoreStrings? strings,
 }) {
-  if (title.trim().length < 5) return 'Опишите, какие услуги нужны';
-  if (address.trim().isEmpty) return 'Укажите адрес';
+  // Сервер передаёт словарь языка того, кто прислал запрос; приложение —
+  // нет, и тогда берётся язык приложения.
+  final t = strings ?? coreTr;
+  if (title.trim().length < 5) return t.formNeedTitle;
+  if (address.trim().isEmpty) return t.formNeedAddress;
   if (hourlyRate < kMinHourlyRate) {
-    return 'Ставка должна быть не меньше ${formatMoney(kMinHourlyRate)} в час';
+    return t.formRateTooLow(formatMoney(kMinHourlyRate));
   }
   if (hourlyRate > kMaxHourlyRate) {
-    return 'Ставка не может быть больше ${formatMoney(kMaxHourlyRate)} в час';
+    return t.formRateTooHigh(formatMoney(kMaxHourlyRate));
   }
-  if (workersNeeded < 1) return 'Нужен хотя бы один человек';
+  if (workersNeeded < 1) return t.formNeedWorker;
   if (workersNeeded > kMaxWorkersPerShift) {
-    return 'На одну смену — не больше $kMaxWorkersPerShift человек';
+    return t.formTooManyWorkers(kMaxWorkersPerShift);
   }
   bool inDay(int m) => m >= 0 && m < 1440;
-  if (!inDay(startMinutes) || !inDay(endMinutes)) {
-    return 'Время смены указано неверно';
-  }
+  if (!inDay(startMinutes) || !inDay(endMinutes)) return t.formBadTime;
   final draft = Shift(
     id: 0,
     workDate: workDate,
@@ -324,9 +333,9 @@ String? shiftFormError({
     workersNeeded: workersNeeded,
     workersHired: 0,
   );
-  if (draft.durationMinutes < 60) return 'Смена должна длиться хотя бы час';
+  if (draft.durationMinutes < 60) return t.formTooShort;
   // Смену в прошлом никто не возьмёт: записаться можно только до начала.
-  if (draft.hasStartedAt(now)) return 'Время начала уже прошло';
+  if (draft.hasStartedAt(now)) return t.formStartPassed;
   return null;
 }
 
@@ -361,40 +370,26 @@ String formatTime(int minutes) {
 String formatDuration(int minutes) {
   final h = minutes ~/ 60;
   final m = minutes % 60;
-  return m == 0 ? '$h ч' : '$h ч $m мин';
+  return coreTr.duration(h, m);
 }
 
-const monthsShort = [
-  'янв', 'фев', 'мар', 'апр', 'мая', 'июн',
-  'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
-];
+/// «янв» … «дек» — на языке приложения.
+List<String> get monthsShort => coreTr.monthsShort;
 
-const weekdaysShort = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+/// «пн» … «вс» — на языке приложения.
+List<String> get weekdaysShort => coreTr.weekdaysShort;
 
 /// 2027-03-12 -> «12.03.2027» — так даты пишут в документах.
 String formatDate(DateTime date) =>
     '${date.day.toString().padLeft(2, '0')}.'
     '${date.month.toString().padLeft(2, '0')}.${date.year}';
 
-/// Русское окончание после числа: 1 смена, 2 смены, 5 смен, 11 смен.
-///
-/// Одно правило на всё приложение. Раньше оно было переписано в трёх
-/// местах — а в профиле его не было вовсе, и там стояло «2 смен».
-String plural(int n, String one, String few, String many) {
-  final last = n % 10;
-  final lastTwo = n % 100;
-  if (lastTwo >= 11 && lastTwo <= 14) return many;
-  if (last == 1) return one;
-  if (last >= 2 && last <= 4) return few;
-  return many;
-}
-
-/// 1 -> «1 день», 3 -> «3 дня», 11 -> «11 дней».
-String daysLabel(int days) => '$days ${plural(days, 'день', 'дня', 'дней')}';
+/// 1 -> «1 день», 3 -> «3 дня», 11 -> «11 дней». На казахском —
+/// «3 күн»: окончания у каждого языка свои, они в словаре.
+String daysLabel(int days) => coreTr.days(days);
 
 /// 1 -> «1 смена», 3 -> «3 смены», 11 -> «11 смен».
-String shiftsLabel(int count) =>
-    '$count ${plural(count, 'смена', 'смены', 'смен')}';
+String shiftsLabel(int count) => coreTr.shifts(count);
 
 /// Смена одним сообщением — чтобы переслать другу в мессенджер.
 ///
@@ -406,16 +401,15 @@ String shiftsLabel(int count) =>
 /// Его нет, когда приложение работает без сервера: номера смен там свои
 /// у каждого телефона, и ссылка открыла бы у друга чужую смену.
 String shiftShareText(Shift shift, {Uri? link}) {
-  final date = shift.workDate;
+  final t = coreTr;
   return [
     '${shift.title} — ${shift.company}',
-    '${date.day} ${monthsShort[date.month - 1]}, '
-        '${weekdaysShort[date.weekday - 1]}, '
+    '${t.dayMonthWeekday(shift.workDate)}, '
         '${formatTime(shift.startMinutes)}–${formatTime(shift.endMinutes)}',
     shift.address,
-    '${formatMoney(shift.totalPay)} за смену'
-        '${shift.isFunded ? ', оплата гарантирована' : ''}',
-    if (link != null) 'Записаться: $link' else 'Смена в fastwork',
+    '${t.perShift(formatMoney(shift.totalPay))}'
+        '${shift.isFunded ? t.guaranteedSuffix : ''}',
+    if (link != null) t.bookVia('$link') else t.shiftInFastwork,
   ].join('\n');
 }
 
@@ -423,7 +417,10 @@ String shiftShareText(Shift shift, {Uri? link}) {
 ///
 /// Про ближайшие дни люди говорят словами, а не числами: «смена завтра»
 /// понятнее, чем «смена 25 сен». Дальше трёх дней слова кончаются.
-String relativeDay(DateTime date, DateTime now) {
+///
+/// [strings] — на чьём языке: сервер пишет напоминание на языке того,
+/// кому оно адресовано. Не передали — язык приложения.
+String relativeDay(DateTime date, DateTime now, {CoreStrings? strings}) {
   final today = DateTime(now.year, now.month, now.day);
   final day = DateTime(date.year, date.month, date.day);
   // Разницу считаем по календарю, а не делением часов на 24: в день
@@ -431,13 +428,7 @@ String relativeDay(DateTime date, DateTime now) {
   final diff = DateTime.utc(day.year, day.month, day.day)
       .difference(DateTime.utc(today.year, today.month, today.day))
       .inDays;
-  return switch (diff) {
-    0 => 'сегодня',
-    1 => 'завтра',
-    2 => 'послезавтра',
-    _ => '${date.day} ${monthsShort[date.month - 1]}, '
-        '${weekdaysShort[date.weekday - 1]}',
-  };
+  return (strings ?? coreTr).relativeDay(diff, date);
 }
 
 // ---------------------------------------------------------------------------
@@ -572,10 +563,7 @@ List<Shift> buildDemoShifts() {
 }
 
 /// «17 сен, 08:00» — для крайнего срока отмены.
-String formatDateTime(DateTime dt) =>
-    '${dt.day} ${monthsShort[dt.month - 1]}, '
-    '${dt.hour.toString().padLeft(2, '0')}:'
-    '${dt.minute.toString().padLeft(2, '0')}';
+String formatDateTime(DateTime dt) => coreTr.dateTimeShort(dt);
 
 // ---------------------------------------------------------------------------
 // JSON — язык, на котором приложение и сервер разговаривают

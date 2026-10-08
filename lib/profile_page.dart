@@ -11,11 +11,12 @@ import 'stories/story_actions.dart';
 import 'support_ui/support_page.dart';
 import 'theme/app_colors.dart';
 import 'theme/glass.dart';
-import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
 import 'wallet_page.dart';
 import 'widgets/common.dart';
 import 'widgets/nav.dart';
+import 'l10n/strings.dart';
+import 'widgets/language_picker.dart';
 
 /// Профиль пользователя.
 class ProfilePage extends StatelessWidget {
@@ -246,6 +247,12 @@ class ProfilePage extends StatelessWidget {
                   trailing: user.city,
                   onTap: () => _changeCity(context),
                 ),
+                _MenuRow(
+                  icon: Icons.translate_rounded,
+                  title: tr.common.language,
+                  trailing: preferences.language.selfName,
+                  onTap: () => pickLanguage(context, preferences),
+                ),
                 // Слушаем тему: подпись справа должна смениться сразу,
                 // даже если цвета остались прежними — например, «как в
                 // системе» днём и «светлое» выглядят одинаково.
@@ -414,7 +421,7 @@ class _Stats extends StatelessWidget {
             icon: Icons.work_history_rounded,
             value: '${user.completedShifts}',
             // «2 смены», а не «2 смен»: подпись согласуется с числом.
-            label: plural(user.completedShifts, 'Смена', 'Смены', 'Смен'),
+            label: tr.profile.statShifts(user.completedShifts),
             color: AppColors.brand,
           ),
         ),

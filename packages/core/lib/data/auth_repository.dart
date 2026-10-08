@@ -4,6 +4,7 @@ import '../errors.dart';
 import '../terms.dart';
 import '../user.dart';
 import 'database.dart';
+import '../l10n/core_strings.dart';
 
 /// Что умеет хранилище пользователей. Экраны знают только это описание.
 abstract class AuthRepository {
@@ -81,12 +82,12 @@ class DbAuthRepository implements AuthRepository {
 
   @override
   Future<void> requestCode(String email) async {
-    throw UnsupportedError('Коды на почту работают только через сервер');
+    throw UnsupportedError(coreTr.emailCodesNeedServer);
   }
 
   @override
   Future<AppUser?> verifyCode(String email, String code) async {
-    throw UnsupportedError('Коды на почту работают только через сервер');
+    throw UnsupportedError(coreTr.emailCodesNeedServer);
   }
 
   Future<AppUser> _toUser(UserRow row) async {
@@ -273,7 +274,7 @@ class FakeAuthRepository implements AuthRepository {
   @override
   Future<AppUser?> verifyCode(String email, String code) async {
     if (code != expectedCode) {
-      throw StateError('Неверный код');
+      throw StateError(coreTr.wrongLoginCode);
     }
     for (final u in _users) {
       if (u.email == email) {
@@ -399,5 +400,5 @@ void requireCurrentTerms(int acceptedVersion) {
 }
 
 class TermsNotAccepted extends UserError {
-  TermsNotAccepted() : super('Чтобы продолжить, примите правила сервиса');
+  TermsNotAccepted() : super(coreTr.termsNotAccepted);
 }

@@ -11,6 +11,8 @@ import 'package:fastwork_core/user.dart';
 import '../widgets/async_state.dart';
 import '../widgets/common.dart';
 import 'terms_page.dart';
+import '../data/app_preferences.dart';
+import '../widgets/language_picker.dart';
 
 /// Вход и регистрация в одном экране.
 ///
@@ -22,7 +24,16 @@ class RegisterPage extends StatefulWidget {
   final AppSession session;
   final AuthRepository auth;
 
-  const RegisterPage({super.key, required this.session, required this.auth});
+  /// Настройки телефона — чтобы сменить язык ещё до входа. Не передали —
+  /// кнопки языка нет: так в тестах.
+  final AppPreferences? preferences;
+
+  const RegisterPage({
+    super.key,
+    required this.session,
+    required this.auth,
+    this.preferences,
+  });
 
   @override
   State<RegisterPage> createState() => _RegisterPageState();
@@ -214,6 +225,11 @@ class _RegisterPageState extends State<RegisterPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
           children: [
+            if (widget.preferences != null)
+              Align(
+                alignment: Alignment.centerRight,
+                child: LanguageButton(preferences: widget.preferences!),
+              ),
             const Center(child: Wordmark(size: 34)),
             const SizedBox(height: 12),
             Text(

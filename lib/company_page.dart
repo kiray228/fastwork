@@ -7,6 +7,7 @@ import 'theme/app_colors.dart';
 import 'widgets/async_state.dart';
 import 'widgets/common.dart';
 import 'widgets/skeleton.dart';
+import 'l10n/strings.dart';
 
 /// Страница компании: оценка и отзывы исполнителей.
 class CompanyPage extends StatefulWidget {
@@ -184,7 +185,7 @@ class _CompanyPageState extends State<CompanyPage> {
   }
 
   static String _reviewsLabel(int count) =>
-      '$count ${plural(count, 'отзыв', 'отзыва', 'отзывов')}';
+      tr.core.reviews(count);
 }
 
 /// Одна смена в списке ближайших: когда, что и сколько.

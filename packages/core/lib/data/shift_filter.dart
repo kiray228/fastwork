@@ -1,11 +1,13 @@
+import '../l10n/core_strings.dart';
+
 /// Как отсортировать ленту смен.
 enum ShiftSort {
-  byTime('Сначала ранние'),
-  payDesc('Сначала дорогие'),
-  payAsc('Сначала дешёвые');
+  byTime,
+  payDesc,
+  payAsc;
 
-  final String label;
-  const ShiftSort(this.label);
+  /// Подпись в окне фильтра — на языке приложения.
+  String get label => coreTr.sort(this);
 }
 
 /// Настройки ленты: что показывать и в каком порядке.

@@ -4,6 +4,7 @@ import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
 import 'category_icon.dart';
 import 'common.dart';
+import '../l10n/strings.dart';
 
 /// Карточка смены в ленте.
 class ShiftCard extends StatelessWidget {
@@ -117,13 +118,13 @@ class ShiftCard extends StatelessWidget {
                   ),
                 for (final tag in shift.tagsAt(DateTime.now()))
                   TagChip(
-                    text: tag,
-                    icon: tag == 'Срочно'
+                    text: tr.core.tag(tag),
+                    icon: tag == ShiftTag.urgent
                         ? Icons.local_fire_department_rounded
                         : null,
                     color: switch (tag) {
-                      'Срочно' => AppColors.danger,
-                      'Мало мест' => AppColors.accent,
+                      ShiftTag.urgent => AppColors.danger,
+                      ShiftTag.fewSlots => AppColors.accent,
                       _ => null,
                     },
                   ),

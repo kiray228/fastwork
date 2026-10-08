@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:fastwork_core/lang.dart';
 import 'package:http/http.dart' as http;
 
 /// Разговор с сервером.
@@ -24,6 +25,10 @@ class ApiClient {
   Map<String, String> get _headers => {
         'Content-Type': 'application/json; charset=utf-8',
         if (token != null) 'Authorization': 'Bearer $token',
+        // На каком языке отвечать: ошибки, письма с кодом, уведомления.
+        // Сервер запоминает язык и пишет на нём, даже когда человека нет
+        // в приложении.
+        'Accept-Language': appLang.code,
       };
 
   Uri _uri(String path, [Map<String, String>? query]) =>

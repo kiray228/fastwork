@@ -14,6 +14,7 @@ import '../widgets/async_state.dart';
 import '../widgets/category_icon.dart';
 import '../widgets/common.dart';
 import '../widgets/payment_sheet.dart';
+import '../l10n/strings.dart';
 
 /// Создание смены заказчиком — и правка уже созданной.
 ///
@@ -893,7 +894,7 @@ class _CategorySheetState extends State<_CategorySheet> {
                       Padding(
                         padding: const EdgeInsets.fromLTRB(12, 14, 12, 4),
                         child: Text(
-                          group.toUpperCase(),
+                          tr.core.categoryGroup(group).toUpperCase(),
                           style: const TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w800,

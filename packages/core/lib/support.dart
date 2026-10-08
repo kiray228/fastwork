@@ -1,3 +1,4 @@
+import 'l10n/core_strings.dart';
 /// Обращение в поддержку.
 class SupportTicket {
   final int id;
@@ -81,11 +82,11 @@ class UserDocument {
   }
 }
 
-/// Типы документов и их названия для экрана.
-const documentTypes = {
-  'id_card': 'Удостоверение личности',
-  'medical_book': 'Санитарная книжка',
-};
+/// Типы документов и их названия для экрана — на языке приложения.
+Map<String, String> get documentTypes => {
+      for (final type in const ['id_card', 'medical_book'])
+        type: coreTr.documentType(type),
+    };
 
 /// Документы со сроком действия. Удостоверение тоже не вечное, но оно
 /// действует десять лет, а медосмотр в книжке нужно проходить регулярно.

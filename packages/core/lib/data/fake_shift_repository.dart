@@ -5,6 +5,7 @@ import '../payment.dart';
 import '../review.dart';
 import '../shift.dart';
 import '../user.dart';
+import '../l10n/core_strings.dart';
 import 'database.dart';
 import 'shift_filter.dart';
 import 'shift_repository.dart';
@@ -187,7 +188,8 @@ class FakeShiftRepository implements ShiftRepository {
     if (!shift.hasStartedAt(clock())) return BookingResult.notStarted;
 
     _myStatuses[shiftId] = ApplicationStatus.completed;
-    _record(WalletEntryKind.earning, shift.totalPay, '«${shift.title}»',
+    _record(WalletEntryKind.earning, shift.totalPay,
+        coreTr.earning(shift.title, shift.workDate),
         shiftId: shiftId);
     return BookingResult.ok;
   }
@@ -340,7 +342,7 @@ class FakeShiftRepository implements ShiftRepository {
     _reviews.add(Review(
       id: _nextReviewId++,
       shiftId: shiftId,
-      authorName: 'Исполнитель',
+      authorName: coreTr.anonymousWorker,
       rating: rating,
       comment: comment,
       createdAt: clock(),
@@ -401,8 +403,7 @@ class FakeShiftRepository implements ShiftRepository {
     if (method != PaymentMethod.kaspi) return null;
     final normalized = normalizeKzPhone(phone ?? '');
     if (normalized == null) {
-      throw const PaymentDeclined(
-          'Укажите номер телефона, к которому привязан Kaspi.kz');
+      throw PaymentDeclined(coreTr.kaspiPhoneRequired);
     }
     return normalized;
   }
@@ -411,7 +412,7 @@ class FakeShiftRepository implements ShiftRepository {
     final started = await payments.provider(charge.method).startCheckout(
           amount: charge.amount,
           reference: 'charge-${charge.id}',
-          description: 'Смена',
+          description: coreTr.shiftFallback,
           phone: charge.phone,
         );
     charge.operation = started.operation;
@@ -421,7 +422,7 @@ class FakeShiftRepository implements ShiftRepository {
 
   _FakeCharge _chargeById(int id) => _charges.firstWhere(
         (c) => c.id == id,
-        orElse: () => throw const PaymentDeclined('Оплата не найдена'),
+        orElse: () => throw PaymentDeclined(coreTr.paymentNotFound),
       );
 
   @override
@@ -431,7 +432,7 @@ class FakeShiftRepository implements ShiftRepository {
     String? phone,
   }) async {
     if (!_awaiting.contains(shiftId)) {
-      throw const PaymentDeclined('Смена уже оплачена');
+      throw PaymentDeclined(coreTr.shiftAlreadyPaid);
     }
     final shift = _shifts.firstWhere((s) => s.id == shiftId);
     return _start(_FakeCharge(
@@ -482,14 +483,17 @@ class FakeShiftRepository implements ShiftRepository {
             return;
           }
           _record(WalletEntryKind.charge, -charge.amount,
-              'Оплата смены · ${result.paidWith}',
+              coreTr.chargeShift(
+                  _shifts.firstWhere((s) => s.id == shiftId).title,
+                  result.paidWith ?? charge.method.title),
               shiftId: shiftId);
         } else {
           final index = _shifts.indexWhere((s) => s.id == shiftId);
           _paid[shiftId] = _paidFor(_shifts[index]) + charge.amount;
           _shifts[index] = edit;
           _record(WalletEntryKind.charge, -charge.amount,
-              'Доплата за смену «${edit.title}»',
+              coreTr.chargeTopup(
+                  edit.title, result.paidWith ?? charge.method.title),
               shiftId: shiftId);
         }
     }
@@ -595,7 +599,7 @@ class FakeShiftRepository implements ShiftRepository {
     _workerReviews.add(WorkerReview(
       id: _nextWorkerReviewId++,
       shiftId: shiftId,
-      shiftTitle: shift?.title ?? 'Смена',
+      shiftTitle: shift?.title ?? coreTr.shiftFallback,
       company: shift?.company ?? '',
       rating: rating,
       comment: comment,
@@ -631,7 +635,7 @@ class FakeShiftRepository implements ShiftRepository {
     }
     if (rest > 0) {
       await payments.card.refund(operation: 'fake', amount: rest);
-      _record(WalletEntryKind.refund, rest, 'Возврат: смена отменена',
+      _record(WalletEntryKind.refund, rest, coreTr.refundCancelled(shift.title),
           shiftId: shiftId);
     }
 
@@ -657,7 +661,7 @@ class FakeShiftRepository implements ShiftRepository {
     final slot = ShiftCost(slotPay: shift.totalPay, slots: 1).total;
     await payments.card.refund(operation: 'fake', amount: slot);
     _noShowRefunds[shiftId] = (_noShowRefunds[shiftId] ?? 0) + slot;
-    _record(WalletEntryKind.refund, slot, 'Возврат за невыход',
+    _record(WalletEntryKind.refund, slot, coreTr.refundNoShow(shift.title),
         shiftId: shiftId);
     return BookingResult.ok;
   }
@@ -735,7 +739,7 @@ class FakeShiftRepository implements ShiftRepository {
     }
     if (diff < 0) {
       await payments.card.refund(operation: 'fake', amount: -diff);
-      _record(WalletEntryKind.refund, -diff, 'Возврат разницы',
+      _record(WalletEntryKind.refund, -diff, coreTr.refundCheaper(updated.title),
           shiftId: shiftId);
     }
     _paid[shiftId] = paid + diff;

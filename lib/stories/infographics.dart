@@ -8,6 +8,7 @@ import 'package:fastwork_core/mrp.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
 import '../widgets/category_icon.dart';
+import '../l10n/strings.dart';
 
 // Детали, из которых собраны картинки историй.
 //
@@ -1528,7 +1529,8 @@ class MiniShiftCard extends StatelessWidget {
                   icon: Icons.verified_user_rounded,
                   color: color,
                 ),
-                for (final tag in shift.tags) _Pill(text: tag, color: color),
+                for (final tag in shift.tags)
+                  _Pill(text: tr.core.tag(tag), color: color),
               ],
             ),
           ),

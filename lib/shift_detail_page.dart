@@ -14,6 +14,7 @@ import 'widgets/check_in_dialog.dart';
 import 'widgets/async_state.dart';
 import 'widgets/common.dart';
 import 'widgets/nav.dart';
+import 'l10n/strings.dart';
 
 /// Экран «Подробнее»: одна смена целиком.
 class ShiftDetailPage extends StatefulWidget {
@@ -734,13 +735,13 @@ class _HeroCard extends StatelessWidget {
               if (shift.isFunded) const GuaranteeChip(),
               for (final tag in shift.tagsAt(DateTime.now()))
                 TagChip(
-                  text: tag,
-                  icon: tag == 'Срочно'
+                  text: tr.core.tag(tag),
+                  icon: tag == ShiftTag.urgent
                       ? Icons.local_fire_department_rounded
                       : null,
                   color: switch (tag) {
-                    'Срочно' => AppColors.danger,
-                    'Мало мест' => AppColors.accent,
+                    ShiftTag.urgent => AppColors.danger,
+                    ShiftTag.fewSlots => AppColors.accent,
                     _ => null,
                   },
                 ),

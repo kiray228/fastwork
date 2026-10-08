@@ -108,6 +108,13 @@ class UserRows extends Table {
   /// с отметкой о выходе: из времени галочку получить можно, наоборот нет.
   /// А при споре «я ни с чем не соглашался» время — единственный довод.
   DateTimeColumn get termsAcceptedAt => dateTime().nullable()();
+
+  /// Язык, на котором человек пользуется приложением: `kk`, `ru`, `en`.
+  ///
+  /// Нужен серверу, чтобы писать уведомления и строки истории на языке
+  /// получателя, — сам получатель в этот момент может быть офлайн.
+  /// null — не знаем: пишем на языке того, кто действует.
+  TextColumn get language => text().nullable()();
 }
 
 /// Значения МРП.
@@ -759,7 +766,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -856,6 +863,9 @@ class AppDatabase extends _$AppDatabase {
             await addColumnIfMissing(m, shiftRows, shiftRows.checkInCode);
             await addColumnIfMissing(
                 m, applicationRows, applicationRows.checkInVerified);
+          }
+          if (from < 19) {
+            await addColumnIfMissing(m, userRows, userRows.language);
           }
         },
         beforeOpen: (details) async {
