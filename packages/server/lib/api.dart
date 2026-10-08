@@ -551,6 +551,15 @@ class Api {
       });
     });
 
+    // «Точно выйду» — подтверждение накануне.
+    router.post('/api/shifts/<id|[0-9]+>/confirm-coming',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        final result = await _shiftsFor(user).confirmComing(int.parse(id));
+        return _json({'result': result.name});
+      });
+    });
+
     // Код отметки — только заказчику этой смены.
     router.get('/api/shifts/<id|[0-9]+>/code',
         (Request request, String id) async {

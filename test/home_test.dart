@@ -101,6 +101,28 @@ void main() {
       expect(find.text('Я на месте'), findsNothing);
     });
 
+    testWidgets('накануне можно подтвердить «Точно выйду»', (tester) async {
+      // Смена через три часа — в окне подтверждения, когда бы ни
+      // запускали тест, даже если она начнётся уже завтра.
+      final starts = now.add(const Duration(hours: 3));
+      final day = DateTime(starts.year, starts.month, starts.day);
+      final start = starts.hour * 60 + starts.minute;
+      final shifts = FakeShiftRepository(
+        shifts: [shiftOn(day, start: start, end: (start + 240) % 1440)],
+      );
+      await shifts.apply(1);
+      await openApp(tester, shifts: shifts);
+
+      await tester.tap(find.text('Ближайшая смена'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Точно выйду'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Вы подтвердили, что выйдете'), findsOneWidget);
+      expect(find.text('Точно выйду'), findsNothing);
+      expect((await shifts.shiftById(1))!.isComingConfirmed, isTrue);
+    });
+
     testWidgets('в день смены с баннера можно отметиться', (tester) async {
       // Смена началась полчаса назад — отметка уже открыта в любое время
       // суток, в котором запустят тест.

@@ -581,6 +581,11 @@ class ApplicationRows extends Table {
   BoolColumn get checkInVerified =>
       boolean().withDefault(const Constant(false))();
 
+  /// Когда исполнитель подтвердил накануне: «точно выйду». null — не
+  /// подтверждал. Заказчик видит это в списке записавшихся и за сутки
+  /// знает, на кого рассчитывать, а кого стоит переспросить.
+  DateTimeColumn get comingConfirmedAt => dateTime().nullable()();
+
   /// Один работник не может откликнуться на одну смену дважды.
   /// Это проверяет сама база — обойти нельзя.
   @override
@@ -786,7 +791,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -889,6 +894,10 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 20) {
             await m.createTable(categoryFollowRows);
+          }
+          if (from < 21) {
+            await addColumnIfMissing(
+                m, applicationRows, applicationRows.comingConfirmedAt);
           }
         },
         beforeOpen: (details) async {

@@ -383,8 +383,9 @@ class CoreEn extends CoreStrings {
           String address) =>
       (
         title: 'Shift $when at $time',
-        body: '“$title”, $company. $address. Arrive 10 minutes early and '
-            'check in in the app — “I’m here”.',
+        body: '“$title”, $company. $address. Confirm you’re coming — '
+            '“I’ll be there”. Arrive 10 minutes early and check in in the '
+            'app — “I’m here”.',
       );
 
   @override

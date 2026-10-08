@@ -382,8 +382,9 @@ class CoreKk extends CoreStrings {
           String address) =>
       (
         title: 'Ауысым $when, басталуы $time',
-        body: '«$title», $company. $address. 10 минут ерте келіп, '
-            'қосымшада «Келдім» деп белгіленіңіз.',
+        body: '«$title», $company. $address. Келетініңізді растаңыз — '
+            '«Келемін». 10 минут ерте келіп, қосымшада '
+            '«Мен орнымдамын» деп белгіленіңіз.',
       );
 
   @override

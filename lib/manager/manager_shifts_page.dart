@@ -1031,6 +1031,14 @@ class _ApplicantTile extends StatelessWidget {
                         ? AppColors.brand
                         : AppColors.accent,
                   )
+                else if (applicant.isComingConfirmed)
+                  // Накануне человек сказал «точно выйду» — на него можно
+                  // рассчитывать, переспрашивать не нужно.
+                  TagChip(
+                    text: tr.manager.statusComing,
+                    icon: Icons.thumb_up_alt_outlined,
+                    color: AppColors.brand,
+                  )
                 else
                   TagChip(text: tr.manager.statusBooked),
               ],

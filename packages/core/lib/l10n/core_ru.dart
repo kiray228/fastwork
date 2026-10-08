@@ -384,8 +384,9 @@ class CoreRu extends CoreStrings {
           String address) =>
       (
         title: 'Смена $when в $time',
-        body: '«$title», $company. $address. Придите на 10 минут раньше и '
-            'отметьтесь в приложении — «Я на месте».',
+        body: '«$title», $company. $address. Подтвердите, что выйдете, — '
+            '«Точно выйду». Придите на 10 минут раньше и отметьтесь в '
+            'приложении — «Я на месте».',
       );
 
   @override

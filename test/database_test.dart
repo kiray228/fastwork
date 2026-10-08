@@ -1237,6 +1237,37 @@ void main() {
     expect(kinds, [NotificationKind.invited]);
   });
 
+  test('«точно выйду» — за сутки до начала, и заказчик это видит', () async {
+    final (shiftId, worker, manager) = await upcomingShift(); // сегодня 10:00
+    final today = DateTime(clock.now.year, clock.now.month, clock.now.day);
+    session.setUser(worker);
+
+    clock.now = today.add(const Duration(hours: 10, minutes: 30));
+    expect(await shifts.confirmComing(shiftId), BookingResult.alreadyStarted);
+
+    clock.now = today.subtract(const Duration(hours: 15)); // вчера, 9:00
+    expect(
+        await shifts.confirmComing(shiftId), BookingResult.tooEarlyToConfirm);
+    expect((await shifts.shiftById(shiftId))!.isComingConfirmed, isFalse);
+
+    clock.now = today.subtract(const Duration(hours: 13)); // вчера, 11:00
+    expect((await shifts.shiftById(shiftId))!.canConfirmComingAt(clock.now),
+        isTrue);
+    expect(await shifts.confirmComing(shiftId), BookingResult.ok);
+    expect(await shifts.confirmComing(shiftId), BookingResult.ok,
+        reason: 'второй раз — ничего не меняется');
+    final mine = (await shifts.shiftById(shiftId))!;
+    expect(mine.isComingConfirmed, isTrue);
+    expect(mine.canConfirmComingAt(clock.now), isFalse);
+
+    session.setUser(manager);
+    final applicant = (await shifts.applicantsFor(shiftId)).single;
+    expect(applicant.comingConfirmedAt, clock.now);
+
+    // Чужую запись не подтвердить.
+    expect(await shifts.confirmComing(shiftId), BookingResult.notFound);
+  });
+
   // ---------------------------------------------------------------------
   // ПОДПИСКИ НА ВИДЫ РАБОТ
   // ---------------------------------------------------------------------

@@ -8,6 +8,9 @@ import 'package:fastwork_core/lang.dart';
 abstract class ManagerStrings {
   const ManagerStrings();
 
+  /// Записался и накануне подтвердил: «точно выйду».
+  String get statusComing;
+
   static ManagerStrings of(Lang lang) => switch (lang) {
         Lang.ru => const _Ru(),
         Lang.kk => const _Kk(),
@@ -181,6 +184,9 @@ abstract class ManagerStrings {
 
 class _Ru extends ManagerStrings {
   const _Ru();
+
+  @override
+  String get statusComing => 'Точно выйдет';
 
   // ---- Общее для экранов заказчика ----
   @override
@@ -494,6 +500,9 @@ class _Ru extends ManagerStrings {
 
 class _Kk extends ManagerStrings {
   const _Kk();
+
+  @override
+  String get statusComing => 'Келетінін растады';
 
   // ---- Общее для экранов заказчика ----
   @override
@@ -812,6 +821,9 @@ class _Kk extends ManagerStrings {
 
 class _En extends ManagerStrings {
   const _En();
+
+  @override
+  String get statusComing => 'Confirmed coming';
 
   // ---- Общее для экранов заказчика ----
   @override

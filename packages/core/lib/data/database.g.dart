@@ -1284,6 +1284,18 @@ class $ApplicationRowsTable extends ApplicationRows
     }),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _comingConfirmedAtMeta = const VerificationMeta(
+    'comingConfirmedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> comingConfirmedAt =
+      GeneratedColumn<DateTime>(
+        'coming_confirmed_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1293,6 +1305,7 @@ class $ApplicationRowsTable extends ApplicationRows
     createdAt,
     checkedInAt,
     checkInVerified,
+    comingConfirmedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1359,6 +1372,15 @@ class $ApplicationRowsTable extends ApplicationRows
         ),
       );
     }
+    if (data.containsKey('coming_confirmed_at')) {
+      context.handle(
+        _comingConfirmedAtMeta,
+        comingConfirmedAt.isAcceptableOrUnknown(
+          data['coming_confirmed_at']!,
+          _comingConfirmedAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1400,6 +1422,10 @@ class $ApplicationRowsTable extends ApplicationRows
         DriftSqlType.bool,
         data['${effectivePrefix}check_in_verified'],
       )!,
+      comingConfirmedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}coming_confirmed_at'],
+      ),
     );
   }
 
@@ -1428,6 +1454,11 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
 
   /// Отметка подтверждена кодом с экрана заказчика.
   final bool checkInVerified;
+
+  /// Когда исполнитель подтвердил накануне: «точно выйду». null — не
+  /// подтверждал. Заказчик видит это в списке записавшихся и за сутки
+  /// знает, на кого рассчитывать, а кого стоит переспросить.
+  final DateTime? comingConfirmedAt;
   const ApplicationRow({
     required this.id,
     required this.shiftId,
@@ -1436,6 +1467,7 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
     required this.createdAt,
     this.checkedInAt,
     required this.checkInVerified,
+    this.comingConfirmedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1449,6 +1481,9 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
       map['checked_in_at'] = Variable<DateTime>(checkedInAt);
     }
     map['check_in_verified'] = Variable<bool>(checkInVerified);
+    if (!nullToAbsent || comingConfirmedAt != null) {
+      map['coming_confirmed_at'] = Variable<DateTime>(comingConfirmedAt);
+    }
     return map;
   }
 
@@ -1463,6 +1498,9 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
           ? const Value.absent()
           : Value(checkedInAt),
       checkInVerified: Value(checkInVerified),
+      comingConfirmedAt: comingConfirmedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(comingConfirmedAt),
     );
   }
 
@@ -1479,6 +1517,9 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       checkedInAt: serializer.fromJson<DateTime?>(json['checkedInAt']),
       checkInVerified: serializer.fromJson<bool>(json['checkInVerified']),
+      comingConfirmedAt: serializer.fromJson<DateTime?>(
+        json['comingConfirmedAt'],
+      ),
     );
   }
   @override
@@ -1492,6 +1533,7 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'checkedInAt': serializer.toJson<DateTime?>(checkedInAt),
       'checkInVerified': serializer.toJson<bool>(checkInVerified),
+      'comingConfirmedAt': serializer.toJson<DateTime?>(comingConfirmedAt),
     };
   }
 
@@ -1503,6 +1545,7 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
     DateTime? createdAt,
     Value<DateTime?> checkedInAt = const Value.absent(),
     bool? checkInVerified,
+    Value<DateTime?> comingConfirmedAt = const Value.absent(),
   }) => ApplicationRow(
     id: id ?? this.id,
     shiftId: shiftId ?? this.shiftId,
@@ -1511,6 +1554,9 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
     createdAt: createdAt ?? this.createdAt,
     checkedInAt: checkedInAt.present ? checkedInAt.value : this.checkedInAt,
     checkInVerified: checkInVerified ?? this.checkInVerified,
+    comingConfirmedAt: comingConfirmedAt.present
+        ? comingConfirmedAt.value
+        : this.comingConfirmedAt,
   );
   ApplicationRow copyWithCompanion(ApplicationRowsCompanion data) {
     return ApplicationRow(
@@ -1525,6 +1571,9 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
       checkInVerified: data.checkInVerified.present
           ? data.checkInVerified.value
           : this.checkInVerified,
+      comingConfirmedAt: data.comingConfirmedAt.present
+          ? data.comingConfirmedAt.value
+          : this.comingConfirmedAt,
     );
   }
 
@@ -1537,7 +1586,8 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
           ..write('status: $status, ')
           ..write('createdAt: $createdAt, ')
           ..write('checkedInAt: $checkedInAt, ')
-          ..write('checkInVerified: $checkInVerified')
+          ..write('checkInVerified: $checkInVerified, ')
+          ..write('comingConfirmedAt: $comingConfirmedAt')
           ..write(')'))
         .toString();
   }
@@ -1551,6 +1601,7 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
     createdAt,
     checkedInAt,
     checkInVerified,
+    comingConfirmedAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -1562,7 +1613,8 @@ class ApplicationRow extends DataClass implements Insertable<ApplicationRow> {
           other.status == this.status &&
           other.createdAt == this.createdAt &&
           other.checkedInAt == this.checkedInAt &&
-          other.checkInVerified == this.checkInVerified);
+          other.checkInVerified == this.checkInVerified &&
+          other.comingConfirmedAt == this.comingConfirmedAt);
 }
 
 class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
@@ -1573,6 +1625,7 @@ class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
   final Value<DateTime> createdAt;
   final Value<DateTime?> checkedInAt;
   final Value<bool> checkInVerified;
+  final Value<DateTime?> comingConfirmedAt;
   const ApplicationRowsCompanion({
     this.id = const Value.absent(),
     this.shiftId = const Value.absent(),
@@ -1581,6 +1634,7 @@ class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
     this.createdAt = const Value.absent(),
     this.checkedInAt = const Value.absent(),
     this.checkInVerified = const Value.absent(),
+    this.comingConfirmedAt = const Value.absent(),
   });
   ApplicationRowsCompanion.insert({
     this.id = const Value.absent(),
@@ -1590,6 +1644,7 @@ class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
     required DateTime createdAt,
     this.checkedInAt = const Value.absent(),
     this.checkInVerified = const Value.absent(),
+    this.comingConfirmedAt = const Value.absent(),
   }) : shiftId = Value(shiftId),
        workerId = Value(workerId),
        status = Value(status),
@@ -1602,6 +1657,7 @@ class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? checkedInAt,
     Expression<bool>? checkInVerified,
+    Expression<DateTime>? comingConfirmedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1611,6 +1667,7 @@ class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
       if (createdAt != null) 'created_at': createdAt,
       if (checkedInAt != null) 'checked_in_at': checkedInAt,
       if (checkInVerified != null) 'check_in_verified': checkInVerified,
+      if (comingConfirmedAt != null) 'coming_confirmed_at': comingConfirmedAt,
     });
   }
 
@@ -1622,6 +1679,7 @@ class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
     Value<DateTime>? createdAt,
     Value<DateTime?>? checkedInAt,
     Value<bool>? checkInVerified,
+    Value<DateTime?>? comingConfirmedAt,
   }) {
     return ApplicationRowsCompanion(
       id: id ?? this.id,
@@ -1631,6 +1689,7 @@ class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
       createdAt: createdAt ?? this.createdAt,
       checkedInAt: checkedInAt ?? this.checkedInAt,
       checkInVerified: checkInVerified ?? this.checkInVerified,
+      comingConfirmedAt: comingConfirmedAt ?? this.comingConfirmedAt,
     );
   }
 
@@ -1658,6 +1717,9 @@ class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
     if (checkInVerified.present) {
       map['check_in_verified'] = Variable<bool>(checkInVerified.value);
     }
+    if (comingConfirmedAt.present) {
+      map['coming_confirmed_at'] = Variable<DateTime>(comingConfirmedAt.value);
+    }
     return map;
   }
 
@@ -1670,7 +1732,8 @@ class ApplicationRowsCompanion extends UpdateCompanion<ApplicationRow> {
           ..write('status: $status, ')
           ..write('createdAt: $createdAt, ')
           ..write('checkedInAt: $checkedInAt, ')
-          ..write('checkInVerified: $checkInVerified')
+          ..write('checkInVerified: $checkInVerified, ')
+          ..write('comingConfirmedAt: $comingConfirmedAt')
           ..write(')'))
         .toString();
   }
@@ -11252,6 +11315,7 @@ typedef $$ApplicationRowsTableCreateCompanionBuilder =
       required DateTime createdAt,
       Value<DateTime?> checkedInAt,
       Value<bool> checkInVerified,
+      Value<DateTime?> comingConfirmedAt,
     });
 typedef $$ApplicationRowsTableUpdateCompanionBuilder =
     ApplicationRowsCompanion Function({
@@ -11262,6 +11326,7 @@ typedef $$ApplicationRowsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime?> checkedInAt,
       Value<bool> checkInVerified,
+      Value<DateTime?> comingConfirmedAt,
     });
 
 final class $$ApplicationRowsTableReferences
@@ -11330,6 +11395,11 @@ class $$ApplicationRowsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<DateTime> get comingConfirmedAt => $composableBuilder(
+    column: $table.comingConfirmedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$ShiftRowsTableFilterComposer get shiftId {
     final $$ShiftRowsTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -11393,6 +11463,11 @@ class $$ApplicationRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get comingConfirmedAt => $composableBuilder(
+    column: $table.comingConfirmedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$ShiftRowsTableOrderingComposer get shiftId {
     final $$ShiftRowsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -11445,6 +11520,11 @@ class $$ApplicationRowsTableAnnotationComposer
 
   GeneratedColumn<bool> get checkInVerified => $composableBuilder(
     column: $table.checkInVerified,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get comingConfirmedAt => $composableBuilder(
+    column: $table.comingConfirmedAt,
     builder: (column) => column,
   );
 
@@ -11509,6 +11589,7 @@ class $$ApplicationRowsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> checkedInAt = const Value.absent(),
                 Value<bool> checkInVerified = const Value.absent(),
+                Value<DateTime?> comingConfirmedAt = const Value.absent(),
               }) => ApplicationRowsCompanion(
                 id: id,
                 shiftId: shiftId,
@@ -11517,6 +11598,7 @@ class $$ApplicationRowsTableTableManager
                 createdAt: createdAt,
                 checkedInAt: checkedInAt,
                 checkInVerified: checkInVerified,
+                comingConfirmedAt: comingConfirmedAt,
               ),
           createCompanionCallback:
               ({
@@ -11527,6 +11609,7 @@ class $$ApplicationRowsTableTableManager
                 required DateTime createdAt,
                 Value<DateTime?> checkedInAt = const Value.absent(),
                 Value<bool> checkInVerified = const Value.absent(),
+                Value<DateTime?> comingConfirmedAt = const Value.absent(),
               }) => ApplicationRowsCompanion.insert(
                 id: id,
                 shiftId: shiftId,
@@ -11535,6 +11618,7 @@ class $$ApplicationRowsTableTableManager
                 createdAt: createdAt,
                 checkedInAt: checkedInAt,
                 checkInVerified: checkInVerified,
+                comingConfirmedAt: comingConfirmedAt,
               ),
           withReferenceMapper: (p0) => p0
               .map(

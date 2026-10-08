@@ -36,6 +36,9 @@ class Shift {
   /// Когда я отметился на этой смене. null — ещё не отмечался.
   final DateTime? myCheckedInAt;
 
+  /// Когда я подтвердил накануне, что выйду. null — не подтверждал.
+  final DateTime? myComingConfirmedAt;
+
   /// Когда смену отменил заказчик. null — смена в силе.
   final DateTime? cancelledAt;
 
@@ -70,6 +73,7 @@ class Shift {
     this.createdBy,
     this.myStatus,
     this.myCheckedInAt,
+    this.myComingConfirmedAt,
     this.cancelledAt,
     this.city = 'Алматы',
     this.category = kOtherCategory,
@@ -92,6 +96,7 @@ class Shift {
     String? myStatus,
     bool clearMyStatus = false,
     DateTime? myCheckedInAt,
+    DateTime? myComingConfirmedAt,
     DateTime? cancelledAt,
     bool? isFunded,
     bool? awaitingPayment,
@@ -120,6 +125,7 @@ class Shift {
         createdBy: createdBy,
         myStatus: clearMyStatus ? null : (myStatus ?? this.myStatus),
         myCheckedInAt: myCheckedInAt ?? this.myCheckedInAt,
+        myComingConfirmedAt: myComingConfirmedAt ?? this.myComingConfirmedAt,
         cancelledAt: cancelledAt ?? this.cancelledAt,
         isFunded: isFunded ?? this.isFunded,
         awaitingPayment: awaitingPayment ?? this.awaitingPayment,
@@ -160,6 +166,24 @@ class Shift {
 
   /// Я отметился, что пришёл.
   bool get isCheckedIn => myCheckedInAt != null;
+
+  /// Я подтвердил накануне, что выйду.
+  bool get isComingConfirmed => myComingConfirmedAt != null;
+
+  /// За сколько до начала можно подтвердить выход.
+  ///
+  /// Сутки — как у напоминания: раньше планы ещё меняются, и «точно
+  /// выйду» за неделю ничего не значит. Позже начала — уже поздно:
+  /// там работает отметка «Я на месте».
+  static const confirmComingWindow = Duration(hours: 24);
+
+  /// Можно ли сейчас подтвердить, что выйду.
+  bool canConfirmComingAt(DateTime now) =>
+      isApplied &&
+      !isCancelled &&
+      !isComingConfirmed &&
+      now.isBefore(startsAt) &&
+      startsAt.difference(now) <= confirmComingWindow;
 
   /// Момент, с которого можно отметиться: за час до начала.
   /// Раньше смысла нет, а опоздавшим на час запирать кнопку жестоко —
@@ -602,6 +626,7 @@ extension ShiftJson on Shift {
         'createdBy': createdBy,
         'myStatus': myStatus,
         'myCheckedInAt': myCheckedInAt?.toIso8601String(),
+        'myComingConfirmedAt': myComingConfirmedAt?.toIso8601String(),
         'cancelledAt': cancelledAt?.toIso8601String(),
         'isFunded': isFunded,
         'awaitingPayment': awaitingPayment,
@@ -636,6 +661,9 @@ Shift shiftFromJson(Map<String, dynamic> json) => Shift(
       myCheckedInAt: json['myCheckedInAt'] == null
           ? null
           : DateTime.parse(json['myCheckedInAt'] as String),
+      myComingConfirmedAt: json['myComingConfirmedAt'] == null
+          ? null
+          : DateTime.parse(json['myComingConfirmedAt'] as String),
       cancelledAt: json['cancelledAt'] == null
           ? null
           : DateTime.parse(json['cancelledAt'] as String),
