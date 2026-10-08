@@ -65,7 +65,7 @@ List<Story> workerStories() => [
           StorySlide(
             title: _s.howStepsTitle,
             body: _s.howStepsBody,
-            visual: (context, data) => const StepList(
+            visual: (context, data) => StepList(
               color: _how,
               items: [
                 StepItem(Icons.search_rounded, _s.stepFind,
@@ -87,18 +87,18 @@ List<Story> workerStories() => [
               nodes: [
                 MoneyNode(Icons.business_rounded, _s.flowEmployer,
                     amount: formatMoney(_cost.total)),
-                const MoneyNode(Icons.shield_rounded, 'fastwork',
+                MoneyNode(Icons.shield_rounded, 'fastwork',
                     amount: _s.flowHolds, highlight: true),
                 MoneyNode(Icons.person_rounded, _s.flowYou,
                     amount: formatMoney(_cost.pay)),
               ],
-              links: const [_s.flowPaysUpfront, _s.flowAfterShift],
+              links: [_s.flowPaysUpfront, _s.flowAfterShift],
             ),
           ),
           StorySlide(
             title: _s.howDocsTitle,
             body: _s.howDocsBody,
-            visual: (context, data) => const StatusChain(
+            visual: (context, data) => StatusChain(
               color: _how,
               steps: [
                 StepItem(Icons.upload_file_rounded, _s.docUploadedPlural),
@@ -120,7 +120,7 @@ List<Story> workerStories() => [
           StorySlide(
             title: _s.moneyPathTitle,
             body: _s.moneyPathBody,
-            visual: (context, data) => const StepList(
+            visual: (context, data) => StepList(
               color: _money,
               items: [
                 StepItem(Icons.credit_card_rounded, _s.pathEmployerPaid,
@@ -152,7 +152,7 @@ List<Story> workerStories() => [
           StorySlide(
             title: _s.whenMoneyTitle,
             body: _s.whenMoneyBody,
-            visual: (context, data) => const StatusChain(
+            visual: (context, data) => StatusChain(
               color: _money,
               steps: [
                 StepItem(Icons.work_rounded, _s.chainShift,
@@ -168,7 +168,7 @@ List<Story> workerStories() => [
             title: _s.withdrawTitle,
             body: _s.withdrawBody(formatMoney(kMinWithdrawal)),
             visual: (context, data) =>
-                const CardMock(caption: _s.withdrawFeeCaption),
+                CardMock(caption: _s.withdrawFeeCaption),
             action: StoryAction.wallet,
             actionLabel: _s.openPayouts,
           ),
@@ -208,7 +208,7 @@ List<Story> workerStories() => [
           StorySlide(
             title: _s.docsWhichTitle,
             body: _s.docsWhichBody,
-            visual: (context, data) => const StepList(
+            visual: (context, data) => StepList(
               color: _docs,
               connected: false,
               items: [
@@ -223,7 +223,7 @@ List<Story> workerStories() => [
           StorySlide(
             title: _s.docsCheckTitle,
             body: _s.docsCheckBody,
-            visual: (context, data) => const StatusChain(
+            visual: (context, data) => StatusChain(
               color: _docs,
               steps: [
                 StepItem(Icons.upload_file_rounded, _s.docUploaded),
@@ -235,7 +235,7 @@ List<Story> workerStories() => [
           StorySlide(
             title: _s.docsWhyTitle,
             body: _s.docsWhyBody,
-            visual: (context, data) => const CheckList(
+            visual: (context, data) => CheckList(
               color: _docs,
               items: [
                 _s.docsWhyBadge,
@@ -276,7 +276,7 @@ List<Story> workerStories() => [
           StorySlide(
             title: _s.medHowTitle,
             body: _s.medHowBody,
-            visual: (context, data) => const StepList(
+            visual: (context, data) => StepList(
               color: _med,
               items: [
                 StepItem(Icons.event_available_rounded,
@@ -293,7 +293,7 @@ List<Story> workerStories() => [
           StorySlide(
             title: _s.medExpiryTitle,
             body: _s.medExpiryBody,
-            visual: (context, data) => const CalendarTile(
+            visual: (context, data) => CalendarTile(
               month: tr.core.monthsNominative[2],
               day: '12',
               caption: _s.medCalendarCaption,
@@ -316,14 +316,14 @@ List<Story> workerStories() => [
             visual: (context, data) => StepList(
               color: _rules,
               items: [
-                const StepItem(Icons.how_to_reg_rounded, _s.ruleBooked,
+                StepItem(Icons.how_to_reg_rounded, _s.ruleBooked,
                     caption: _s.ruleBookedCaption),
                 StepItem(Icons.event_busy_rounded, _s.ruleCancel,
                     caption: _s.ruleCancelCaption(
                         _example.cancelDeadlineHours)),
-                const StepItem(Icons.location_on_rounded, _s.ruleHourBefore,
+                StepItem(Icons.location_on_rounded, _s.ruleHourBefore,
                     caption: _s.ruleHourBeforeCaption),
-                const StepItem(Icons.play_arrow_rounded, _s.ruleStart,
+                StepItem(Icons.play_arrow_rounded, _s.ruleStart,
                     caption: _s.ruleStartCaption),
               ],
             ),
@@ -336,7 +336,7 @@ List<Story> workerStories() => [
           StorySlide(
             title: _s.dosAndDontsTitle,
             body: _s.workerRulesBody,
-            visual: (context, data) => const DoDont(
+            visual: (context, data) => DoDont(
               color: _rules,
               dos: [
                 _s.doCancelInTime,
@@ -403,7 +403,7 @@ List<Story> workerStories() => [
           StorySlide(
             title: _s.whenToWriteTitle,
             body: _s.workerSupportBody,
-            visual: (context, data) => const CheckList(
+            visual: (context, data) => CheckList(
               color: _help,
               items: [
                 _s.supportMarkedNoShow,
@@ -416,7 +416,7 @@ List<Story> workerStories() => [
           StorySlide(
             title: _s.howToWriteTitle,
             body: _s.howToWriteBody,
-            visual: (context, data) => const ChatPreview(
+            visual: (context, data) => ChatPreview(
               color: _help,
               messages: [
                 (true, _s.chatWorker),
@@ -442,7 +442,7 @@ List<Story> managerStories() => [
           StorySlide(
             title: _s.hireStepsTitle,
             body: _s.hireStepsBody,
-            visual: (context, data) => const StepList(
+            visual: (context, data) => StepList(
               color: _how,
               items: [
                 StepItem(Icons.add_circle_rounded, _s.hireCreate,
@@ -461,7 +461,7 @@ List<Story> managerStories() => [
           StorySlide(
             title: _s.whoComesTitle,
             body: _s.whoComesBody,
-            visual: (context, data) => const CheckList(
+            visual: (context, data) => CheckList(
               color: _how,
               items: [
                 _s.whoComesRating,
@@ -497,7 +497,7 @@ List<Story> managerStories() => [
           StorySlide(
             title: _s.payForAttendedTitle,
             body: _s.payForAttendedBody,
-            visual: (context, data) => const StepList(
+            visual: (context, data) => StepList(
               color: _money,
               connected: false,
               items: [
@@ -525,7 +525,7 @@ List<Story> managerStories() => [
           StorySlide(
             title: _s.confirmAttendanceTitle,
             body: _s.confirmAttendanceBody,
-            visual: (context, data) => const StatusChain(
+            visual: (context, data) => StatusChain(
               color: _docs,
               steps: [
                 StepItem(Icons.how_to_reg_rounded, _s.attBooked),
@@ -557,7 +557,7 @@ List<Story> managerStories() => [
           StorySlide(
             title: _s.dosAndDontsTitle,
             body: _s.managerRulesBody,
-            visual: (context, data) => const DoDont(
+            visual: (context, data) => DoDont(
               color: _rules,
               dos: [
                 _s.doEditShift,
@@ -584,7 +584,7 @@ List<Story> managerStories() => [
           StorySlide(
             title: _s.whenToWriteTitle,
             body: _s.managerSupportBody,
-            visual: (context, data) => const CheckList(
+            visual: (context, data) => CheckList(
               color: _help,
               items: [
                 _s.supportWorkerNoShow,
@@ -644,13 +644,13 @@ class _ReliabilityExample extends StatelessWidget {
     return StoryPanel(
       child: Row(
         children: [
-          const RingGauge(fraction: 0.9, value: '90%', caption: _s.reliabilityCaption),
+          RingGauge(fraction: 0.9, value: '90%', caption: _s.reliabilityCaption),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   _s.reliabilityExample,
                   style: TextStyle(
                     color: Colors.white70,
@@ -659,7 +659,7 @@ class _ReliabilityExample extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                   _s.reliabilityExampleText,
                   style: TextStyle(
                     color: Colors.white,

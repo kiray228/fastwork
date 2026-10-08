@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/app_preferences.dart';
+import '../l10n/strings.dart';
 import '../stories/story.dart';
 import '../theme/app_colors.dart';
 import '../theme/glass.dart';
@@ -74,8 +75,8 @@ class _StoryBubbleState extends State<_StoryBubble> {
     return Semantics(
       button: true,
       label: seen
-          ? 'История «${story.title}»'
-          : 'Новая история «${story.title}»',
+          ? tr.stories.storyLabel(story.title)
+          : tr.stories.newStoryLabel(story.title),
       excludeSemantics: true,
       child: GestureDetector(
         onTapDown: (_) => setState(() => pressed = true),

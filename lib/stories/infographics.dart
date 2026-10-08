@@ -814,7 +814,7 @@ class LimitMeter extends StatelessWidget {
           return StoryPanel(
             child: Row(
               children: [
-                const RingGauge(
+                RingGauge(
                   fraction: 0,
                   value: '0%',
                   caption: tr.stories.meterOfLimit,
@@ -825,7 +825,7 @@ class LimitMeter extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Лимит на ${formatMonth(monthOf(now))}',
+                      Text(tr.stories.meterLimitFor(formatMonth(monthOf(now))),
                           style: _captionStyle()),
                       const SizedBox(height: 4),
                       Text(formatMoney(yearLimit), style: _titleStyle),
@@ -1007,9 +1007,9 @@ class LevelLadder extends StatelessWidget {
               index: kWorkerLevels.length,
               child: Text(
                 next == null
-                    ? 'У вас высший уровень — ${shiftsLabel(shifts)}'
-                    : 'У вас ${shiftsLabel(shifts)}. До уровня «${next.name}» — '
-                        'ещё ${next.minShifts - shifts}',
+                    ? tr.stories.levelTop(shiftsLabel(shifts))
+                    : tr.stories.levelToNext(shiftsLabel(shifts), next.name,
+                        next.minShifts - shifts),
                 style: _captionStyle(0.85).copyWith(fontSize: 13),
               ),
             ),
@@ -1046,7 +1046,7 @@ class LevelLadder extends StatelessWidget {
                     ? tr.stories.levelYouAreHere
                     : level.minShifts == 0
                         ? tr.stories.levelFromFirst
-                        : 'от ${level.minShifts} смен',
+                        : tr.stories.levelFromShifts(level.minShifts),
                 maxLines: 1,
                 overflow: TextOverflow.fade,
                 softWrap: false,
@@ -1301,7 +1301,7 @@ class ThresholdScale extends StatelessWidget {
               Icon(Icons.lock_outline_rounded, size: 18, color: _white(0.9)),
               const SizedBox(width: 6),
               Text(
-                'Смена от ${threshold.toStringAsFixed(1)}',
+                tr.stories.thresholdShift(threshold.toStringAsFixed(1)),
                 style: _titleStyle,
               ),
             ],
@@ -1378,8 +1378,8 @@ class ThresholdScale extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               open
-                  ? 'Ваш рейтинг ${mine.toStringAsFixed(1)} — смена открыта'
-                  : 'Ваш рейтинг ${mine.toStringAsFixed(1)} — пока закрыта',
+                  ? tr.stories.thresholdOpen(mine.toStringAsFixed(1))
+                  : tr.stories.thresholdClosed(mine.toStringAsFixed(1)),
               style: _captionStyle(0.9).copyWith(fontSize: 13),
             ),
           ],
