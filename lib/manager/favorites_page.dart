@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
+import '../l10n/strings.dart';
 import '../theme/app_colors.dart';
 import '../widgets/async_state.dart';
 import '../widgets/common.dart';
@@ -46,7 +47,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     if (result == null || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${user.fullName} убран из любимых'),
+        content: Text(tr.manager.removedFromFavorites(user.fullName)),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -56,7 +57,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Любимые исполнители')),
+      appBar: AppBar(title: Text(tr.manager.favoritesTitle)),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 260),
         child: switch (state) {
@@ -68,12 +69,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
                 _load();
               },
             ),
-          Ready(value: []) => const EmptyState(
+          Ready(value: []) => EmptyState(
               icon: Icons.favorite_border_rounded,
-              title: 'Пока никого',
-              subtitle: 'Отметьте сердечком тех, кто хорошо отработал, —\n'
-                  'в списке записавшихся на прошедшую смену.\n'
-                  'Они первыми узнают о ваших новых сменах',
+              title: tr.manager.favoritesEmptyTitle,
+              subtitle: tr.manager.favoritesEmptySubtitle,
             ),
           Ready(:final value) => RefreshIndicator(
               onRefresh: _load,
@@ -104,19 +103,19 @@ class _Hint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.only(bottom: 14),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
       child: SurfaceCard(
-        padding: EdgeInsets.all(14),
+        padding: const EdgeInsets.all(14),
         child: Row(
           children: [
-            Icon(Icons.campaign_outlined, size: 18, color: AppColors.brand),
-            SizedBox(width: 10),
+            const Icon(Icons.campaign_outlined,
+                size: 18, color: AppColors.brand),
+            const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Когда вы публикуете смену, этим людям приходит приглашение '
-                '— если они в том же городе.',
-                style: TextStyle(
+                tr.manager.favoritesHint,
+                style: const TextStyle(
                   fontSize: 12.5,
                   height: 1.35,
                   color: AppColors.muted,
@@ -176,9 +175,11 @@ class _FavoriteTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '★ ${user.rating.toStringAsFixed(1)} · '
-                    '${shiftsLabel(user.completedShifts)} у вас · '
-                    '${user.city}',
+                    tr.manager.favoriteStats(
+                      user.rating.toStringAsFixed(1),
+                      shiftsLabel(user.completedShifts),
+                      tr.core.city(user.city),
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -191,7 +192,7 @@ class _FavoriteTile extends StatelessWidget {
             ),
             IconButton(
               onPressed: onRemove,
-              tooltip: 'Убрать из любимых',
+              tooltip: tr.manager.removeFromFavorites,
               icon: const Icon(
                 Icons.favorite_rounded,
                 color: AppColors.accent,

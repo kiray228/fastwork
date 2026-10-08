@@ -7,6 +7,7 @@ import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/stats.dart';
+import '../l10n/strings.dart';
 import '../theme/app_colors.dart';
 import 'package:fastwork_core/user.dart';
 import '../widgets/async_state.dart';
@@ -82,23 +83,21 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
     final agreed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Отменить смену?'),
+        title: Text(tr.manager.cancelShiftTitle),
         content: Text(
           shift.workersHired > 0
-              ? 'На смену записались ${shift.workersHired} чел. '
-                  'Все получат уведомление, что выходить не нужно.'
-              : 'Смена пропадёт из ленты. Вернуть её будет нельзя — '
-                  'нужно будет создать новую.',
+              ? tr.manager.cancelShiftHired(shift.workersHired)
+              : tr.manager.cancelShiftEmpty,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Нет'),
+            child: Text(tr.manager.no),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-            child: const Text('Отменить смену'),
+            child: Text(tr.manager.cancelShiftButton),
           ),
         ],
       ),
@@ -114,12 +113,11 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(switch (result) {
-          BookingResult.ok => 'Смена отменена',
-          BookingResult.notMine => 'Это не ваша смена',
-          BookingResult.alreadyCancelled => 'Смена уже отменена',
-          BookingResult.alreadyStarted =>
-            'Смена уже началась — отменить её нельзя',
-          _ => 'Смену не удалось отменить',
+          BookingResult.ok => tr.manager.shiftCancelled,
+          BookingResult.notMine => tr.manager.notYourShift,
+          BookingResult.alreadyCancelled => tr.manager.shiftAlreadyCancelled,
+          BookingResult.alreadyStarted => tr.manager.cancelTooLate,
+          _ => tr.manager.cancelFailed,
         }),
         behavior: SnackBarBehavior.floating,
       ),
@@ -161,17 +159,17 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
     final cost = ShiftCost.of(shift);
     final result = await showCheckoutSheet(
       context,
-      title: 'Оплата смены',
-      note: 'Смена появится в ленте, как только пройдёт оплата.',
+      title: tr.manager.paymentTitle,
+      note: tr.manager.payExistingNote,
       lines: [
         PaymentLine(
-          'Вознаграждение: ${cost.slots} × ${formatMoney(cost.slotPay)}',
+          tr.manager.rewardLine(cost.slots, formatMoney(cost.slotPay)),
           cost.pay,
         ),
-        PaymentLine('Комиссия сервиса $kPlatformFeePercent%', cost.fee),
+        PaymentLine(tr.manager.serviceFee(kPlatformFeePercent), cost.fee),
       ],
       total: cost.total,
-      actionLabel: 'Оплатить ${formatMoney(cost.total)}',
+      actionLabel: tr.manager.payAmount(formatMoney(cost.total)),
       phone: widget.session.user?.phone ?? '',
       start: (method, phone, _) =>
           repository.retryPayment(shift.id, method: method, phone: phone),
@@ -182,7 +180,7 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
     await _load();
     if (!mounted || result == null || !result.isPaid) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Смена опубликована')),
+      SnackBar(content: Text(tr.manager.shiftPublished)),
     );
   }
 
@@ -208,7 +206,7 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Мои смены')),
+      appBar: AppBar(title: Text(tr.manager.myShiftsTitle)),
       // Истории листаются вместе со сменами, как у исполнителя.
       body: RefreshIndicator(
         onRefresh: _load,
@@ -245,10 +243,9 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
                     hasScrollBody: false,
                     child: EmptyState(
                       icon: Icons.post_add_rounded,
-                      title: 'Смен пока нет',
-                      subtitle: 'Опубликуйте первую — люди увидят её\n'
-                          'в ленте сразу после оплаты',
-                      actionLabel: 'Создать смену',
+                      title: tr.manager.emptyTitle,
+                      subtitle: tr.manager.emptySubtitle,
+                      actionLabel: tr.manager.createShiftAction,
                       onAction: () => widget.onOpenTab(1),
                     ),
                   ),
@@ -305,31 +302,26 @@ class _StatsRow extends StatelessWidget {
         Expanded(
           child: _StatTile(
             value: '${stats.shifts}',
-            label: 'смен за 30 дней',
+            label: tr.manager.statShifts,
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
           child: _StatTile(
             value: stats.fillPercent == null ? '—' : '${stats.fillPercent}%',
-            label: 'мест заполнено',
+            label: tr.manager.statFilled,
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
           child: _StatTile(
             value: formatMoney(stats.spentThisMonth),
-            label: 'потрачено в ${_monthsIn[month - 1]}',
+            label: tr.manager.statSpent(month),
           ),
         ),
       ],
     );
   }
-
-  static const _monthsIn = [
-    'январе', 'феврале', 'марте', 'апреле', 'мае', 'июне',
-    'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре',
-  ];
 }
 
 class _StatTile extends StatelessWidget {
@@ -417,20 +409,26 @@ class _ManagerShiftCard extends StatelessWidget {
                   ),
                 ),
                 if (shift.isCancelled)
-                  const TagChip(text: 'Отменена', color: AppColors.danger)
+                  TagChip(
+                    text: tr.manager.statusCancelled,
+                    color: AppColors.danger,
+                  )
                 else if (shift.awaitingPayment)
-                  const TagChip(
-                    text: 'Ждёт оплаты',
+                  TagChip(
+                    text: tr.manager.statusAwaitingPayment,
                     icon: Icons.hourglass_top_rounded,
                     color: AppColors.warning,
                   )
                 else if (isPast)
-                  const TagChip(text: 'Прошла')
+                  TagChip(text: tr.manager.statusPast)
                 else if (!shift.hasFreeSlots)
-                  const TagChip(text: 'Набрана', color: AppColors.brand)
+                  TagChip(
+                    text: tr.manager.statusFull,
+                    color: AppColors.brand,
+                  )
                 else
                   TagChip(
-                    text: 'Идёт набор',
+                    text: tr.manager.statusHiring,
                     color: AppColors.accent,
                   ),
               ],
@@ -438,22 +436,23 @@ class _ManagerShiftCard extends StatelessWidget {
             const SizedBox(height: 10),
             InfoRow(
               icon: Icons.calendar_today_rounded,
-              text: '${shift.workDate.day} '
-                  '${monthsShort[shift.workDate.month - 1]} · '
+              text: '${tr.core.dayMonthShort(shift.workDate)} · '
                   '${formatTime(shift.startMinutes)}—'
                   '${formatTime(shift.endMinutes)}',
             ),
             InfoRow(
               icon: Icons.payments_outlined,
-              text: '${formatMoney(shift.totalPay)} за смену · '
-                  '${formatMoney(shift.hourlyRate)}/ч',
+              text: tr.manager.payPerShift(
+                formatMoney(shift.totalPay),
+                formatMoney(shift.hourlyRate),
+              ),
             ),
             // Где сейчас деньги: у сервиса, ещё не пришли или вернулись.
             if (shift.awaitingPayment && !shift.isCancelled) ...[
-              const InfoRow(
+              InfoRow(
                 icon: Icons.visibility_off_outlined,
                 iconColor: AppColors.warning,
-                text: 'Исполнители не видят смену, пока она не оплачена',
+                text: tr.manager.hiddenUntilPaid,
               ),
               const SizedBox(height: 10),
               SizedBox(
@@ -461,22 +460,22 @@ class _ManagerShiftCard extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: onPay,
                   icon: const Icon(Icons.lock_rounded, size: 18),
-                  label: Text(
-                      'Оплатить ${formatMoney(ShiftCost.of(shift).total)}'),
+                  label: Text(tr.manager
+                      .payAmount(formatMoney(ShiftCost.of(shift).total))),
                 ),
               ),
             ] else if (shift.isFunded)
               InfoRow(
                 icon: Icons.verified_user_outlined,
                 iconColor: AppColors.success,
-                text: 'Оплачено ${formatMoney(ShiftCost.of(shift).total)} — '
-                    'деньги у сервиса до подтверждения выхода',
+                text: tr.manager
+                    .fundedNote(formatMoney(ShiftCost.of(shift).total)),
               )
             else if (shift.isCancelled)
-              const InfoRow(
+              InfoRow(
                 icon: Icons.undo_rounded,
                 iconColor: AppColors.muted,
-                text: 'Неизрасходованное возвращено на карту',
+                text: tr.manager.refundedNote,
               ),
             const SizedBox(height: 12),
             Row(
@@ -513,11 +512,11 @@ class _ManagerShiftCard extends StatelessWidget {
                 // Flexible, а не просто Text: рядом стоит кнопка «Отменить»,
                 // и на узком экране двое в строку не помещались — карточка
                 // ругалась полосатой лентой поверх текста.
-                const Flexible(
+                Flexible(
                   child: Text(
-                    'Посмотреть записавшихся',
+                    tr.manager.viewApplicants,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w700,
                       color: AppColors.brand,
@@ -539,9 +538,9 @@ class _ManagerShiftCard extends StatelessWidget {
                       minimumSize: const Size(0, 32),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: const Text(
-                      'Изменить',
-                      style: TextStyle(
+                    child: Text(
+                      tr.manager.edit,
+                      style: const TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w700,
                       ),
@@ -555,9 +554,9 @@ class _ManagerShiftCard extends StatelessWidget {
                       minimumSize: const Size(0, 32),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: const Text(
-                      'Отменить',
-                      style: TextStyle(
+                    child: Text(
+                      tr.manager.cancel,
+                      style: const TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w700,
                       ),
@@ -567,7 +566,7 @@ class _ManagerShiftCard extends StatelessWidget {
                   // экране не помещаются.
                   IconButton(
                     onPressed: onRepeat,
-                    tooltip: 'Повторить',
+                    tooltip: tr.manager.repeat,
                     icon: const Icon(Icons.replay_rounded, size: 18),
                     color: AppColors.brand,
                     visualDensity: VisualDensity.compact,
@@ -581,9 +580,9 @@ class _ManagerShiftCard extends StatelessWidget {
                   TextButton.icon(
                     onPressed: onRepeat,
                     icon: const Icon(Icons.replay_rounded, size: 16),
-                    label: const Text(
-                      'Повторить',
-                      style: TextStyle(
+                    label: Text(
+                      tr.manager.repeat,
+                      style: const TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w700,
                       ),
@@ -652,21 +651,17 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
     final agreed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Отметить невыход?'),
-        content: Text(
-          '${applicant.user.fullName} не вышел на смену. '
-          'Отметка видна другим заказчикам и влияет на надёжность — '
-          'ставьте её, только если человек действительно не пришёл.',
-        ),
+        title: Text(tr.manager.noShowTitle),
+        content: Text(tr.manager.noShowBody(applicant.user.fullName)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
+            child: Text(tr.manager.dialogCancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-            child: const Text('Не вышел'),
+            child: Text(tr.manager.noShowLabel),
           ),
         ],
       ),
@@ -685,10 +680,10 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(switch (result) {
-          BookingResult.ok => 'Отмечено: ${applicant.user.fullName} не вышел',
-          BookingResult.notStarted =>
-            'Смена ещё не началась — отмечать невыход рано',
-          _ => 'Не получилось отметить',
+          BookingResult.ok =>
+            tr.manager.noShowMarked(applicant.user.fullName),
+          BookingResult.notStarted => tr.manager.noShowTooEarly,
+          _ => tr.manager.noShowFailed,
         }),
         behavior: SnackBarBehavior.floating,
       ),
@@ -715,10 +710,10 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
       SnackBar(
         content: Text(switch (result) {
           BookingResult.ok when favorite =>
-            '${applicant.user.fullName} — в любимых. Позовём на ваши '
-                'следующие смены',
-          BookingResult.ok => '${applicant.user.fullName} убран из любимых',
-          _ => 'В любимые — только тех, кто у вас уже отработал',
+            tr.manager.addedToFavorites(applicant.user.fullName),
+          BookingResult.ok =>
+            tr.manager.removedFromFavorites(applicant.user.fullName),
+          _ => tr.manager.favoritesOnlyWorked,
         }),
         behavior: SnackBarBehavior.floating,
       ),
@@ -739,11 +734,11 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(switch (result) {
-          BookingResult.ok => 'Смена засчитана: ${applicant.user.fullName}',
-          BookingResult.notStarted =>
-            'Смена ещё не началась — засчитать её можно после начала',
-          BookingResult.notMine => 'Это не ваша смена',
-          _ => 'Не получилось засчитать',
+          BookingResult.ok =>
+            tr.manager.attendanceConfirmed(applicant.user.fullName),
+          BookingResult.notStarted => tr.manager.confirmTooEarly,
+          BookingResult.notMine => tr.manager.notYourShift,
+          _ => tr.manager.confirmFailed,
         }),
         behavior: SnackBarBehavior.floating,
       ),
@@ -754,7 +749,7 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Записались')),
+      appBar: AppBar(title: Text(tr.manager.applicantsTitle)),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 260),
         child: switch (state) {
@@ -766,10 +761,10 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
                 _load();
               },
             ),
-          Ready(value: []) => const EmptyState(
+          Ready(value: []) => EmptyState(
               icon: Icons.person_search_rounded,
-              title: 'Пока никто не записался',
-              subtitle: 'Смена опубликована — исполнители её видят',
+              title: tr.manager.noApplicantsTitle,
+              subtitle: tr.manager.noApplicantsSubtitle,
             ),
           Ready(:final value) => ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -836,7 +831,7 @@ class _CheckInCodeCard extends StatelessWidget {
         child: Column(
           children: [
             Text(
-              'Код отметки',
+              tr.manager.checkInCodeTitle,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -855,8 +850,7 @@ class _CheckInCodeCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Покажите его людям на месте: кто введёт код, '
-              'тот точно пришёл',
+              tr.manager.checkInCodeHint,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12.5,
@@ -890,8 +884,7 @@ class _AttendanceHint extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Исполнитель отмечается сам в день смены. Подтвердите '
-                'выход — только после этого смена идёт в оплату.',
+                tr.manager.attendanceHint,
                 style: const TextStyle(
                   fontSize: 12.5,
                   height: 1.35,
@@ -982,8 +975,8 @@ class _ApplicantTile extends StatelessWidget {
                           Flexible(
                             child: Text(
                               user.isVerified
-                                  ? 'Верифицирован'
-                                  : 'Без проверки',
+                                  ? tr.manager.verified
+                                  : tr.manager.notVerified,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -1003,8 +996,8 @@ class _ApplicantTile extends StatelessWidget {
                   IconButton(
                     onPressed: onFavorite,
                     tooltip: applicant.isFavorite
-                        ? 'Убрать из любимых'
-                        : 'В любимые исполнители',
+                        ? tr.manager.removeFromFavorites
+                        : tr.manager.addToFavorites,
                     icon: Icon(
                       applicant.isFavorite
                           ? Icons.favorite_rounded
@@ -1013,14 +1006,14 @@ class _ApplicantTile extends StatelessWidget {
                     ),
                   ),
                 if (applicant.isConfirmed)
-                  const TagChip(
-                    text: 'Отработал',
+                  TagChip(
+                    text: tr.manager.statusWorked,
                     icon: Icons.check_circle_outline_rounded,
                     color: AppColors.brand,
                   )
                 else if (applicant.isNoShow)
-                  const TagChip(
-                    text: 'Не вышел',
+                  TagChip(
+                    text: tr.manager.noShowLabel,
                     icon: Icons.person_off_outlined,
                     color: AppColors.danger,
                   )
@@ -1028,7 +1021,9 @@ class _ApplicantTile extends StatelessWidget {
                   TagChip(
                     // По коду — человек точно был на точке; без кода —
                     // только нажал кнопку.
-                    text: applicant.checkInVerified ? 'На месте · код' : 'На месте',
+                    text: applicant.checkInVerified
+                        ? tr.manager.statusOnSiteCode
+                        : tr.manager.statusOnSite,
                     icon: applicant.checkInVerified
                         ? Icons.verified_rounded
                         : Icons.location_on_outlined,
@@ -1037,7 +1032,7 @@ class _ApplicantTile extends StatelessWidget {
                         : AppColors.accent,
                   )
                 else
-                  const TagChip(text: 'Записан'),
+                  TagChip(text: tr.manager.statusBooked),
               ],
             ),
             // Надёжность показываем, только если есть о чём говорить:
@@ -1054,8 +1049,10 @@ class _ApplicantTile extends StatelessWidget {
                   // не помещалась и вылезала полосатой лентой за край.
                   Flexible(
                     child: Text(
-                      'Выходит: ${applicant.user.reliabilityPercent}% · '
-                      'невыходов ${applicant.user.noShows}',
+                      tr.manager.reliabilityLine(
+                        applicant.user.reliabilityPercent,
+                        applicant.user.noShows,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1076,8 +1073,9 @@ class _ApplicantTile extends StatelessWidget {
                       size: 14, color: AppColors.muted),
                   const SizedBox(width: 6),
                   Text(
-                    'Отметился в '
-                    '${formatTime(applicant.checkedInAt!.hour * 60 + applicant.checkedInAt!.minute)}',
+                    tr.manager.checkedInAt(formatTime(
+                        applicant.checkedInAt!.hour * 60 +
+                            applicant.checkedInAt!.minute)),
                     style: const TextStyle(
                       fontSize: 12.5,
                       color: AppColors.muted,
@@ -1095,7 +1093,7 @@ class _ApplicantTile extends StatelessWidget {
                       child: FilledButton.icon(
                         onPressed: onConfirm,
                         icon: const Icon(Icons.check_rounded, size: 18),
-                        label: const Text('Вышел'),
+                        label: Text(tr.manager.showedUp),
                         style: FilledButton.styleFrom(
                           minimumSize: const Size.fromHeight(44),
                         ),
@@ -1108,7 +1106,7 @@ class _ApplicantTile extends StatelessWidget {
                       child: OutlinedButton.icon(
                         onPressed: onNoShow,
                         icon: const Icon(Icons.close_rounded, size: 18),
-                        label: const Text('Не вышел'),
+                        label: Text(tr.manager.noShowLabel),
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size.fromHeight(44),
                           foregroundColor: AppColors.danger,

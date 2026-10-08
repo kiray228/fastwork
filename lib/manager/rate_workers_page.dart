@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/review.dart';
-import 'package:fastwork_core/shift.dart';
+import '../l10n/strings.dart';
 import '../theme/app_colors.dart';
 import '../widgets/async_state.dart';
 import '../widgets/common.dart';
@@ -51,11 +51,10 @@ class _RateWorkersPageState extends State<RateWorkersPage> {
   Future<void> _rate(PendingRating item) async {
     final input = await showRatingSheet(
       context,
-      title: 'Оцените исполнителя',
+      title: tr.manager.rateSheetTitle,
       subtitle: '${item.workerName} · ${item.shiftTitle}',
-      hint: 'Пришёл вовремя? Справился с работой? '
-          'Это увидят другие заказчики',
-      buttonLabel: 'Поставить оценку',
+      hint: tr.manager.rateSheetHint,
+      buttonLabel: tr.manager.rateSheetButton,
     );
     if (input == null || !mounted) return;
 
@@ -72,7 +71,7 @@ class _RateWorkersPageState extends State<RateWorkersPage> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Оценка учтена в рейтинге ${item.workerName}'),
+        content: Text(tr.manager.ratedSnack(item.workerName)),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -82,7 +81,7 @@ class _RateWorkersPageState extends State<RateWorkersPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Оценки')),
+      appBar: AppBar(title: Text(tr.manager.ratingsTitle)),
       // AnimatedSwitcher сглаживает смену состояния: скелет не пропадает
       // рывком, а растворяется в списке.
       body: AnimatedSwitcher(
@@ -96,11 +95,10 @@ class _RateWorkersPageState extends State<RateWorkersPage> {
                 _load();
               },
             ),
-          Ready(value: []) => const EmptyState(
+          Ready(value: []) => EmptyState(
               icon: Icons.task_alt_rounded,
-              title: 'Все оценены',
-              subtitle: 'Как только пройдёт следующая смена,\n'
-                  'её участники появятся здесь',
+              title: tr.manager.allRatedTitle,
+              subtitle: tr.manager.allRatedSubtitle,
             ),
           Ready(:final value) => RefreshIndicator(
               onRefresh: _load,
@@ -142,8 +140,7 @@ class _Explainer extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Оценка сразу меняет рейтинг исполнителя — по нему его '
-                'выбирают другие заказчики.',
+                tr.manager.ratingExplainer,
                 style: const TextStyle(
                   fontSize: 12.5,
                   height: 1.35,
@@ -207,8 +204,8 @@ class _PendingTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '${item.shiftTitle} · ${item.workDate.day} '
-                    '${monthsShort[item.workDate.month - 1]}',
+                    '${item.shiftTitle} · '
+                    '${tr.core.dayMonthShort(item.workDate)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -235,8 +232,8 @@ class _PendingTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            const TagChip(
-              text: 'Оценить',
+            TagChip(
+              text: tr.manager.rateChip,
               icon: Icons.star_outline_rounded,
               color: AppColors.brand,
             ),
