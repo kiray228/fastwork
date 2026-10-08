@@ -557,6 +557,39 @@ void main() {
     });
   });
 
+  group('ссылка на смену', () {
+    testWidgets('по ссылке открывается сама смена', (tester) async {
+      useTallPhone(tester);
+      final user = testUser(rating: 5.0);
+      await tester.pumpWidget(FastworkApp(
+        session: AppSession()..setUser(user),
+        repos: buildRepos(
+          shifts: FakeShiftRepository(clock: morning(), userRating: 5.0),
+          signedIn: user,
+        ),
+        sharedShiftId: 4, // курьер Magnum завтра
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Услуги курьера'), findsWidgets);
+      expect(find.text('Вознаграждение'), findsOneWidget);
+    });
+
+    testWidgets('несуществующая смена — понятный экран, а не вечная загрузка',
+        (tester) async {
+      useTallPhone(tester);
+      final user = testUser();
+      await tester.pumpWidget(FastworkApp(
+        session: AppSession()..setUser(user),
+        repos: buildRepos(signedIn: user),
+        sharedShiftId: 999,
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Смена не найдена'), findsOneWidget);
+    });
+  });
+
   group('компания', () {
     testWidgets('на компанию можно подписаться со страницы смены',
         (tester) async {

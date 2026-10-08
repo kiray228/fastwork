@@ -20,6 +20,7 @@ import 'package:fastwork_core/data/support_repository.dart';
 import 'package:fastwork_core/data/wallet_repository.dart';
 import 'package:fastwork_core/payment.dart';
 import 'home_shell.dart';
+import 'links.dart';
 import 'theme/app_theme.dart';
 import 'theme/glass.dart';
 
@@ -48,6 +49,8 @@ Future<void> main() async {
     session: session,
     repos: repos,
     preferences: await AppPreferences.open(),
+    // Открыли по ссылке на смену — покажем её, как только человек войдёт.
+    sharedShiftId: sharedShiftId(Uri.base),
   ));
 }
 
@@ -129,11 +132,15 @@ class FastworkApp extends StatefulWidget {
   /// приложение: так в тестах.
   final AppPreferences? preferences;
 
+  /// Смена из ссылки, по которой открыли приложение. null — без ссылки.
+  final int? sharedShiftId;
+
   const FastworkApp({
     super.key,
     required this.session,
     required this.repos,
     this.preferences,
+    this.sharedShiftId,
   });
 
   @override
@@ -143,6 +150,10 @@ class FastworkApp extends StatefulWidget {
 class _FastworkAppState extends State<FastworkApp> {
   late final AppPreferences preferences =
       widget.preferences ?? AppPreferences();
+
+  /// Смена из ссылки, которую ещё не показали. Показываем один раз:
+  /// вышел и вошёл снова — второй раз она не откроется.
+  late int? pendingShift = widget.sharedShiftId;
 
   @override
   Widget build(BuildContext context) {
@@ -183,6 +194,8 @@ class _FastworkAppState extends State<FastworkApp> {
           session: widget.session,
           repos: widget.repos,
           preferences: preferences,
+          pendingShift: () => pendingShift,
+          onShiftOpened: () => pendingShift = null,
         ),
       ),
     );
@@ -198,11 +211,15 @@ class _AuthGate extends StatelessWidget {
   final AppSession session;
   final AppRepositories repos;
   final AppPreferences preferences;
+  final int? Function() pendingShift;
+  final VoidCallback onShiftOpened;
 
   const _AuthGate({
     required this.session,
     required this.repos,
     required this.preferences,
+    required this.pendingShift,
+    required this.onShiftOpened,
   });
 
   @override
@@ -222,6 +239,8 @@ class _AuthGate extends StatelessWidget {
           session: session,
           repos: repos,
           preferences: preferences,
+          openShiftId: pendingShift(),
+          onShiftOpened: onShiftOpened,
         );
       },
     );

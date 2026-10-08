@@ -382,7 +382,11 @@ String shiftsLabel(int count) =>
 /// Кнопка «Поделиться» раньше ничего не делала. Теперь она кладёт в буфер
 /// обмена вот это: всё, что нужно, чтобы решить «пойду или нет», без
 /// ссылок и без необходимости ставить приложение.
-String shiftShareText(Shift shift) {
+///
+/// [link] — адрес, по которому смена открывается в приложении на сайте.
+/// Его нет, когда приложение работает без сервера: номера смен там свои
+/// у каждого телефона, и ссылка открыла бы у друга чужую смену.
+String shiftShareText(Shift shift, {Uri? link}) {
   final date = shift.workDate;
   return [
     '${shift.title} — ${shift.company}',
@@ -392,7 +396,7 @@ String shiftShareText(Shift shift) {
     shift.address,
     '${formatMoney(shift.totalPay)} за смену'
         '${shift.isFunded ? ', оплата гарантирована' : ''}',
-    'Смена в fastwork',
+    if (link != null) 'Записаться: $link' else 'Смена в fastwork',
   ].join('\n');
 }
 

@@ -83,3 +83,29 @@ Uri calendarLink(Shift shift) {
 }
 
 String _two(int n) => n.toString().padLeft(2, '0');
+
+/// Где живёт приложение в браузере. Задаётся при сборке, как и адрес
+/// сервера; по умолчанию — GitHub Pages проекта.
+const appUrl = String.fromEnvironment(
+  'APP_URL',
+  defaultValue: 'https://kiray228.github.io/fastwork/',
+);
+
+/// Ссылками на смены можно делиться, только когда смены живут на сервере.
+/// Без сервера у каждого телефона своя база и свои номера смен: ссылка
+/// открыла бы у друга совсем другую смену или ничего.
+const sharedLinksWork = bool.hasEnvironment('API_URL') &&
+    String.fromEnvironment('API_URL') != '';
+
+/// Ссылка на смену: открывает приложение сразу на ней.
+///
+/// Номер смены — в параметре адреса, а не в пути: сайт на GitHub Pages —
+/// одна страница, и путь вроде `/fastwork/shift/12` ответил бы «404».
+/// Параметр же страница получает целиком и сама решает, что открыть.
+Uri shiftLink(int shiftId) =>
+    Uri.parse(appUrl).replace(queryParameters: {'shift': '$shiftId'});
+
+/// Номер смены из адреса, по которому открыли приложение. null — открыли
+/// просто так, без ссылки на смену.
+int? sharedShiftId(Uri address) =>
+    int.tryParse(address.queryParameters['shift'] ?? '');

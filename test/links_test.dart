@@ -66,4 +66,21 @@ void main() {
       expect(details, contains('Отменить запись можно до'));
     });
   });
+
+  group('ссылка на смену', () {
+    test('номер смены в параметре и обратно', () {
+      final link = shiftLink(42);
+      expect(link.toString(), 'https://kiray228.github.io/fastwork/?shift=42');
+      expect(sharedShiftId(link), 42);
+      expect(sharedShiftId(Uri.parse('https://kiray228.github.io/fastwork/')),
+          isNull);
+      expect(sharedShiftId(Uri.parse('https://x.kz/?shift=abc')), isNull);
+    });
+
+    test('в тексте для пересылки — ссылка, если она есть', () {
+      final text = shiftShareText(shift(), link: shiftLink(1));
+      expect(text, contains('Записаться: https://kiray228.github.io'));
+      expect(shiftShareText(shift()), endsWith('Смена в fastwork'));
+    });
+  });
 }

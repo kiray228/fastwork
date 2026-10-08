@@ -35,6 +35,11 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
   Shift? shift;
   bool busy = false;
 
+  /// Ответ уже пришёл. Без этого флага «смены нет» и «ещё грузим»
+  /// выглядели одинаково — вечным кружком. А по ссылке от друга смена
+  /// могла быть уже удалена или ещё не оплачена.
+  bool loaded = false;
+
   @override
   void initState() {
     super.initState();
@@ -42,9 +47,12 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
   }
 
   Future<void> _load() async {
-    final loaded = await widget.repository.shiftById(widget.shiftId);
+    final found = await widget.repository.shiftById(widget.shiftId);
     if (!mounted) return;
-    setState(() => shift = loaded);
+    setState(() {
+      shift = found;
+      loaded = true;
+    });
   }
 
   /// Записаться на смену.
@@ -277,7 +285,13 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     if (current == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Смена')),
-        body: const Center(child: CircularProgressIndicator()),
+        body: loaded
+            ? const EmptyState(
+                icon: Icons.event_busy_rounded,
+                title: 'Смена не найдена',
+                subtitle: 'Её могли удалить, или она ещё не опубликована',
+              )
+            : const Center(child: CircularProgressIndicator()),
       );
     }
 
@@ -287,7 +301,10 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
         actions: [
           IconButton(
             onPressed: () => _copy(
-              shiftShareText(current),
+              shiftShareText(
+                current,
+                link: sharedLinksWork ? shiftLink(current.id) : null,
+              ),
               'Описание смены скопировано — вставьте его в чат',
             ),
             tooltip: 'Поделиться',
