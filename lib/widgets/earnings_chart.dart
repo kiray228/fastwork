@@ -4,6 +4,7 @@ import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
 import 'common.dart';
+import '../l10n/strings.dart';
 
 /// Заработок по неделям: восемь столбиков, текущая неделя справа.
 ///
@@ -46,15 +47,17 @@ class _EarningsChartState extends State<EarningsChart> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionHeader(
+          SectionHeader(
             icon: Icons.bar_chart_rounded,
-            title: 'Заработок по неделям',
+            title: tr.wallet.chartTitle,
           ),
           const SizedBox(height: 4),
           Text(
-            'За ${weeks.length} недель — ${formatMoney(total)}'
-            '${worked > 0 ? ', в среднем ${formatMoney(total ~/ worked)} '
-                'в рабочую неделю' : ''}',
+            tr.wallet.chartSummary(
+              weeks.length,
+              formatMoney(total),
+              worked > 0 ? formatMoney(total ~/ worked) : null,
+            ),
             style: TextStyle(fontSize: 12.5, height: 1.35, color: muted),
           ),
           const SizedBox(height: 14),
@@ -148,7 +151,7 @@ class _EarningsChartState extends State<EarningsChart> {
                     // Подписи через одну: восемь дат в строку не влезают.
                     i.isEven || i == weeks.length - 1
                         ? (i == weeks.length - 1
-                            ? 'эта'
+                            ? tr.wallet.thisWeekShort
                             : '${weeks[i].start.day}.'
                                 '${weeks[i].start.month.toString().padLeft(2, '0')}')
                         : '',
@@ -171,7 +174,7 @@ class _EarningsChartState extends State<EarningsChart> {
 
   /// «неделя с 6 окт» — или «эта неделя».
   String _weekLabel(DateTime start) {
-    if (start == widget.weeks.last.start) return 'эта неделя';
-    return 'неделя с ${start.day} ${monthsShort[start.month - 1]}';
+    if (start == widget.weeks.last.start) return tr.wallet.thisWeek;
+    return tr.wallet.weekFrom(tr.core.dayMonthShort(start));
   }
 }

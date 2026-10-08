@@ -85,7 +85,7 @@ class ShiftCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '${formatMoney(shift.hourlyRate)}/ч',
+                  tr.feed.perHour(formatMoney(shift.hourlyRate)),
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -111,8 +111,8 @@ class ShiftCard extends StatelessWidget {
                 if (shift.isFunded) const GuaranteeChip(),
                 if (!allowed)
                   TagChip(
-                    text: 'Нужен рейтинг '
-                        '${shift.minRating!.toStringAsFixed(1)}',
+                    text: tr.feed.ratingRequired(
+                        shift.minRating!.toStringAsFixed(1)),
                     icon: Icons.lock_outline_rounded,
                     color: AppColors.accent,
                   ),
@@ -153,7 +153,7 @@ class ShiftCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    'осталось ${shift.freeSlots}',
+                    tr.feed.slotsLeft(shift.freeSlots),
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
@@ -178,10 +178,10 @@ class ShiftCard extends StatelessWidget {
                       ),
                 child: Text(
                   !allowed
-                      ? 'Рейтинг ниже требуемого'
+                      ? tr.feed.ratingTooLow
                       : shift.hasFreeSlots || shift.isMine
-                          ? 'Подробнее'
-                          : 'Мест нет · Ждать места',
+                          ? tr.feed.details
+                          : tr.feed.noSlotsWait,
                 ),
               ),
             ),

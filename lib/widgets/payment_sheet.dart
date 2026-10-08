@@ -9,6 +9,7 @@ import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
 import '../theme/glass.dart';
 import 'async_state.dart';
+import '../l10n/strings.dart';
 
 /// Строка расшифровки: за что именно платят.
 class PaymentLine {
@@ -141,7 +142,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     if (method == PaymentMethod.kaspi) {
       phone = normalizeKzPhone(phoneController.text);
       if (phone == null) {
-        setState(() => error = 'Введите номер, к которому привязан Kaspi.kz');
+        setState(() => error = tr.wallet.kaspiPhoneMissing);
         return;
       }
     }
@@ -178,7 +179,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
       setState(() {
         previous = current;
         checkout = null;
-        error = current.message ?? 'Оплата не прошла';
+        error = current.message ?? tr.wallet.paymentFailed;
       });
       return;
     }
@@ -196,7 +197,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
       webOnlyWindowName: '_blank',
     );
     if (!ok && mounted) {
-      setState(() => error = 'Не получилось открыть страницу оплаты');
+      setState(() => error = tr.wallet.providerOpenFailed);
     }
   }
 
@@ -226,12 +227,12 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   /// Луна, просроченную карту — дата.
   String? _validateCard() {
     final digits = cardDigits(numberController.text);
-    if (!luhnValid(digits)) return 'Проверьте номер карты';
+    if (!luhnValid(digits)) return tr.wallet.checkCardNumber;
     if (!expiryValid(expiryController.text, DateTime.now())) {
-      return 'Проверьте срок действия';
+      return tr.wallet.checkExpiry;
     }
     final cvc = cardDigits(cvcController.text);
-    if (cvc.length < 3) return 'CVC — три цифры с обратной стороны';
+    if (cvc.length < 3) return tr.wallet.cvcHint;
     return null;
   }
 
@@ -306,7 +307,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
               for (final line in widget.lines)
                 _AmountRow(label: line.label, amount: line.amount),
               const Divider(height: 20),
-              _AmountRow(label: 'Итого', amount: widget.total, bold: true),
+              _AmountRow(label: tr.wallet.total, amount: widget.total, bold: true),
               const SizedBox(height: 16),
               if (current == null)
                 ..._chooseMethod()
@@ -341,25 +342,24 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
             controller: phoneController,
             keyboardType: TextInputType.phone,
             onChanged: (_) => setState(() => error = null),
-            decoration: const InputDecoration(
-              labelText: 'Номер телефона в Kaspi.kz',
+            decoration: InputDecoration(
+              labelText: tr.wallet.kaspiPhoneLabel,
               hintText: '+7 700 000 00 00',
-              prefixIcon: Icon(Icons.phone_iphone_rounded),
+              prefixIcon: const Icon(Icons.phone_iphone_rounded),
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'На этот номер придёт счёт в приложении Kaspi.kz — останется '
-            'подтвердить его там.',
-            style: TextStyle(fontSize: 12.5, color: AppColors.muted),
+          Text(
+            tr.wallet.kaspiPhoneNote,
+            style: const TextStyle(fontSize: 12.5, color: AppColors.muted),
           ),
           const SizedBox(height: 14),
         ],
         if (widget.payout) ...[
-          const Text(
-            'Карту любого банка, в том числе Kaspi Gold, вы укажете на '
-            'следующем шаге — на странице платёжного сервиса.',
-            style: TextStyle(fontSize: 13, color: AppColors.muted, height: 1.4),
+          Text(
+            tr.wallet.payoutCardNote,
+            style: const TextStyle(
+                fontSize: 13, color: AppColors.muted, height: 1.4),
           ),
           const SizedBox(height: 14),
         ],
@@ -377,15 +377,15 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                   ),
             label: Text(previous == null
                 ? widget.actionLabel
-                : 'Попробовать ещё раз'),
+                : tr.wallet.tryAgain),
           ),
         ),
         const SizedBox(height: 10),
-        const Text(
-          'fastwork не видит номер вашей карты: его принимает платёжный '
-          'сервис. Деньги хранятся у сервиса до конца смены.',
+        Text(
+          tr.wallet.cardPrivacy,
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 11.5, color: AppColors.muted, height: 1.4),
+          style: const TextStyle(
+              fontSize: 11.5, color: AppColors.muted, height: 1.4),
         ),
       ];
 
@@ -403,7 +403,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
               icon: busy
                   ? const _Spinner()
                   : const Icon(Icons.check_circle_rounded, size: 18),
-              label: const Text('Подтвердить в Kaspi.kz (тест)'),
+              label: Text(tr.wallet.kaspiConfirmTest),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFFF14635),
               ),
@@ -419,10 +419,10 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
               _CardNumberFormatter(),
             ],
             onChanged: (_) => setState(() => error = null),
-            decoration: const InputDecoration(
-              labelText: 'Номер карты',
+            decoration: InputDecoration(
+              labelText: tr.wallet.cardNumber,
               hintText: '0000 0000 0000 0000',
-              prefixIcon: Icon(Icons.credit_card_rounded),
+              prefixIcon: const Icon(Icons.credit_card_rounded),
             ),
           ),
           const SizedBox(height: 12),
@@ -438,9 +438,9 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                     _ExpiryFormatter(),
                   ],
                   onChanged: (_) => setState(() => error = null),
-                  decoration: const InputDecoration(
-                    labelText: 'Срок',
-                    hintText: 'ММ/ГГ',
+                  decoration: InputDecoration(
+                    labelText: tr.wallet.expiry,
+                    hintText: tr.wallet.expiryHint,
                   ),
                 ),
               ),
@@ -468,7 +468,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
             child: TextButton.icon(
               onPressed: busy ? null : _fillTestCard,
               icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
-              label: const Text('Подставить тестовую карту'),
+              label: Text(tr.wallet.fillTestCard),
             ),
           ),
           const SizedBox(height: 6),
@@ -480,8 +480,8 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                   ? const _Spinner()
                   : const Icon(Icons.lock_rounded, size: 18),
               label: Text(widget.payout
-                  ? 'Перевести ${formatMoney(current.amount)}'
-                  : 'Оплатить ${formatMoney(current.amount)}'),
+                  ? tr.wallet.transferAmount(formatMoney(current.amount))
+                  : tr.wallet.payAmount(formatMoney(current.amount))),
             ),
           ),
         ],
@@ -492,20 +492,19 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
         if (current.method == PaymentMethod.kaspi && current.url == null)
           _KaspiInvoice(phone: current.phone, amount: current.amount)
         else
-          const _InfoBox(
+          _InfoBox(
             icon: Icons.open_in_new_rounded,
-            text: 'Мы открыли страницу платёжного сервиса. Заплатите там и '
-                'вернитесь сюда — окно само увидит оплату.',
+            text: tr.wallet.providerOpened,
           ),
         const SizedBox(height: 16),
-        const Row(
+        Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _Spinner(color: AppColors.brand),
-            SizedBox(width: 10),
+            const _Spinner(color: AppColors.brand),
+            const SizedBox(width: 10),
             Text(
-              'Ждём подтверждение оплаты…',
-              style: TextStyle(fontWeight: FontWeight.w700),
+              tr.wallet.waitingConfirmation,
+              style: const TextStyle(fontWeight: FontWeight.w700),
             ),
           ],
         ),
@@ -515,21 +514,21 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
             onPressed: () => _openProvider(current.url!),
             icon: const Icon(Icons.open_in_new_rounded, size: 18),
             label: Text(current.method == PaymentMethod.kaspi
-                ? 'Открыть Kaspi.kz'
-                : 'Открыть страницу оплаты'),
+                ? tr.wallet.openKaspi
+                : tr.wallet.openPaymentPage),
             style: OutlinedButton.styleFrom(
               minimumSize: const Size.fromHeight(48),
             ),
           ),
         TextButton(
           onPressed: busy ? null : _check,
-          child: const Text('Я оплатил — проверить'),
+          child: Text(tr.wallet.paidCheck),
         ),
         SafeArea(
           top: false,
           child: TextButton(
             onPressed: () => Navigator.of(context).pop(current),
-            child: const Text('Закрыть — оплачу позже'),
+            child: Text(tr.wallet.closePayLater),
           ),
         ),
       ];
@@ -600,7 +599,7 @@ class _MethodPicker extends StatelessWidget {
             'Visa, Mastercard'),
         const SizedBox(width: 10),
         tile(PaymentMethod.kaspi, Icons.phone_iphone_rounded,
-            const Color(0xFFF14635), 'Счёт в приложении'),
+            const Color(0xFFF14635), tr.wallet.kaspiCaption),
       ],
     );
   }
@@ -617,9 +616,10 @@ class _KaspiInvoice extends StatelessWidget {
   Widget build(BuildContext context) => _InfoBox(
         icon: Icons.phone_iphone_rounded,
         color: const Color(0xFFF14635),
-        text: 'Счёт на ${formatMoney(amount)} отправлен в Kaspi.kz'
-            '${phone == null ? '' : ' на номер ${formatKzPhone(phone!)}'}. '
-            'Откройте приложение Kaspi.kz и подтвердите оплату.',
+        text: tr.wallet.kaspiInvoice(
+          formatMoney(amount),
+          phone == null ? null : formatKzPhone(phone!),
+        ),
       );
 }
 
@@ -750,17 +750,15 @@ class _SandboxBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
       ),
-      child: const Row(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.science_outlined, size: 18, color: AppColors.accent),
-          SizedBox(width: 10),
+          const Icon(Icons.science_outlined, size: 18, color: AppColors.accent),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Тестовый режим: деньги ненастоящие, платёж проходит прямо '
-              'здесь. Карта $kSandboxCardNumber проходит, карта на …0002 — '
-              'отказ банка.',
-              style: TextStyle(fontSize: 12.5, height: 1.35),
+              tr.wallet.sandboxBanner(kSandboxCardNumber),
+              style: const TextStyle(fontSize: 12.5, height: 1.35),
             ),
           ),
         ],

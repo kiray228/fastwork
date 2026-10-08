@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
 import '../theme/glass.dart';
+import '../l10n/strings.dart';
 
 /// Окно подтверждения записи на смену.
 ///
@@ -64,14 +65,13 @@ class _BookingConfirmSheetState extends State<_BookingConfirmSheet> {
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
                 children: [
                   Text(
-                    'Подтвердите запись',
+                    tr.shift.confirmTitle,
                     style: text.headlineSmall?.copyWith(fontSize: 22),
                   ),
                   const SizedBox(height: 6),
-                  const Text(
-                    'Это не заявка на рассмотрение. После подтверждения '
-                    'место закрепляется за вами.',
-                    style: TextStyle(
+                  Text(
+                    tr.shift.confirmSubtitle,
+                    style: const TextStyle(
                       fontSize: 13.5,
                       color: AppColors.muted,
                       height: 1.4,
@@ -90,17 +90,20 @@ class _BookingConfirmSheetState extends State<_BookingConfirmSheet> {
                     child: Column(
                       children: [
                         _SummaryRow(
-                          label: 'Смена',
+                          label: tr.shift.title,
                           value: shift.title,
                         ),
                         _SummaryRow(
-                          label: 'Когда',
+                          label: tr.shift.summaryWhen,
                           value: '${formatDateTime(shift.startsAt)} — '
                               '${formatTime(shift.endMinutes)}',
                         ),
-                        _SummaryRow(label: 'Где', value: shift.company),
                         _SummaryRow(
-                          label: 'Вознаграждение',
+                          label: tr.shift.summaryWhere,
+                          value: shift.company,
+                        ),
+                        _SummaryRow(
+                          label: tr.shift.payTitle,
                           value: formatMoney(shift.totalPay),
                           highlight: true,
                         ),
@@ -109,13 +112,12 @@ class _BookingConfirmSheetState extends State<_BookingConfirmSheet> {
                   ),
                   const SizedBox(height: 20),
 
-                  Text('Вы обязуетесь', style: text.titleMedium),
+                  Text(tr.shift.youCommit, style: text.titleMedium),
                   const SizedBox(height: 12),
 
                   _Term(
                     icon: Icons.schedule_rounded,
-                    text: 'Выйти на смену ${formatDateTime(shift.startsAt)} '
-                        'и отработать её полностью.',
+                    text: tr.shift.termShowUp(formatDateTime(shift.startsAt)),
                   ),
                   _Term(
                     icon: Icons.event_busy_rounded,
@@ -124,52 +126,42 @@ class _BookingConfirmSheetState extends State<_BookingConfirmSheet> {
                     // эту запись не выйдет вовсе. Раньше здесь стояло
                     // «можно до 05:00» — время, которое уже прошло.
                     text: shift.canCancelAt(DateTime.now())
-                        ? 'Отменить запись можно только до '
-                            '${formatDateTime(shift.cancelDeadline)} — это '
-                            'за ${shift.cancelDeadlineHours} часов до '
-                            'начала. После этого времени отмена невозможна.'
-                        : 'До начала меньше ${shift.cancelDeadlineHours} '
-                            'часов — отменить эту запись будет нельзя. '
-                            'Записывайтесь, только если точно придёте.',
+                        ? tr.shift.termCancelUntil(
+                            formatDateTime(shift.cancelDeadline),
+                            shift.cancelDeadlineHours,
+                          )
+                        : tr.shift.termNoCancel(shift.cancelDeadlineHours),
                   ),
                   _Term(
                     icon: Icons.trending_down_rounded,
                     danger: true,
-                    text: 'Неявка без отмены снижает рейтинг и закрывает '
-                        'доступ к части заказчиков.',
+                    text: tr.shift.termNoShow,
                   ),
                   if (shift.hasUnpaidBreak)
                     _Term(
                       icon: Icons.lunch_dining_rounded,
-                      text: 'Оплачивается фактически отработанное время. '
-                          '${formatDuration(shift.breakMinutes)} перерыва '
-                          'на обед не оплачивается.',
+                      text: tr.shift.termUnpaidBreak(
+                          formatDuration(shift.breakMinutes)),
                     ),
                   if (shift.isFunded)
-                    const _Term(
+                    _Term(
                       icon: Icons.verified_user_rounded,
-                      text: 'Оплата гарантирована: заказчик уже внёс деньги, '
-                          'сервис переведёт их вам после подтверждения смены. '
-                          'Комиссия с вас не удерживается.',
+                      text: tr.shift.termFunded,
                     ),
                   _Term(
                     icon: Icons.account_balance_wallet_outlined,
                     text: shift.payoutDelayDays == 1
-                        ? 'Вознаграждение поступит на следующий день '
-                            'после смены.'
-                        : 'Вознаграждение поступит через '
-                            '${shift.payoutDelayDays} дня после смены.',
+                        ? tr.shift.termPayoutNextDay
+                        : tr.shift.termPayoutInDays(shift.payoutDelayDays),
                   ),
-                  const _Term(
+                  _Term(
                     icon: Icons.account_balance_rounded,
-                    text: 'Доход через сервис — не больше 300 МРП в месяц. '
-                        'Если эта смена превысит лимит, запись не пройдёт.',
+                    text: tr.shift.termEarningsLimit,
                   ),
                   if (shift.dressCode != null)
                     _Term(
                       icon: Icons.checkroom_rounded,
-                      text: 'Соблюдать требования к форме одежды: '
-                          '${shift.dressCode}',
+                      text: tr.shift.termDressCode(shift.dressCode!),
                     ),
 
                   const SizedBox(height: 8),
@@ -191,13 +183,15 @@ class _BookingConfirmSheetState extends State<_BookingConfirmSheet> {
                               borderRadius: BorderRadius.circular(5),
                             ),
                           ),
-                          const Expanded(
+                          Expanded(
                             child: Padding(
-                              padding: EdgeInsets.only(top: 12),
+                              padding: const EdgeInsets.only(top: 12),
                               child: Text(
-                                'Условия прочитаны — подтверждаю, '
-                                'что выйду на смену',
-                                style: TextStyle(fontSize: 13.5, height: 1.35),
+                                tr.shift.agreeCheckbox,
+                                style: const TextStyle(
+                                  fontSize: 13.5,
+                                  height: 1.35,
+                                ),
                               ),
                             ),
                           ),
@@ -223,7 +217,7 @@ class _BookingConfirmSheetState extends State<_BookingConfirmSheet> {
                           minimumSize: const Size.fromHeight(52),
                           foregroundColor: AppColors.body,
                         ),
-                        child: const Text('Назад'),
+                        child: Text(tr.shift.back),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -233,7 +227,7 @@ class _BookingConfirmSheetState extends State<_BookingConfirmSheet> {
                         onPressed: agreed
                             ? () => Navigator.of(context).pop(true)
                             : null,
-                        child: const Text('Подтверждаю'),
+                        child: Text(tr.shift.confirmButton),
                       ),
                     ),
                   ],

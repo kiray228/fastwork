@@ -61,8 +61,8 @@ class _CompanyPageState extends State<CompanyPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(follow
-            ? 'Сообщим, когда ${data.name} выставит новую смену в вашем городе'
-            : 'Вы отписались от новых смен ${data.name}'),
+            ? tr.feed.followedSnack(data.name)
+            : tr.feed.unfollowedSnack(data.name)),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -73,7 +73,7 @@ class _CompanyPageState extends State<CompanyPage> {
     final data = info;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('О компании')),
+      appBar: AppBar(title: Text(tr.feed.aboutCompany)),
       body: data == null
           ? const TileListSkeleton(count: 3)
           : ListView(
@@ -94,8 +94,8 @@ class _CompanyPageState extends State<CompanyPage> {
                       ),
                       const SizedBox(height: 12),
                       if (data.rating == null)
-                        const TagChip(
-                          text: 'Пока нет оценок',
+                        TagChip(
+                          text: tr.feed.noRatingsYet,
                           icon: Icons.star_outline_rounded,
                         )
                       else
@@ -117,7 +117,7 @@ class _CompanyPageState extends State<CompanyPage> {
                                 icon: const Icon(
                                     Icons.notifications_active_rounded,
                                     size: 18),
-                                label: const Text('Вы подписаны · Отписаться'),
+                                label: Text(tr.feed.followingUnfollow),
                               )
                             : FilledButton.icon(
                                 onPressed:
@@ -125,7 +125,7 @@ class _CompanyPageState extends State<CompanyPage> {
                                 icon: const Icon(
                                     Icons.notifications_none_rounded,
                                     size: 18),
-                                label: const Text('Сообщать о новых сменах'),
+                                label: Text(tr.feed.followNewShifts),
                               ),
                       ),
                     ],
@@ -137,9 +137,9 @@ class _CompanyPageState extends State<CompanyPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SectionHeader(
+                        SectionHeader(
                           icon: Icons.event_available_rounded,
-                          title: 'Ближайшие смены',
+                          title: tr.feed.upcomingShifts,
                         ),
                         const SizedBox(height: 8),
                         for (final shift in data.upcoming)
@@ -158,16 +158,15 @@ class _CompanyPageState extends State<CompanyPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SectionHeader(
+                      SectionHeader(
                         icon: Icons.reviews_outlined,
-                        title: 'Отзывы исполнителей',
+                        title: tr.feed.workerReviews,
                       ),
                       const SizedBox(height: 14),
                       if (data.reviews.isEmpty)
-                        const Text(
-                          'Пока никто не оставил отзыв. Отработайте смену '
-                          'и расскажите, как всё прошло.',
-                          style: TextStyle(
+                        Text(
+                          tr.feed.noReviewsYet,
+                          style: const TextStyle(
                             fontSize: 13.5,
                             color: AppColors.muted,
                             height: 1.4,
@@ -223,7 +222,7 @@ class _UpcomingRow extends StatelessWidget {
                     '${relativeDay(date, DateTime.now())} · '
                     '${formatTime(shift.startMinutes)}–'
                     '${formatTime(shift.endMinutes)}'
-                    '${shift.hasFreeSlots ? '' : ' · мест нет'}',
+                    '${shift.hasFreeSlots ? '' : ' · ${tr.feed.noSlots}'}',
                     style: const TextStyle(
                       fontSize: 12.5,
                       color: AppColors.muted,

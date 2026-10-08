@@ -5,6 +5,7 @@ import 'package:fastwork_core/data/shift_filter.dart';
 import '../theme/app_colors.dart';
 import '../theme/glass.dart';
 import 'category_icon.dart';
+import '../l10n/strings.dart';
 
 /// Окно фильтра и сортировки ленты.
 /// Возвращает новый фильтр или null, если пользователь ничего не менял.
@@ -89,14 +90,14 @@ class _FilterSheetState extends State<_FilterSheet> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Фильтр',
+                      tr.feed.filter,
                       style: text.headlineSmall?.copyWith(fontSize: 21),
                     ),
                   ),
                   TextButton(
                     onPressed: () =>
                         setState(() => draft = const ShiftFilter()),
-                    child: const Text('Очистить'),
+                    child: Text(tr.feed.clear),
                   ),
                 ],
               ),
@@ -107,7 +108,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
                 children: [
                   if (widget.categories.isNotEmpty) ...[
-                    Text('Категории', style: text.titleMedium),
+                    Text(tr.feed.categories, style: text.titleMedium),
                     const SizedBox(height: 10),
                     Wrap(
                       spacing: 8,
@@ -125,7 +126,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                     const SizedBox(height: 22),
                   ],
                   if (widget.companies.isNotEmpty) ...[
-                    Text('Компании', style: text.titleMedium),
+                    Text(tr.feed.companies, style: text.titleMedium),
                     const SizedBox(height: 10),
                     Wrap(
                       spacing: 8,
@@ -141,7 +142,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                     ),
                     const SizedBox(height: 22),
                   ],
-                  Text('Сортировка', style: text.titleMedium),
+                  Text(tr.feed.sorting, style: text.titleMedium),
                   const SizedBox(height: 10),
                   // RadioGroup хранит выбранное значение за все кнопки сразу —
                   // поэтому каждая из них знает только своё значение.
@@ -172,7 +173,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                     activeThumbColor: AppColors.brand,
                     contentPadding: EdgeInsets.zero,
                     title: Text(
-                      'Только со свободными местами',
+                      tr.feed.onlyOpen,
                       style: text.bodyLarge?.copyWith(fontSize: 14.5),
                     ),
                   ),
@@ -187,7 +188,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                   width: double.infinity,
                   child: FilledButton(
                     onPressed: () => Navigator.of(context).pop(draft),
-                    child: const Text('Показать результаты'),
+                    child: Text(tr.feed.showResults),
                   ),
                 ),
               ),

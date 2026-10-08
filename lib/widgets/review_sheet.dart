@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fastwork_core/shift.dart';
 import '../theme/app_colors.dart';
 import '../theme/glass.dart';
+import '../l10n/strings.dart';
 
 /// Результат окна оценки.
 class ReviewInput {
@@ -16,10 +17,9 @@ class ReviewInput {
 Future<ReviewInput?> showReviewSheet(BuildContext context, Shift shift) {
   return showRatingSheet(
     context,
-    title: 'Как прошла смена?',
-    subtitle: '${shift.company} · ${shift.workDate.day} '
-        '${monthsShort[shift.workDate.month - 1]}',
-    hint: 'Что понравилось или нет? Это увидят другие исполнители',
+    title: tr.shift.reviewTitle,
+    subtitle: '${shift.company} · ${tr.core.dayMonthShort(shift.workDate)}',
+    hint: tr.shift.reviewHint,
   );
 }
 
@@ -34,7 +34,7 @@ Future<ReviewInput?> showRatingSheet(
   required String title,
   required String subtitle,
   required String hint,
-  String buttonLabel = 'Отправить отзыв',
+  String? buttonLabel,
 }) {
   return showModalBottomSheet<ReviewInput>(
     context: context,
@@ -44,7 +44,7 @@ Future<ReviewInput?> showRatingSheet(
       title: title,
       subtitle: subtitle,
       hint: hint,
-      buttonLabel: buttonLabel,
+      buttonLabel: buttonLabel ?? tr.shift.reviewSend,
     ),
   );
 }
@@ -75,15 +75,6 @@ class _ReviewSheetState extends State<_ReviewSheet> {
     commentController.dispose();
     super.dispose();
   }
-
-  static const _labels = [
-    'Выберите оценку',
-    'Плохо',
-    'Так себе',
-    'Нормально',
-    'Хорошо',
-    'Отлично',
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -147,7 +138,7 @@ class _ReviewSheetState extends State<_ReviewSheet> {
                   ),
                   Center(
                     child: Text(
-                      _labels[rating],
+                      tr.shift.ratingLabels[rating],
                       style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w700,

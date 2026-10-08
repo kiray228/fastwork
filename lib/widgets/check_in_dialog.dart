@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
+import '../l10n/strings.dart';
 
 /// Что выбрал человек в окне отметки.
 sealed class CheckInChoice {
@@ -53,14 +54,13 @@ class _CheckInDialogState extends State<_CheckInDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Я на месте'),
+      title: Text(tr.shift.checkInButton),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Попросите у старшего смены код отметки — четыре цифры на его '
-            'экране. С кодом заказчик видит, что вы точно на месте.',
+            tr.shift.checkInHint,
             style: Theme.of(context)
                 .textTheme
                 .bodyMedium
@@ -96,13 +96,13 @@ class _CheckInDialogState extends State<_CheckInDialog> {
         TextButton(
           onPressed: () => Navigator.of(context).pop(const WithoutCode()),
           style: TextButton.styleFrom(foregroundColor: AppColors.muted),
-          child: const Text('Без кода'),
+          child: Text(tr.shift.checkInWithoutCode),
         ),
         TextButton(
           onPressed: _complete
               ? () => Navigator.of(context).pop(WithCode(controller.text))
               : null,
-          child: const Text('Отметиться'),
+          child: Text(tr.shift.checkInSubmit),
         ),
       ],
     );

@@ -319,8 +319,8 @@ class _StoryViewerState extends State<StoryViewer>
     return LayoutBuilder(
       builder: (context, constraints) => Semantics(
         customSemanticsActions: {
-          const CustomSemanticsAction(label: 'Следующий слайд'): _next,
-          const CustomSemanticsAction(label: 'Предыдущий слайд'): _previous,
+          const CustomSemanticsAction(label: tr.stories.nextSlide): _next,
+          const CustomSemanticsAction(label: tr.stories.previousSlide): _previous,
         },
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -585,7 +585,7 @@ class _Header extends StatelessWidget {
             ),
           IconButton(
             onPressed: onClose,
-            tooltip: 'Закрыть',
+            tooltip: tr.stories.close,
             icon: const Icon(
               Icons.close_rounded,
               color: Colors.white,
@@ -676,7 +676,7 @@ class _SlideBody extends StatelessWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        slide.actionLabel ?? 'Открыть',
+                        slide.actionLabel ?? tr.stories.open,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 16,
