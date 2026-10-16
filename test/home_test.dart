@@ -110,11 +110,8 @@ void main() {
         shiftOn(today.add(const Duration(days: 3)), id: 2),
       ]);
       await openApp(tester, shifts: shifts);
-      expect(find.text('Подробнее'), findsNothing, reason: 'сегодня пусто');
-
-      await tester.tap(find.text('Все дни'));
-      await tester.pumpAndSettle();
-
+      // Сегодня пусто — лента сама открылась на «Все дни», а не на
+      // пустом дне.
       expect(find.text('Две недели'), findsOneWidget);
       expect(find.text('2 смены'), findsOneWidget);
       expect(find.textContaining('Завтра, '), findsOneWidget);
