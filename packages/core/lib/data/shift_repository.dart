@@ -352,7 +352,11 @@ List<Shift> applyFilter(List<Shift> shifts, ShiftFilter filter) {
     result = result.where((s) {
       // Категория тоже участвует: «сантехник» найдёт смену, даже если
       // заказчик назвал её «Замена смесителя».
-      final haystack = '${s.title} ${s.categoryInfo.name} '
+      //
+      // Название вида работ — на всех трёх языках сразу. Человек с
+      // приложением на казахском может набрать «грузчик», а на русском —
+      // «loader»: слово он знает, а язык приложения тут ни при чём.
+      final haystack = '${s.title} ${_categoryNames(s.category)} '
               '${s.company} ${s.address}'
           .toLowerCase();
       // Все слова запроса должны найтись — но в любом порядке.
@@ -403,6 +407,11 @@ List<Shift> applyFilter(List<Shift> shifts, ShiftFilter filter) {
   }
   return result;
 }
+
+/// Название вида работ на всех языках — для поиска словами.
+String _categoryNames(String id) =>
+    [for (final lang in Lang.values) CoreStrings.of(lang).category(id)]
+        .join(' ');
 
 /// Ключи категорий — в том порядке, в каком они стоят в справочнике.
 ///
