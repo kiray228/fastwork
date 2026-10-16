@@ -178,8 +178,15 @@ class _MyShiftsPageState extends State<MyShiftsPage> {
                     key: ValueKey(archived),
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                    itemCount: value.length,
-                    itemBuilder: (context, index) {
+                    itemCount: value.length + (archived ? 0 : 1),
+                    itemBuilder: (context, rawIndex) {
+                      // «В работе» начинается с итога: сколько смен впереди
+                      // и сколько за них придёт. Ради этого числа человек
+                      // и выходит на смены.
+                      if (!archived && rawIndex == 0) {
+                        return _UpcomingTotal(shifts: value);
+                      }
+                      final index = archived ? rawIndex : rawIndex - 1;
                       final shift = value[index];
                       final now = DateTime.now();
 
@@ -379,3 +386,41 @@ class _ArchiveFooter extends StatelessWidget {
     );
   }
 }
+
+/// Итог над «В работе»: сколько смен впереди и сколько за них заплатят.
+class _UpcomingTotal extends StatelessWidget {
+  final List<Shift> shifts;
+
+  const _UpcomingTotal({required this.shifts});
+
+  @override
+  Widget build(BuildContext context) {
+    final booked = [
+      for (final s in shifts)
+        if (s.isApplied && !s.isCancelled) s,
+    ];
+    if (booked.isEmpty) return const SizedBox.shrink();
+    final total = booked.fold(0, (sum, s) => sum + s.totalPay);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          const Icon(Icons.account_balance_wallet_outlined,
+              size: 18, color: AppColors.brand),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              tr.profile.upcomingTotal(
+                  shiftsLabel(booked.length), formatMoney(total)),
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
