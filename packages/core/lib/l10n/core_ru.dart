@@ -220,6 +220,9 @@ class CoreRu extends CoreStrings {
   String get paymentNotSandbox =>
       'Эта оплата идёт через платёжный сервис, а не в тестовом режиме';
   @override
+  String get paymentMethodOff =>
+      'Этот способ оплаты пока не подключён — выберите другой';
+  @override
   String get payoutNotSandbox =>
       'Этот вывод идёт через платёжный сервис, а не в тестовом режиме';
   @override

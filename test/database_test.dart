@@ -1378,4 +1378,134 @@ void main() {
     session.setUser(manager);
     expect((await shifts.applicantsFor(shiftId)).single.checkInVerified, isTrue);
   });
+
+  test('отметившемуся по коду невыход не поставить', () async {
+    final (shiftId, worker, manager) = await upcomingShift(); // сегодня 10:00
+    session.setUser(manager);
+    final code = (await shifts.checkInCode(shiftId))!;
+
+    clock.setHour(10);
+    session.setUser(worker);
+    expect(await shifts.checkIn(shiftId, code: code), BookingResult.ok);
+
+    // Код видно только на точке — значит, человек был на месте. Невыход
+    // забрал бы его заработок заказчику.
+    session.setUser(manager);
+    expect(
+      await shifts.markNoShow(shiftId: shiftId, workerId: worker.id),
+      BookingResult.checkedIn,
+    );
+    expect(
+      await shifts.confirmAttendance(shiftId: shiftId, workerId: worker.id),
+      BookingResult.ok,
+    );
+  });
+
+  test('код отметки не перебрать: после пяти ошибок он не принимается',
+      () async {
+    final (shiftId, worker, manager) = await upcomingShift();
+    session.setUser(manager);
+    final code = (await shifts.checkInCode(shiftId))!;
+    final wrong = code == '0000' ? '1111' : '0000';
+
+    clock.setHour(10);
+    session.setUser(worker);
+    for (var i = 0; i < kMaxCheckInAttempts; i++) {
+      expect(await shifts.checkIn(shiftId, code: wrong),
+          BookingResult.wrongCode);
+    }
+    expect(await shifts.checkIn(shiftId, code: code),
+        BookingResult.tooManyAttempts,
+        reason: 'даже верный код — попытки кончились');
+    expect((await shifts.shiftById(shiftId))!.isCheckedIn, isFalse);
+  });
+
+  test('одновременный перебор кода тоже упирается в предел', () async {
+    final (shiftId, worker, manager) = await upcomingShift();
+    session.setUser(manager);
+    final code = (await shifts.checkInCode(shiftId))!;
+
+    clock.setHour(10);
+    session.setUser(worker);
+    final guesses = [
+      for (var i = 0; i < 100; i++) i.toString().padLeft(4, '0'),
+    ]..remove(code);
+    await Future.wait(guesses.map((g) => shifts.checkIn(shiftId, code: g)));
+    expect(await shifts.checkIn(shiftId, code: code),
+        BookingResult.tooManyAttempts);
+  });
+
+  test('ночная смена после полуночи — ещё в работе, и отметиться можно',
+      () async {
+    final manager = await auth.register(
+      phone: '77000000901',
+      fullName: 'Айгуль Досова',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      role: UserRole.manager,
+      company: 'Magnum',
+    );
+    final worker = await auth.register(
+      phone: '77000000902',
+      fullName: 'Ернар Калдыбеков',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    session.setUser(manager);
+    final shiftId = await shifts.publishShift(
+      workDate: daysAgo(0),
+      title: 'Ночная выкладка товара',
+      company: 'Magnum',
+      address: 'г. Алматы, ул. Абая, 1',
+      startMinutes: 22 * 60,
+      endMinutes: 6 * 60,
+      hourlyRate: 100000,
+      workersNeeded: 1,
+      createdBy: manager.id,
+      city: 'Алматы',
+      card: testCard,
+    );
+    session.setUser(worker);
+    expect(await shifts.apply(shiftId), BookingResult.ok);
+
+    // Десять минут первого: день смены уже вчерашний, а сама смена идёт.
+    final today = DateTime(clock.now.year, clock.now.month, clock.now.day);
+    clock.now = today.add(const Duration(days: 1, minutes: 10));
+    final active = await shifts.myShifts(archived: false);
+    expect(active.map((s) => s.id), contains(shiftId));
+    expect(
+      (await shifts.myShifts(archived: true)).map((s) => s.id),
+      isNot(contains(shiftId)),
+    );
+    expect(await shifts.checkIn(shiftId), BookingResult.ok);
+
+    // Утром смена кончилась — и уходит в архив.
+    clock.now = today.add(const Duration(days: 1, hours: 7));
+    expect(
+      (await shifts.myShifts(archived: true)).map((s) => s.id),
+      contains(shiftId),
+    );
+  });
+
+  test('повторная запись — с чистого листа: «точно выйду» не переносится',
+      () async {
+    final (shiftId, worker, manager) = await upcomingShift(); // сегодня 10:00
+    session.setUser(worker);
+    // Вчера в 23:00: подтвердить уже можно, а отменить ещё не поздно.
+    clock.now = DateTime(clock.now.year, clock.now.month, clock.now.day - 1, 23);
+    expect(await shifts.confirmComing(shiftId), BookingResult.ok);
+    expect(await shifts.cancelApplication(shiftId), BookingResult.ok);
+    expect(await shifts.apply(shiftId), BookingResult.ok);
+
+    expect((await shifts.shiftById(shiftId))!.isComingConfirmed, isFalse);
+    session.setUser(manager);
+    expect((await shifts.applicantsFor(shiftId)).single.comingConfirmedAt,
+        isNull);
+  });
+
+  test('на свою смену записаться нельзя', () async {
+    final (shiftId, _, manager) = await upcomingShift();
+    session.setUser(manager);
+    expect(await shifts.apply(shiftId), BookingResult.ownShift);
+  });
 }

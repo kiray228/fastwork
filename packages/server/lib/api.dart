@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
@@ -63,6 +64,52 @@ class Api {
     this.webhookSecrets = const {},
   })  : auth = AuthService(db, sender),
         payments = payments ?? SandboxPaymentGateway();
+
+  /// Сколько байт можно прислать в одном запросе.
+  ///
+  /// Самый большой честный запрос — смена с описанием и обязанностями —
+  /// занимает пару килобайт. Без предела сервер читал бы в память всё, что
+  /// пришлют, и один запрос на гигабайт уронил бы его для всех.
+  static const maxBodyBytes = 64 * 1024;
+
+  /// Общие проверки перед любым маршрутом.
+  ///
+  /// Стоят снаружи маршрутов, поэтому действуют на все адреса сразу — и
+  /// на те, куда пускают без входа.
+  Future<Response> _guarded(Request request, Handler routes) async {
+    final limited = await _limitBody(request);
+    if (limited == null) {
+      return _error(serverTr.requestTooLarge, status: 413);
+    }
+    try {
+      return await routes(limited);
+    } on FormatException {
+      // Кривой JSON на адресе без входа: раньше это было 500.
+      return _error(serverTr.badRequest);
+    } on TypeError {
+      return _error(serverTr.badRequestShape);
+    } on ProviderException catch (e) {
+      // Платёжный сервис не ответил посреди возврата. Ошибка не наша и
+      // не клиента — «плохой шлюз», 502, а подробности в журнал.
+      stderr.writeln('платёжный сервис: $e');
+      return _error(serverTr.providerUnavailable, status: 502);
+    }
+  }
+
+  /// Прочитать тело не больше предела. null — тело слишком большое.
+  ///
+  /// Заголовку Content-Length не верим на слово: его может не быть, а
+  /// может и соврать. Считаем байты сами, пока читаем.
+  static Future<Request?> _limitBody(Request request) async {
+    final declared = request.contentLength;
+    if (declared != null && declared > maxBodyBytes) return null;
+    final bytes = <int>[];
+    await for (final chunk in request.read()) {
+      bytes.addAll(chunk);
+      if (bytes.length > maxBodyBytes) return null;
+    }
+    return request.change(body: bytes);
+  }
 
   /// Найти пользователя по почте — нужно после ввода кода.
   Future<AppUser?> _userByEmail(String email) async {
@@ -187,7 +234,7 @@ class Api {
     final routes = _routes;
     return (request) => withLang(
           Lang.fromHeader(request.headers['accept-language']),
-          () => routes.call(request),
+          () => _guarded(request, routes.call),
         );
   }
 
@@ -308,6 +355,20 @@ class Api {
       final fullName = (body['fullName'] as String? ?? '').trim();
       if (fullName.length < 2) return _error(serverTr.needFullName);
 
+      // Роль и город — из короткого списка, а не что пришлют. Иначе роль
+      // «admin» или город «<script>» легли бы в базу как есть, а человек с
+      // выдуманным городом не увидел бы ни одной смены.
+      final role = body['role'] as String? ?? UserRole.worker;
+      if (role != UserRole.worker && role != UserRole.manager) {
+        return _error(serverTr.badRequestShape);
+      }
+      final city = body['city'] as String? ?? kCities.first;
+      if (!kCities.contains(city)) return _error(serverTr.unknownCity);
+      final company = (body['company'] as String?)?.trim();
+      if (role == UserRole.manager && (company == null || company.isEmpty)) {
+        return _error(serverTr.needCompany);
+      }
+
       final repository = DbAuthRepository(db);
       if (await repository.findByPhone(phone) != null) {
         return _error(serverTr.phoneTaken);
@@ -319,9 +380,9 @@ class Api {
           phone: phone,
           email: info.email,
           fullName: fullName,
-          city: body['city'] as String? ?? 'Алматы',
-          role: body['role'] as String? ?? UserRole.worker,
-          company: body['company'] as String?,
+          city: city,
+          role: role,
+          company: role == UserRole.manager ? company : null,
           // Старое приложение этого поля не шлёт — значит, правил человек
           // не видел, и аккаунт без них не создаём.
           acceptedTermsVersion: body['acceptedTermsVersion'] as int? ?? 0,
@@ -402,10 +463,9 @@ class Api {
     router.post('/api/me/city', (Request request) async {
       return _authorized(request, (user) async {
         final body = await _body(request);
-        final updated = await DbAuthRepository(db).changeCity(
-          user.id,
-          body['city'] as String? ?? user.city,
-        );
+        final city = body['city'] as String? ?? user.city;
+        if (!kCities.contains(city)) return _error(serverTr.unknownCity);
+        final updated = await DbAuthRepository(db).changeCity(user.id, city);
         return _json(updated!.toJson());
       });
     });

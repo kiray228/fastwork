@@ -145,6 +145,7 @@ abstract class CoreStrings {
   String get shiftWasCancelled;
   String get shiftAlreadyPaid;
   String get paymentNotSandbox;
+  String get paymentMethodOff;
   String get payoutNotSandbox;
   String get providerNoAnswer;
   String get paymentFailed;

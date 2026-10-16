@@ -89,6 +89,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
         BookingResult.timeConflict => tr.shift.bookTimeConflict,
         BookingResult.alreadyFinished => tr.shift.bookAlreadyFinished,
         BookingResult.earningsLimit => tr.shift.bookEarningsLimit,
+        BookingResult.ownShift => tr.shift.bookOwnShift,
         _ => tr.shift.bookFailed,
       },
     );
@@ -120,6 +121,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
         BookingResult.ok => tr.shift.checkInOkSnack,
         BookingResult.alreadyBooked => tr.shift.checkInAlready,
         BookingResult.wrongCode => tr.shift.checkInWrongCode,
+        BookingResult.tooManyAttempts => tr.shift.checkInLocked,
         BookingResult.tooEarlyToCheckIn => tr.shift.checkInTooEarly,
         _ => tr.shift.checkInFailed,
       },

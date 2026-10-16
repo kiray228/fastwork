@@ -213,6 +213,9 @@ class CoreKk extends CoreStrings {
   String get paymentNotSandbox =>
       'Бұл төлем сынақ режимінде емес, төлем қызметі арқылы өтеді';
   @override
+  String get paymentMethodOff =>
+      'Бұл төлем тәсілі әлі қосылмаған — басқасын таңдаңыз';
+  @override
   String get payoutNotSandbox =>
       'Бұл шығару сынақ режимінде емес, төлем қызметі арқылы өтеді';
   @override

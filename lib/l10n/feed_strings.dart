@@ -89,6 +89,7 @@ abstract class FeedStrings {
   String get sorting;
   String get onlyOpen;
   String get showResults;
+  String get checkInLocked;
 }
 
 class _Ru extends FeedStrings {
@@ -210,6 +211,9 @@ class _Ru extends FeedStrings {
   String get onlyOpen => 'Только со свободными местами';
   @override
   String get showResults => 'Показать результаты';
+  @override
+  String get checkInLocked =>
+      'Код введён неверно слишком много раз — отметьтесь у старшего смены';
 }
 
 class _Kk extends FeedStrings {
@@ -335,6 +339,9 @@ class _Kk extends FeedStrings {
   String get onlyOpen => 'Тек бос орны барлар';
   @override
   String get showResults => 'Нәтижелерді көрсету';
+  @override
+  String get checkInLocked =>
+      'Код тым көп рет қате енгізілді — ауысым жетекшісіне белгіленіңіз';
 }
 
 class _En extends FeedStrings {
@@ -456,4 +463,7 @@ class _En extends FeedStrings {
   String get onlyOpen => 'Only with open spots';
   @override
   String get showResults => 'Show results';
+  @override
+  String get checkInLocked =>
+      'Too many wrong codes — ask the shift lead to mark you';
 }

@@ -311,10 +311,20 @@ class PaymentGateway {
   /// Хоть где-то деньги ненастоящие — экран честно об этом скажет.
   bool get isSandbox => card.isSandbox || kaspi.isSandbox;
 
+  /// Можно ли сейчас платить этим способом.
+  ///
+  /// Нельзя, если способ тестовый, а выплаты настоящие. Иначе смену
+  /// «оплатили» бы понарошку, а исполнитель вывел бы за неё живые деньги
+  /// на карту: сервис платил бы из своего кармана за то, чего не получал.
+  /// Так бывает, когда подключён только ioka (карты и выплаты), а Kaspi
+  /// ещё тестовый.
+  bool accepts(PaymentMethod method) =>
+      !provider(method).isSandbox || payouts.isSandbox;
+
   /// Тестовый провайдер этого способа — чтобы «заплатить» без провайдера.
   SandboxProvider? sandboxFor(PaymentMethod method) {
     final p = provider(method);
-    return p is SandboxProvider ? p : null;
+    return p is SandboxProvider && accepts(method) ? p : null;
   }
 
   SandboxProvider? get sandboxPayouts {

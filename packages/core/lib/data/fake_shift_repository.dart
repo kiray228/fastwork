@@ -144,6 +144,11 @@ class FakeShiftRepository implements ShiftRepository {
     if (!limit.allows(shift.totalPay)) return BookingResult.earningsLimit;
 
     _myStatuses[shiftId] = ApplicationStatus.active;
+    // Повторная запись — с чистого листа, как в базе.
+    _coming.remove(shiftId);
+    _checkIns.remove(shiftId);
+    _verified.remove(shiftId);
+    _attempts.remove(shiftId);
     _waitlist.remove(shiftId);
     return BookingResult.ok;
   }
@@ -159,8 +164,11 @@ class FakeShiftRepository implements ShiftRepository {
     if (!shift.canCheckInAt(clock())) {
       return BookingResult.tooEarlyToCheckIn;
     }
-    if (code != null && code.trim() != _codes[shiftId]) {
-      return BookingResult.wrongCode;
+    if (code != null) {
+      final used = _attempts[shiftId] ?? 0;
+      if (used >= kMaxCheckInAttempts) return BookingResult.tooManyAttempts;
+      _attempts[shiftId] = used + 1;
+      if (code.trim() != _codes[shiftId]) return BookingResult.wrongCode;
     }
 
     _checkIns[shiftId] = clock();
@@ -187,6 +195,9 @@ class FakeShiftRepository implements ShiftRepository {
   /// Коды отметки по сменам и смены, где отметка подтверждена кодом.
   final Map<int, String> _codes = {};
   final Set<int> _verified = {};
+
+  /// Сколько раз вводили код отметки по смене.
+  final Map<int, int> _attempts = {};
 
   @override
   Future<String?> checkInCode(int shiftId) async =>
@@ -683,6 +694,7 @@ class FakeShiftRepository implements ShiftRepository {
     if (status == null) return BookingResult.notFound;
     if (status == ApplicationStatus.noShow) return BookingResult.ok;
     if (status != ApplicationStatus.active) return BookingResult.alreadyBooked;
+    if (_verified.contains(shiftId)) return BookingResult.checkedIn;
     final shift = (await shiftById(shiftId))!;
     if (!shift.hasStartedAt(clock())) return BookingResult.notStarted;
 
@@ -822,8 +834,9 @@ class FakeShiftRepository implements ShiftRepository {
     return _shifts.where((s) {
       final status = _myStatuses[s.id];
       if (status == null) return false;
-      final isActive =
-          status == ApplicationStatus.active && !s.workDate.isBefore(today);
+      // Ночная смена после полуночи ещё идёт — она в работе, как в базе.
+      final isActive = status == ApplicationStatus.active &&
+          (!s.workDate.isBefore(today) || s.isAheadAt(now));
       return archived ? !isActive : isActive;
     }).map(_decorate).toList();
   }

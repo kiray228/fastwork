@@ -116,4 +116,42 @@ void main() {
     expect(at(12, 600, 840).overlaps(at(12, 840, 1200)), isFalse);
     expect(at(12, 600, 900).overlaps(at(12, 840, 1200)), isTrue);
   });
+
+  test('10:00–10:00 — опечатка, а не смена на сутки', () {
+    String? problem(int start, int end) => shiftFormError(
+          title: 'Услуги грузчика',
+          address: 'ул. Абая, 1',
+          workDate: DateTime(2026, 9, 18),
+          startMinutes: start,
+          endMinutes: end,
+          hourlyRate: 110000,
+          workersNeeded: 1,
+          now: DateTime(2026, 9, 17, 12),
+        );
+    expect(problem(600, 600), isNotNull);
+    expect(problem(600, 1260), isNull);
+    expect(problem(1320, 360), isNull, reason: 'ночная смена — не ошибка');
+  });
+
+  test('на ночную смену отмечаются и после полуночи, до её конца', () {
+    final night = shift(start: 1320, end: 360, rate: 110000)
+        .copyWith(myStatus: 'active');
+    final day = DateTime(2026, 9, 17);
+    expect(night.canCheckInAt(day.add(const Duration(hours: 21))), isTrue);
+    expect(night.canCheckInAt(day.add(const Duration(hours: 24, minutes: 10))),
+        isTrue);
+    expect(night.canCheckInAt(day.add(const Duration(hours: 30))), isFalse,
+        reason: 'смена кончилась в 06:00');
+
+    // Смена в 00:30 открывает отметку в 23:30 накануне.
+    final early = shift(start: 30, end: 480, rate: 110000)
+        .copyWith(myStatus: 'active');
+    expect(early.canCheckInAt(day.subtract(const Duration(minutes: 30))),
+        isTrue);
+    // Дневная — до конца своего дня, как и раньше.
+    final daily = shift(start: 600, end: 1260, rate: 110000)
+        .copyWith(myStatus: 'active');
+    expect(daily.canCheckInAt(day.add(const Duration(hours: 23))), isTrue);
+    expect(daily.canCheckInAt(day.add(const Duration(hours: 25))), isFalse);
+  });
 }

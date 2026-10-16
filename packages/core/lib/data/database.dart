@@ -586,6 +586,11 @@ class ApplicationRows extends Table {
   /// знает, на кого рассчитывать, а кого стоит переспросить.
   DateTimeColumn get comingConfirmedAt => dateTime().nullable()();
 
+  /// Сколько раз исполнитель вводил код отметки. После
+  /// `kMaxCheckInAttempts` неверных код больше не принимается: четыре
+  /// цифры иначе перебираются из дома.
+  IntColumn get checkInAttempts => integer().withDefault(const Constant(0))();
+
   /// Один работник не может откликнуться на одну смену дважды.
   /// Это проверяет сама база — обойти нельзя.
   @override
@@ -790,8 +795,38 @@ class AppDatabase extends _$AppDatabase {
     return rows.map((r) => r.read<String>('name')).toSet();
   }
 
+  /// Индексы под частые запросы.
+  ///
+  /// Без них база на каждый вопрос «сколько непрочитанных» или «мои
+  /// смены» читает таблицу целиком. Пока строк сотня, это незаметно; на
+  /// живом сервере с тысячами уведомлений и откликов — заметно, тем более
+  /// что число на колокольчике спрашивается постоянно, а напоминания и
+  /// опрос оплат ходят по таблицам каждый час и каждую минуту.
+  ///
+  /// `IF NOT EXISTS` понимают и SQLite, и PostgreSQL, поэтому индексы
+  /// заводятся при каждом открытии: новая база получит их сразу, старая —
+  /// при первом запуске, и номер схемы ради них поднимать не нужно.
+  Future<void> _createIndexes() async {
+    const indexes = {
+      'idx_notifications_user': 'notification_rows (user_id, read_at)',
+      'idx_applications_worker': 'application_rows (worker_id, status)',
+      'idx_shifts_city_date': 'shift_rows (city, work_date)',
+      'idx_shifts_created_by': 'shift_rows (created_by)',
+      'idx_wallet_user': 'wallet_entry_rows (user_id)',
+      'idx_wallet_shift': 'wallet_entry_rows (shift_id, kind)',
+      'idx_charges_status': 'charge_rows (status, created_at)',
+      'idx_charges_shift': 'charge_rows (shift_id)',
+      'idx_worker_reviews_worker': 'worker_review_rows (worker_id)',
+      'idx_company_follows_company': 'company_follow_rows (company)',
+      'idx_category_follows_category': 'category_follow_rows (category)',
+    };
+    for (final MapEntry(key: name, value: on) in indexes.entries) {
+      await customStatement('CREATE INDEX IF NOT EXISTS $name ON $on');
+    }
+  }
+
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -899,6 +934,10 @@ class AppDatabase extends _$AppDatabase {
             await addColumnIfMissing(
                 m, applicationRows, applicationRows.comingConfirmedAt);
           }
+          if (from < 22) {
+            await addColumnIfMissing(
+                m, applicationRows, applicationRows.checkInAttempts);
+          }
         },
         beforeOpen: (details) async {
           // Без этой строки SQLite не проверяет внешние ключи — редкая
@@ -910,6 +949,7 @@ class AppDatabase extends _$AppDatabase {
           if (executor.dialect == SqlDialect.sqlite) {
             await customStatement('PRAGMA foreign_keys = ON');
           }
+          await _createIndexes();
         },
       );
 }
