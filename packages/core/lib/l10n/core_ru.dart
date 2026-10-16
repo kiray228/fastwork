@@ -344,6 +344,27 @@ class CoreRu extends CoreStrings {
         body: '«$title» ${dayMonth(day)}: ${changes.join(', ')}.',
       );
   @override
+  Note releasedByEdit(String title, DateTime day, List<String> changes,
+          {required bool overLimit}) =>
+      (
+        title: 'Запись снята',
+        body: '«$title» ${dayMonth(day)}: ${changes.join(', ')}. '
+            '${overLimit ? 'С новой оплатой доход за месяц превысил бы '
+                'предел в 300 МРП' : 'Новое время совпадает с другой вашей '
+                'сменой'}, поэтому запись снята. Вашей отменой это не '
+            'считается.',
+      );
+  @override
+  Note workerReleased(String name, String title, DateTime day,
+          {required bool overLimit}) =>
+      (
+        title: 'Запись снята после правки',
+        body: '$name не сможет выйти на «$title» ${dayMonth(day)}: '
+            '${overLimit ? 'с новой оплатой доход человека за месяц '
+                'превысил бы предел в 300 МРП' : 'в новое время у человека '
+                'другая смена'}. Место снова свободно.',
+      );
+  @override
   String changedDay(DateTime day) => 'новый день — ${dayMonth(day)}';
   @override
   String changedTime(String time) => 'новое время — $time';

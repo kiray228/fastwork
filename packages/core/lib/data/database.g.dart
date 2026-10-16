@@ -5609,6 +5609,18 @@ class $NotificationRowsTable extends NotificationRows
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _remindedStartMeta = const VerificationMeta(
+    'remindedStart',
+  );
+  @override
+  late final GeneratedColumn<DateTime> remindedStart =
+      GeneratedColumn<DateTime>(
+        'reminded_start',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -5619,6 +5631,7 @@ class $NotificationRowsTable extends NotificationRows
     shiftId,
     createdAt,
     readAt,
+    remindedStart,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5687,6 +5700,15 @@ class $NotificationRowsTable extends NotificationRows
         readAt.isAcceptableOrUnknown(data['read_at']!, _readAtMeta),
       );
     }
+    if (data.containsKey('reminded_start')) {
+      context.handle(
+        _remindedStartMeta,
+        remindedStart.isAcceptableOrUnknown(
+          data['reminded_start']!,
+          _remindedStartMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -5728,6 +5750,10 @@ class $NotificationRowsTable extends NotificationRows
         DriftSqlType.dateTime,
         data['${effectivePrefix}read_at'],
       ),
+      remindedStart: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}reminded_start'],
+      ),
     );
   }
 
@@ -5759,6 +5785,14 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
 
   /// Когда прочитано. null — ещё не прочитано.
   final DateTime? readAt;
+
+  /// Только у напоминаний: на какое начало смены оно было.
+  ///
+  /// Повтор напоминаний раньше отсекали по паре «человек и смена». Смену
+  /// перенесли на другой день после напоминания — и о новом дне никто
+  /// уже не напоминал. Теперь «уже напомнили» значит «напомнили об этом
+  /// самом начале». null — напоминание из версий до схемы 23.
+  final DateTime? remindedStart;
   const NotificationRow({
     required this.id,
     required this.userId,
@@ -5768,6 +5802,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
     this.shiftId,
     required this.createdAt,
     this.readAt,
+    this.remindedStart,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -5783,6 +5818,9 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || readAt != null) {
       map['read_at'] = Variable<DateTime>(readAt);
+    }
+    if (!nullToAbsent || remindedStart != null) {
+      map['reminded_start'] = Variable<DateTime>(remindedStart);
     }
     return map;
   }
@@ -5801,6 +5839,9 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
       readAt: readAt == null && nullToAbsent
           ? const Value.absent()
           : Value(readAt),
+      remindedStart: remindedStart == null && nullToAbsent
+          ? const Value.absent()
+          : Value(remindedStart),
     );
   }
 
@@ -5818,6 +5859,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
       shiftId: serializer.fromJson<int?>(json['shiftId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       readAt: serializer.fromJson<DateTime?>(json['readAt']),
+      remindedStart: serializer.fromJson<DateTime?>(json['remindedStart']),
     );
   }
   @override
@@ -5832,6 +5874,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
       'shiftId': serializer.toJson<int?>(shiftId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'readAt': serializer.toJson<DateTime?>(readAt),
+      'remindedStart': serializer.toJson<DateTime?>(remindedStart),
     };
   }
 
@@ -5844,6 +5887,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
     Value<int?> shiftId = const Value.absent(),
     DateTime? createdAt,
     Value<DateTime?> readAt = const Value.absent(),
+    Value<DateTime?> remindedStart = const Value.absent(),
   }) => NotificationRow(
     id: id ?? this.id,
     userId: userId ?? this.userId,
@@ -5853,6 +5897,9 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
     shiftId: shiftId.present ? shiftId.value : this.shiftId,
     createdAt: createdAt ?? this.createdAt,
     readAt: readAt.present ? readAt.value : this.readAt,
+    remindedStart: remindedStart.present
+        ? remindedStart.value
+        : this.remindedStart,
   );
   NotificationRow copyWithCompanion(NotificationRowsCompanion data) {
     return NotificationRow(
@@ -5864,6 +5911,9 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
       shiftId: data.shiftId.present ? data.shiftId.value : this.shiftId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       readAt: data.readAt.present ? data.readAt.value : this.readAt,
+      remindedStart: data.remindedStart.present
+          ? data.remindedStart.value
+          : this.remindedStart,
     );
   }
 
@@ -5877,14 +5927,24 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
           ..write('body: $body, ')
           ..write('shiftId: $shiftId, ')
           ..write('createdAt: $createdAt, ')
-          ..write('readAt: $readAt')
+          ..write('readAt: $readAt, ')
+          ..write('remindedStart: $remindedStart')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, userId, kind, title, body, shiftId, createdAt, readAt);
+  int get hashCode => Object.hash(
+    id,
+    userId,
+    kind,
+    title,
+    body,
+    shiftId,
+    createdAt,
+    readAt,
+    remindedStart,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -5896,7 +5956,8 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
           other.body == this.body &&
           other.shiftId == this.shiftId &&
           other.createdAt == this.createdAt &&
-          other.readAt == this.readAt);
+          other.readAt == this.readAt &&
+          other.remindedStart == this.remindedStart);
 }
 
 class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
@@ -5908,6 +5969,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
   final Value<int?> shiftId;
   final Value<DateTime> createdAt;
   final Value<DateTime?> readAt;
+  final Value<DateTime?> remindedStart;
   const NotificationRowsCompanion({
     this.id = const Value.absent(),
     this.userId = const Value.absent(),
@@ -5917,6 +5979,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
     this.shiftId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.readAt = const Value.absent(),
+    this.remindedStart = const Value.absent(),
   });
   NotificationRowsCompanion.insert({
     this.id = const Value.absent(),
@@ -5927,6 +5990,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
     this.shiftId = const Value.absent(),
     required DateTime createdAt,
     this.readAt = const Value.absent(),
+    this.remindedStart = const Value.absent(),
   }) : userId = Value(userId),
        kind = Value(kind),
        title = Value(title),
@@ -5941,6 +6005,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
     Expression<int>? shiftId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? readAt,
+    Expression<DateTime>? remindedStart,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -5951,6 +6016,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
       if (shiftId != null) 'shift_id': shiftId,
       if (createdAt != null) 'created_at': createdAt,
       if (readAt != null) 'read_at': readAt,
+      if (remindedStart != null) 'reminded_start': remindedStart,
     });
   }
 
@@ -5963,6 +6029,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
     Value<int?>? shiftId,
     Value<DateTime>? createdAt,
     Value<DateTime?>? readAt,
+    Value<DateTime?>? remindedStart,
   }) {
     return NotificationRowsCompanion(
       id: id ?? this.id,
@@ -5973,6 +6040,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
       shiftId: shiftId ?? this.shiftId,
       createdAt: createdAt ?? this.createdAt,
       readAt: readAt ?? this.readAt,
+      remindedStart: remindedStart ?? this.remindedStart,
     );
   }
 
@@ -6003,6 +6071,9 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
     if (readAt.present) {
       map['read_at'] = Variable<DateTime>(readAt.value);
     }
+    if (remindedStart.present) {
+      map['reminded_start'] = Variable<DateTime>(remindedStart.value);
+    }
     return map;
   }
 
@@ -6016,7 +6087,8 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
           ..write('body: $body, ')
           ..write('shiftId: $shiftId, ')
           ..write('createdAt: $createdAt, ')
-          ..write('readAt: $readAt')
+          ..write('readAt: $readAt, ')
+          ..write('remindedStart: $remindedStart')
           ..write(')'))
         .toString();
   }
@@ -14248,6 +14320,7 @@ typedef $$NotificationRowsTableCreateCompanionBuilder =
       Value<int?> shiftId,
       required DateTime createdAt,
       Value<DateTime?> readAt,
+      Value<DateTime?> remindedStart,
     });
 typedef $$NotificationRowsTableUpdateCompanionBuilder =
     NotificationRowsCompanion Function({
@@ -14259,6 +14332,7 @@ typedef $$NotificationRowsTableUpdateCompanionBuilder =
       Value<int?> shiftId,
       Value<DateTime> createdAt,
       Value<DateTime?> readAt,
+      Value<DateTime?> remindedStart,
     });
 
 class $$NotificationRowsTableFilterComposer
@@ -14307,6 +14381,11 @@ class $$NotificationRowsTableFilterComposer
 
   ColumnFilters<DateTime> get readAt => $composableBuilder(
     column: $table.readAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get remindedStart => $composableBuilder(
+    column: $table.remindedStart,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -14359,6 +14438,11 @@ class $$NotificationRowsTableOrderingComposer
     column: $table.readAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<DateTime> get remindedStart => $composableBuilder(
+    column: $table.remindedStart,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$NotificationRowsTableAnnotationComposer
@@ -14393,6 +14477,11 @@ class $$NotificationRowsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get readAt =>
       $composableBuilder(column: $table.readAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get remindedStart => $composableBuilder(
+    column: $table.remindedStart,
+    builder: (column) => column,
+  );
 }
 
 class $$NotificationRowsTableTableManager
@@ -14440,6 +14529,7 @@ class $$NotificationRowsTableTableManager
                 Value<int?> shiftId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> readAt = const Value.absent(),
+                Value<DateTime?> remindedStart = const Value.absent(),
               }) => NotificationRowsCompanion(
                 id: id,
                 userId: userId,
@@ -14449,6 +14539,7 @@ class $$NotificationRowsTableTableManager
                 shiftId: shiftId,
                 createdAt: createdAt,
                 readAt: readAt,
+                remindedStart: remindedStart,
               ),
           createCompanionCallback:
               ({
@@ -14460,6 +14551,7 @@ class $$NotificationRowsTableTableManager
                 Value<int?> shiftId = const Value.absent(),
                 required DateTime createdAt,
                 Value<DateTime?> readAt = const Value.absent(),
+                Value<DateTime?> remindedStart = const Value.absent(),
               }) => NotificationRowsCompanion.insert(
                 id: id,
                 userId: userId,
@@ -14469,6 +14561,7 @@ class $$NotificationRowsTableTableManager
                 shiftId: shiftId,
                 createdAt: createdAt,
                 readAt: readAt,
+                remindedStart: remindedStart,
               ),
           withReferenceMapper: (p0) => p0
               .map(

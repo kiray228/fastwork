@@ -342,6 +342,27 @@ class CoreKk extends CoreStrings {
         body: '«$title», ${dayMonth(day)}: ${changes.join(', ')}.',
       );
   @override
+  Note releasedByEdit(String title, DateTime day, List<String> changes,
+          {required bool overLimit}) =>
+      (
+        title: 'Жазылу алынды',
+        body: '«$title», ${dayMonth(day)}: ${changes.join(', ')}. '
+            '${overLimit ? 'Жаңа төлеммен айлық табысыңыз 300 АЕК шегінен '
+                'асып кетер еді' : 'Жаңа уақыт сіздің басқа ауысымыңызбен '
+                'сәйкес келеді'}, сондықтан жазылу алынды. Бұл сіздің бас '
+            'тартуыңыз болып саналмайды.',
+      );
+  @override
+  Note workerReleased(String name, String title, DateTime day,
+          {required bool overLimit}) =>
+      (
+        title: 'Өзгерістен кейін жазылу алынды',
+        body: '$name ${dayMonth(day)} «$title» ауысымына шыға алмайды: '
+            '${overLimit ? 'жаңа төлеммен адамның айлық табысы 300 АЕК '
+                'шегінен асып кетер еді' : 'жаңа уақытта адамның басқа '
+                'ауысымы бар'}. Орын қайта бос.',
+      );
+  @override
   String changedDay(DateTime day) => 'жаңа күн — ${dayMonth(day)}';
   @override
   String changedTime(String time) => 'жаңа уақыт — $time';
