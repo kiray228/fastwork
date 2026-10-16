@@ -38,6 +38,9 @@ enum NotificationKind {
 
   /// Компания, на которую человек подписан, выставила новую смену.
   newShift,
+
+  /// Новое сообщение в переписке по смене.
+  message,
 }
 
 /// Одно уведомление в колокольчике.
@@ -69,6 +72,10 @@ class AppNotification {
   /// (`readAt != null`), а из галочки время уже не вернёшь.
   final DateTime? readAt;
 
+  /// С кем переписка — у уведомлений о сообщениях. Заказчику нужен, чтобы
+  /// открыть разговор именно с этим человеком.
+  final int? peerId;
+
   const AppNotification({
     required this.id,
     required this.kind,
@@ -77,6 +84,7 @@ class AppNotification {
     required this.shiftId,
     required this.createdAt,
     required this.readAt,
+    this.peerId,
   });
 
   bool get isUnread => readAt == null;
@@ -103,6 +111,7 @@ extension AppNotificationJson on AppNotification {
         'shiftId': shiftId,
         'createdAt': createdAt.toIso8601String(),
         'readAt': readAt?.toIso8601String(),
+        'peerId': peerId,
       };
 }
 
@@ -117,4 +126,5 @@ AppNotification notificationFromJson(Map<String, dynamic> json) =>
       readAt: json['readAt'] == null
           ? null
           : DateTime.parse(json['readAt'] as String),
+      peerId: json['peerId'] as int?,
     );

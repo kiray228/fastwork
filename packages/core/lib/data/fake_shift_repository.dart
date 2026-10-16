@@ -1,4 +1,6 @@
 import '../category.dart';
+import '../chat.dart';
+import '../errors.dart';
 import '../mrp.dart';
 import '../notification.dart';
 import '../payment.dart';
@@ -881,6 +883,51 @@ class FakeShiftRepository implements ShiftRepository {
         );
       }
     }
+  }
+
+  /// Переписка в памяти. Человек здесь один на всё, поэтому сторону
+  /// различаем по вызову: без `workerId` пишет исполнитель, с ним — заказчик.
+  final List<({int shiftId, int thread, bool fromEmployer, String text})>
+      _chat = [];
+
+  @override
+  Future<List<ShiftMessage>> chatMessages(int shiftId, {int? workerId}) async {
+    if (await shiftById(shiftId) == null) {
+      throw UserError(coreTr.chatNotAllowed);
+    }
+    final thread = workerId ?? 0;
+    var id = 0;
+    return [
+      for (final m in _chat)
+        if (m.shiftId == shiftId && m.thread == thread)
+          ShiftMessage(
+            id: ++id,
+            shiftId: shiftId,
+            workerId: thread,
+            authorId: m.fromEmployer ? 1 : thread,
+            text: m.text,
+            createdAt: clock(),
+            mine: m.fromEmployer == (workerId != null),
+          ),
+    ];
+  }
+
+  @override
+  Future<void> sendChatMessage(
+    int shiftId,
+    String text, {
+    int? workerId,
+  }) async {
+    final body = checkedMessage(text);
+    if (await shiftById(shiftId) == null) {
+      throw UserError(coreTr.chatNotAllowed);
+    }
+    _chat.add((
+      shiftId: shiftId,
+      thread: workerId ?? 0,
+      fromEmployer: workerId != null,
+      text: body,
+    ));
   }
 
   @override

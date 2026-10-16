@@ -1259,6 +1259,28 @@ void main() {
       expect(find.text('Засчитано: 3 чел.'), findsOneWidget);
     });
 
+    testWidgets('исполнитель пишет заказчику быстрой фразой', (tester) async {
+      final repo = FakeShiftRepository(clock: morning(), userRating: 5.0);
+      expect(await repo.apply(1), BookingResult.ok);
+      await openApp(tester, repos: buildRepos(shifts: repo));
+
+      final shift = (await repo.shiftById(1))!;
+      await tester.tap(find.text('Мои'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(shift.title).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Написать заказчику'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Сообщений пока нет'), findsOneWidget);
+      await tester.tap(find.text('Опаздываю на 15 минут').first);
+      await tester.pumpAndSettle();
+
+      expect((await repo.chatMessages(1)).single.text, 'Опаздываю на 15 минут');
+      // Пузырь и чип с той же фразой.
+      expect(find.text('Опаздываю на 15 минут'), findsNWidgets(2));
+    });
+
     testWidgets('заказчик подтверждает выход', (tester) async {
       final now = DateTime.now();
       final repo = FakeShiftRepository(

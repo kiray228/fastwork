@@ -1,3 +1,4 @@
+import 'package:fastwork_core/chat.dart';
 import 'package:fastwork_core/category.dart';
 import 'package:fastwork_core/mrp.dart';
 import 'package:fastwork_core/notification.dart';
@@ -344,6 +345,28 @@ class ApiShiftRepository implements ShiftRepository {
     return data
         .map((e) => workerReviewFromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  @override
+  Future<List<ShiftMessage>> chatMessages(int shiftId, {int? workerId}) async {
+    final data = await client.get('/api/shifts/$shiftId/chat', {
+      if (workerId != null) 'worker': '$workerId',
+    }) as List<dynamic>;
+    return [
+      for (final e in data) ShiftMessage.fromJson(e as Map<String, dynamic>),
+    ];
+  }
+
+  @override
+  Future<void> sendChatMessage(
+    int shiftId,
+    String text, {
+    int? workerId,
+  }) async {
+    await client.post('/api/shifts/$shiftId/chat', {
+      'text': text,
+      'worker': ?workerId,
+    });
   }
 
   @override

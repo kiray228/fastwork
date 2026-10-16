@@ -153,6 +153,28 @@ void main() {
     });
   });
 
+  group('переписка по смене', () {
+    test('без входа не прочитать', () async {
+      final (status, _) = await call('GET', '/api/shifts/1/chat');
+      expect(status, 401);
+    });
+
+    test('о несуществующей смене — отказ, а не падение', () async {
+      final token =
+          await AuthService(db, sender).issue(email: 'chat@example.kz');
+      await call('POST', '/api/auth/register', token: token, body: {
+        'phone': '+7 700 555 44 33',
+        'fullName': 'Ернар Калдыбеков',
+        'acceptedTermsVersion': kTermsVersion,
+      });
+      final (read, _) = await call('GET', '/api/shifts/999/chat', token: token);
+      expect(read, 400);
+      final (send, _) = await call('POST', '/api/shifts/999/chat',
+          token: token, body: {'text': 'привет'});
+      expect(send, 400);
+    });
+  });
+
   group('CORS', () {
     Future<Response> ask(List<String> allowed, String? origin) async =>
         corsFor(allowed)((_) => Response.ok('ok'))(Request(
