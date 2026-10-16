@@ -5,6 +5,7 @@ import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
 import '../l10n/strings.dart';
 import '../theme/app_colors.dart';
+import '../theme/glass.dart';
 import '../widgets/async_state.dart';
 import '../widgets/common.dart';
 import '../widgets/skeleton.dart';
@@ -18,7 +19,14 @@ import '../widgets/skeleton.dart';
 class FavoritesPage extends StatefulWidget {
   final ShiftRepository repository;
 
-  const FavoritesPage({super.key, required this.repository});
+  /// Чьи это любимые — нужен, чтобы предложить его смены для приглашения.
+  final int managerId;
+
+  const FavoritesPage({
+    super.key,
+    required this.repository,
+    required this.managerId,
+  });
 
   @override
   State<FavoritesPage> createState() => _FavoritesPageState();
@@ -54,6 +62,101 @@ class _FavoritesPageState extends State<FavoritesPage> {
     await _load();
   }
 
+  /// Позвать человека на смену, которая недобирает людей.
+  ///
+  /// Список — только то, куда звать имеет смысл: впереди, оплачена,
+  /// есть свободные места.
+  Future<void> _invite(AppUser user) async {
+    final shifts = await guarded(
+      context,
+      () => widget.repository.shiftsCreatedBy(widget.managerId),
+    );
+    if (shifts == null || !mounted) return;
+    final now = DateTime.now();
+    final open = [
+      for (final s in shifts)
+        if (!s.isCancelled &&
+            !s.awaitingPayment &&
+            !s.hasStartedAt(now) &&
+            s.hasFreeSlots)
+          s,
+    ]..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+
+    final picked = await showModalBottomSheet<Shift>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => GlassSheet(
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SheetHandle(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  tr.manager.inviteSheetTitle(user.fullName),
+                  style: Theme.of(sheetContext)
+                      .textTheme
+                      .headlineSmall
+                      ?.copyWith(fontSize: 19),
+                ),
+              ),
+              if (open.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                  child: Text(
+                    tr.manager.inviteNoShifts,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AppColors.muted),
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      for (final s in open)
+                        ListTile(
+                          leading: const Icon(Icons.event_available_rounded,
+                              color: AppColors.brand),
+                          title: Text(s.title),
+                          subtitle: Text(
+                            '${tr.core.dayMonth(s.workDate)}, '
+                            '${formatTime(s.startMinutes)}–'
+                            '${formatTime(s.endMinutes)} · '
+                            '${tr.feed.slotsLeft(s.freeSlots)}',
+                          ),
+                          onTap: () => Navigator.of(sheetContext).pop(s),
+                        ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+
+    final result = await guarded(
+      context,
+      () => widget.repository
+          .inviteToShift(shiftId: picked.id, workerId: user.id),
+    );
+    if (result == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(switch (result) {
+        BookingResult.ok => tr.manager.invitedSnack(user.fullName),
+        BookingResult.alreadyBooked =>
+          tr.manager.inviteAlreadyBooked(user.fullName),
+        _ => tr.manager.inviteFailed,
+      }),
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -87,6 +190,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
                     child: _FavoriteTile(
                       user: user,
                       onRemove: () => _remove(user),
+                      onInvite: () => _invite(user),
                     ),
                   );
                 },
@@ -132,8 +236,13 @@ class _Hint extends StatelessWidget {
 class _FavoriteTile extends StatelessWidget {
   final AppUser user;
   final VoidCallback onRemove;
+  final VoidCallback onInvite;
 
-  const _FavoriteTile({required this.user, required this.onRemove});
+  const _FavoriteTile({
+    required this.user,
+    required this.onRemove,
+    required this.onInvite,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -189,6 +298,11 @@ class _FavoriteTile extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+            IconButton(
+              onPressed: onInvite,
+              tooltip: tr.manager.inviteToShift,
+              icon: const Icon(Icons.send_rounded, color: AppColors.brand),
             ),
             IconButton(
               onPressed: onRemove,

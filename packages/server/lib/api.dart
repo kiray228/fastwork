@@ -677,6 +677,20 @@ class Api {
       });
     });
 
+    // Позвать любимого исполнителя на свою смену. Кому и куда можно,
+    // решает хранилище.
+    router.post('/api/shifts/<id|[0-9]+>/invite',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        final body = await _body(request);
+        final result = await _shiftsFor(user).inviteToShift(
+          shiftId: int.parse(id),
+          workerId: body['worker'] as int,
+        );
+        return _json({'result': result.name});
+      });
+    });
+
     // Код отметки — только заказчику этой смены.
     router.get('/api/shifts/<id|[0-9]+>/code',
         (Request request, String id) async {

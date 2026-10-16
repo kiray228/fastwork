@@ -1922,4 +1922,70 @@ void main() {
         .firstWhere((n) => n.kind == NotificationKind.withdrew);
     expect(note.body, contains('Reason: sick'));
   });
+
+  test('любимого можно позвать на свою смену — один раз', () async {
+    final (_, workerId, managerId) = await workedShift();
+    final manager = (await auth.refresh(managerId))!;
+    session.setUser(manager);
+    expect(await shifts.setFavorite(workerId: workerId, favorite: true),
+        BookingResult.ok);
+    final shiftId = await shifts.publishShift(
+      workDate: daysAgo(-1),
+      title: 'Услуги грузчика',
+      company: 'Magnum',
+      address: 'г. Алматы, ул. Абая, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 2,
+      createdBy: managerId,
+      city: 'Алматы',
+      card: testCard,
+    );
+
+    Future<int> invites() async {
+      session.setUser((await auth.refresh(workerId))!);
+      final n = (await shifts.notifications())
+          .where((n) =>
+              n.kind == NotificationKind.invited && n.shiftId == shiftId)
+          .length;
+      session.setUser(manager);
+      return n;
+    }
+
+    final before = await invites(); // приглашение при публикации
+    expect(await shifts.inviteToShift(shiftId: shiftId, workerId: workerId),
+        BookingResult.ok);
+    expect(await invites(), before,
+        reason: 'второе приглашение на ту же смену не шлём');
+    expect(before, 1, reason: 'любимым приглашение уходит уже при публикации');
+
+    // Уведомление удалили (например, позже приглашали заново) — приходит.
+    await db.delete(db.notificationRows).go();
+    expect(await shifts.inviteToShift(shiftId: shiftId, workerId: workerId),
+        BookingResult.ok);
+    expect(await invites(), 1);
+
+    // Не любимого — нельзя: приглашение не рассылка всем подряд.
+    final stranger = await auth.register(
+      phone: '77090000001',
+      fullName: 'Незнакомец',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    expect(await shifts.inviteToShift(shiftId: shiftId, workerId: stranger.id),
+        BookingResult.notMine);
+
+    // Записался — звать уже некуда.
+    session.setUser((await auth.refresh(workerId))!);
+    expect(await shifts.apply(shiftId), BookingResult.ok);
+    session.setUser(manager);
+    expect(await shifts.inviteToShift(shiftId: shiftId, workerId: workerId),
+        BookingResult.alreadyBooked);
+
+    // Чужую смену — нельзя.
+    session.setUser(stranger);
+    expect(await shifts.inviteToShift(shiftId: shiftId, workerId: workerId),
+        BookingResult.notMine);
+  });
 }

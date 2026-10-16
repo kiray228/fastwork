@@ -372,6 +372,21 @@ class FakeShiftRepository implements ShiftRepository {
   @override
   Future<Set<String>> followedCategories() async => {..._followedCategories};
 
+  /// Кого и куда звали — тестам видно, что приглашение ушло.
+  final List<(int shiftId, int workerId)> invitations = [];
+
+  @override
+  Future<BookingResult> inviteToShift({
+    required int shiftId,
+    required int workerId,
+  }) async {
+    final shift = await shiftById(shiftId);
+    if (shift == null) return BookingResult.notFound;
+    if (!shift.hasFreeSlots) return BookingResult.noSlots;
+    invitations.add((shiftId, workerId));
+    return BookingResult.ok;
+  }
+
   @override
   Future<WorkerTaste> workerTaste() async {
     final worked = [
