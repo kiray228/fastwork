@@ -95,6 +95,10 @@ abstract class FeedStrings {
   String get filterPayAny;
   String filterPayFrom(String amount);
   String get forYouTag;
+  String get interestsTitle;
+  String get interestsBody;
+  String get interestsAction;
+  String get interestsHide;
 }
 
 class _Ru extends FeedStrings {
@@ -229,6 +233,15 @@ class _Ru extends FeedStrings {
   String filterPayFrom(String amount) => 'от $amount';
   @override
   String get forYouTag => 'Вам подходит';
+  @override
+  String get interestsTitle => 'Какая работа вам интересна?';
+  @override
+  String get interestsBody =>
+      'Отметьте виды работ — подскажем подходящие смены и сообщим о новых';
+  @override
+  String get interestsAction => 'Выбрать';
+  @override
+  String get interestsHide => 'Скрыть';
 }
 
 class _Kk extends FeedStrings {
@@ -367,6 +380,15 @@ class _Kk extends FeedStrings {
   String filterPayFrom(String amount) => '$amount бастап';
   @override
   String get forYouTag => 'Сізге лайық';
+  @override
+  String get interestsTitle => 'Сізді қандай жұмыс қызықтырады?';
+  @override
+  String get interestsBody =>
+      'Жұмыс түрлерін белгілеңіз — лайық ауысымдарды көрсетіп, жаңалары туралы хабарлаймыз';
+  @override
+  String get interestsAction => 'Таңдау';
+  @override
+  String get interestsHide => 'Жасыру';
 }
 
 class _En extends FeedStrings {
@@ -501,4 +523,13 @@ class _En extends FeedStrings {
   String filterPayFrom(String amount) => '$amount+';
   @override
   String get forYouTag => 'For you';
+  @override
+  String get interestsTitle => 'What work interests you?';
+  @override
+  String get interestsBody =>
+      "Pick job types — we'll point out shifts that suit you and tell you about new ones";
+  @override
+  String get interestsAction => 'Choose';
+  @override
+  String get interestsHide => 'Hide';
 }

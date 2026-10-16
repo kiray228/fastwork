@@ -21,6 +21,9 @@ class AppPreferences extends ChangeNotifier {
   final ValueNotifier<Lang> _language;
   final Set<String> _seenStories;
 
+  /// Человек закрыл карточку «Какая работа вам интересна?».
+  bool _interestsHidden;
+
   /// [deviceLanguage] — язык телефона. Им говорим, пока человек не выбрал
   /// язык сам; не передали — по-русски, как в тестах.
   AppPreferences({SharedPreferences? store, String? deviceLanguage})
@@ -28,7 +31,8 @@ class AppPreferences extends ChangeNotifier {
         _theme = ValueNotifier(_readThemeMode(store)),
         _language = ValueNotifier(
             Lang.fromCode(store?.getString(_languageKey) ?? deviceLanguage)),
-        _seenStories = {...?store?.getStringList(_seenKey)};
+        _seenStories = {...?store?.getStringList(_seenKey)},
+        _interestsHidden = store?.getBool(_interestsKey) ?? false;
 
   /// Открыть настройки с диска.
   ///
@@ -52,6 +56,7 @@ class AppPreferences extends ChangeNotifier {
   static const _themeKey = 'theme_mode';
   static const _languageKey = 'language';
   static const _seenKey = 'seen_stories';
+  static const _interestsKey = 'interests_hidden';
 
   static ThemeMode _readThemeMode(SharedPreferences? store) =>
       switch (store?.getString(_themeKey)) {
@@ -97,5 +102,16 @@ class AppPreferences extends ChangeNotifier {
     if (!_seenStories.add(id)) return;
     notifyListeners();
     await _store?.setStringList(_seenKey, _seenStories.toList());
+  }
+
+  /// Закрыта ли карточка выбора интересов в ленте. Закрыл — больше не
+  /// спрашиваем: навязчивость хуже пустой подсказки.
+  bool get interestsHidden => _interestsHidden;
+
+  Future<void> hideInterests() async {
+    if (_interestsHidden) return;
+    _interestsHidden = true;
+    notifyListeners();
+    await _store?.setBool(_interestsKey, true);
   }
 }
