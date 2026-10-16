@@ -73,7 +73,7 @@ class _HomeShellState extends State<HomeShell>
     // добавится — метод сам это проверяет.
     final user = widget.session.user;
     if (user != null && !user.isManager) {
-      widget.repos.shifts.prepareDemoHistory(user.id);
+      _prepareDemo(user.id);
     }
 
     // Пришли по ссылке на смену — открываем её поверх ленты. После первого
@@ -91,6 +91,19 @@ class _HomeShellState extends State<HomeShell>
           )),
         );
       });
+    }
+  }
+
+  /// Завести учебную историю и сразу перечитать человека: иначе профиль
+  /// до первого переключения вкладки показывал «0 смен», хотя отработанные
+  /// смены уже лежат в архиве и кошельке.
+  Future<void> _prepareDemo(int userId) async {
+    try {
+      await widget.repos.shifts.prepareDemoHistory(userId);
+      final fresh = await widget.repos.auth.refresh(userId);
+      if (fresh != null && mounted) widget.session.setUser(fresh);
+    } catch (_) {
+      // Без учебной истории приложение работает так же — просто беднее.
     }
   }
 
