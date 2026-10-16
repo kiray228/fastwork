@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../errors.dart';
+import '../shift.dart' show formatMoney;
 import '../terms.dart';
 import '../user.dart';
 import 'database.dart';
@@ -66,6 +67,18 @@ abstract class AuthRepository {
 
   /// Сменить город. От него зависит, какие смены человек видит.
   Future<AppUser?> changeCity(int userId, String city);
+
+  /// Удалить аккаунт.
+  ///
+  /// Магазины приложений требуют, чтобы аккаунт можно было удалить из
+  /// самого приложения. Но у нас за аккаунтом деньги и обязательства,
+  /// поэтому сначала их нужно закрыть: живые записи на смены, свои
+  /// предстоящие смены, остаток на балансе. Иначе — отказ с причиной.
+  ///
+  /// Удаление — обезличивание, а не стирание строки: история денег и
+  /// отработанных смен нужна для учёта, отзывы — другим людям. Имя,
+  /// телефон, почта, документы, подписки и входы исчезают.
+  Future<void> deleteAccount(int userId);
 }
 
 /// Ключ, под которым в настройках лежит номер вошедшего пользователя.
@@ -232,6 +245,12 @@ class DbAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<void> deleteAccount(int userId) async {
+    await deleteAccountIn(db, userId);
+    await signOut();
+  }
+
+  @override
   Future<void> signIn(AppUser user) async {
     await db.into(db.appSettings).insertOnConflictUpdate(
           AppSettingsCompanion.insert(
@@ -387,6 +406,12 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   Future<void> signOut() async => _current = null;
+
+  @override
+  Future<void> deleteAccount(int userId) async {
+    _users.removeWhere((u) => u.id == userId);
+    if (_current?.id == userId) _current = null;
+  }
 }
 
 /// Отказ создать аккаунт без согласия с действующими правилами.
@@ -401,4 +426,116 @@ void requireCurrentTerms(int acceptedVersion) {
 
 class TermsNotAccepted extends UserError {
   TermsNotAccepted() : super(coreTr.termsNotAccepted);
+}
+
+/// Удалить аккаунт в базе — общее для телефона и сервера.
+///
+/// Отдельной функцией, а не только методом хранилища: сервер вызывает её
+/// от имени того, кто прислал запрос, а входы, которые нужно погасить,
+/// лежат в той же базе.
+Future<void> deleteAccountIn(
+  AppDatabase db,
+  int userId, {
+  DateTime? now,
+  CoreStrings? strings,
+}) async {
+  final t = strings ?? coreTr;
+  final at = now ?? DateTime.now();
+
+  // Смена ещё не кончилась — у неё есть конец; у ночной он завтра. Берём
+  // со вчерашнего дня и досчитываем в Dart, как в «Моих сменах».
+  final yesterday =
+      Variable.withDateTime(DateTime(at.year, at.month, at.day - 1));
+  bool running(QueryRow r) {
+    final d = r.read<DateTime>('work_date');
+    final start = r.read<int>('start_minutes');
+    final end = r.read<int>('end_minutes');
+    final length = end > start ? end - start : 1440 - start + end;
+    final ends = DateTime(d.year, d.month, d.day)
+        .add(Duration(minutes: start + length));
+    return at.isBefore(ends);
+  }
+
+  final booked = await db.query(
+    'SELECT s.work_date, s.start_minutes, s.end_minutes '
+    'FROM application_rows a JOIN shift_rows s ON s.id = a.shift_id '
+    "WHERE a.worker_id = ? AND a.status = 'active' "
+    'AND s.cancelled_at IS NULL AND s.work_date >= ?',
+    variables: [Variable.withInt(userId), yesterday],
+    readsFrom: {db.applicationRows, db.shiftRows},
+  ).get();
+  if (booked.any(running)) throw UserError(t.accountHasBookings);
+
+  final own = await db.query(
+    'SELECT s.work_date, s.start_minutes, s.end_minutes FROM shift_rows s '
+    'WHERE s.created_by = ? AND s.cancelled_at IS NULL AND s.work_date >= ?',
+    variables: [Variable.withInt(userId), yesterday],
+    readsFrom: {db.shiftRows},
+  ).get();
+  if (own.any(running)) throw UserError(t.accountHasShifts);
+
+  // Остаток — заработанное минус выведенное, как в кошельке.
+  final money = await db.query(
+    'SELECT COALESCE(SUM(amount), 0) AS balance FROM wallet_entry_rows '
+    "WHERE user_id = ? AND kind IN ('earning', 'withdrawal')",
+    variables: [Variable.withInt(userId)],
+    readsFrom: {db.walletEntryRows},
+  ).getSingle();
+  final balance = money.read<int>('balance');
+  if (balance > 0) throw UserError(t.accountHasBalance(formatMoney(balance)));
+
+  final user = await (db.select(db.userRows)
+        ..where((u) => u.id.equals(userId)))
+      .getSingleOrNull();
+  if (user == null) return;
+
+  await db.transaction(() async {
+    // Входы гасим первыми: удалённый аккаунт не должен работать ни
+    // минуты, даже на другом телефоне.
+    await (db.delete(db.authTokenRows)..where((x) => x.userId.equals(userId)))
+        .go();
+    if (user.email != null) {
+      await (db.delete(db.authCodeRows)
+            ..where((x) => x.email.equals(user.email!)))
+          .go();
+    }
+    // Номера удостоверений и медкнижек — самое чувствительное.
+    await (db.delete(db.documentRows)..where((x) => x.userId.equals(userId)))
+        .go();
+    final tickets = db.selectOnly(db.supportTicketRows)
+      ..addColumns([db.supportTicketRows.id])
+      ..where(db.supportTicketRows.userId.equals(userId));
+    await (db.delete(db.supportMessageRows)
+          ..where((x) => x.ticketId.isInQuery(tickets)))
+        .go();
+    await (db.delete(db.supportTicketRows)
+          ..where((x) => x.userId.equals(userId)))
+        .go();
+    await (db.delete(db.favoriteRows)
+          ..where((x) =>
+              x.employerId.equals(userId) | x.workerId.equals(userId)))
+        .go();
+    await (db.delete(db.waitlistRows)..where((x) => x.workerId.equals(userId)))
+        .go();
+    await (db.delete(db.companyFollowRows)
+          ..where((x) => x.userId.equals(userId)))
+        .go();
+    await (db.delete(db.categoryFollowRows)
+          ..where((x) => x.userId.equals(userId)))
+        .go();
+    await (db.delete(db.notificationRows)
+          ..where((x) => x.userId.equals(userId)))
+        .go();
+
+    // Сама строка остаётся: на неё ссылаются отклики, отзывы и движения
+    // денег. Телефон уникален, поэтому вместо него — метка с номером.
+    await (db.update(db.userRows)..where((u) => u.id.equals(userId)))
+        .write(UserRowsCompanion(
+      fullName: Value(t.deletedUserName),
+      phone: Value('deleted-$userId'),
+      email: const Value(null),
+      company: const Value(null),
+      isVerified: const Value(false),
+    ));
+  });
 }

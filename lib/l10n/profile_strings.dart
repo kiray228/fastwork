@@ -160,6 +160,10 @@ abstract class ProfileStrings {
   /// «3 сообщ.» — число сообщений в обращении.
   String ticketMessages(int n);
   String get messageHint;
+  String get deleteAccountButton;
+  String get deleteAccountTitle;
+  String get deleteAccountBody;
+  String get deleteAccountConfirm;
 }
 
 class _Ru extends ProfileStrings {
@@ -412,6 +416,17 @@ class _Ru extends ProfileStrings {
   String ticketMessages(int n) => '$n сообщ.';
   @override
   String get messageHint => 'Сообщение';
+  @override
+  String get deleteAccountButton => 'Удалить аккаунт';
+  @override
+  String get deleteAccountTitle => 'Удалить аккаунт насовсем?';
+  @override
+  String get deleteAccountBody =>
+      'Имя, телефон, почта, документы и подписки удалятся, войти в аккаунт '
+      'будет нельзя. История смен и выплат останется без вашего имени — она '
+      'нужна для учёта. Вернуть аккаунт не получится.';
+  @override
+  String get deleteAccountConfirm => 'Удалить';
 }
 
 class _Kk extends ProfileStrings {
@@ -657,6 +672,17 @@ class _Kk extends ProfileStrings {
   String ticketMessages(int n) => '$n хабар.';
   @override
   String get messageHint => 'Хабарлама';
+  @override
+  String get deleteAccountButton => 'Аккаунтты жою';
+  @override
+  String get deleteAccountTitle => 'Аккаунтты біржола жоясыз ба?';
+  @override
+  String get deleteAccountBody =>
+      'Аты-жөніңіз, телефон, пошта, құжаттар мен жазылымдар жойылады, '
+      'аккаунтқа кіру мүмкін болмайды. Ауысымдар мен төлемдер тарихы атыңызсыз '
+      'қалады — ол есеп үшін керек. Аккаунтты қайтару мүмкін емес.';
+  @override
+  String get deleteAccountConfirm => 'Жою';
 }
 
 class _En extends ProfileStrings {
@@ -900,4 +926,15 @@ class _En extends ProfileStrings {
   String ticketMessages(int n) => n == 1 ? '1 message' : '$n messages';
   @override
   String get messageHint => 'Message';
+  @override
+  String get deleteAccountButton => 'Delete account';
+  @override
+  String get deleteAccountTitle => 'Delete your account for good?';
+  @override
+  String get deleteAccountBody =>
+      'Your name, phone, email, documents and subscriptions will be deleted, '
+      'and you will not be able to sign in. Shift and payment history stays '
+      'without your name — it is needed for accounting. This cannot be undone.';
+  @override
+  String get deleteAccountConfirm => 'Delete';
 }

@@ -7,6 +7,7 @@ import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_server/api.dart';
 import 'package:fastwork_server/auth_service.dart';
 import 'package:fastwork_server/code_sender.dart';
+import 'package:fastwork_server/cors.dart';
 import 'package:shelf/shelf.dart';
 import 'package:test/test.dart';
 
@@ -124,6 +125,70 @@ void main() {
     final (status, _) = await call('POST', '/api/auth/request-code',
         body: {'email': 'worker@example.kz'});
     expect(status, 200);
+  });
+
+  group('удаление аккаунта', () {
+    test('аккаунт удаляется, и его вход сразу перестаёт работать', () async {
+      final token =
+          await AuthService(db, sender).issue(email: 'new@example.kz');
+      final (_, reg) = await call('POST', '/api/auth/register',
+          token: token,
+          body: {
+            'phone': '+7 700 123 45 67',
+            'fullName': 'Ернар Калдыбеков',
+            'acceptedTermsVersion': kTermsVersion,
+          });
+      expect(reg['user']['id'], isNotNull);
+
+      final (deleted, _) =
+          await call('POST', '/api/me/delete', token: token, body: {});
+      expect(deleted, 200);
+      final (me, _) = await call('GET', '/api/me', token: token);
+      expect(me, 401);
+    });
+
+    test('без входа удалить нечего', () async {
+      final (status, _) = await call('POST', '/api/me/delete', body: {});
+      expect(status, 401);
+    });
+  });
+
+  group('CORS', () {
+    Future<Response> ask(List<String> allowed, String? origin) async =>
+        corsFor(allowed)((_) => Response.ok('ok'))(Request(
+          'GET',
+          Uri.parse('http://localhost/api/health'),
+          headers: {if (origin != null) 'origin': origin},
+        ));
+
+    test('без списка пускают всех', () async {
+      final response = await ask(const [], 'https://evil.example');
+      expect(response.headers['access-control-allow-origin'], '*');
+    });
+
+    test('со списком — только свои сайты', () async {
+      const allowed = ['https://kiray228.github.io'];
+      final own = await ask(allowed, 'https://kiray228.github.io');
+      expect(own.headers['access-control-allow-origin'],
+          'https://kiray228.github.io');
+      final evil = await ask(allowed, 'https://evil.example');
+      expect(evil.headers['access-control-allow-origin'], isNull);
+      expect(evil.headers['access-control-allow-headers'],
+          isNot(contains('X-Admin-Key')));
+    });
+
+    test('список читается из переменной окружения', () {
+      expect(parseOrigins(' https://a.kz/, https://b.kz ,,'),
+          ['https://a.kz', 'https://b.kz']);
+      expect(parseOrigins(null), isEmpty);
+    });
+  });
+
+  test('служебный ключ сравнивается целиком', () {
+    expect(sameSecret('secret', 'secret'), isTrue);
+    expect(sameSecret('secreT', 'secret'), isFalse);
+    expect(sameSecret('secret1', 'secret'), isFalse);
+    expect(sameSecret('', 'secret'), isFalse);
   });
 
   group('регистрация', () {
