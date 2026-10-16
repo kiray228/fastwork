@@ -503,4 +503,13 @@ class CoreRu extends CoreStrings {
       'На балансе $amount — сначала выведите деньги на карту';
   @override
   String get deletedUserName => 'Аккаунт удалён';
+  @override
+  String dayPart(DayPart part) => switch (part) {
+        DayPart.morning => 'Утро, 5–12',
+        DayPart.day => 'День, 12–17',
+        DayPart.evening => 'Вечер, 17–22',
+        DayPart.night => 'Ночь, 22–5',
+      };
+  @override
+  String get badFullName => 'Укажите имя и фамилию — от 2 до 80 букв';
 }

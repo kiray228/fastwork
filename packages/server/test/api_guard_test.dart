@@ -234,6 +234,17 @@ void main() {
       expect(json['user']['city'], 'Алматы');
     });
 
+    test('имя исправляется, пустое — нет', () async {
+      await register({});
+      final (bad, _) = await call('POST', '/api/me/name',
+          token: token, body: {'fullName': ' '});
+      expect(bad, 400);
+      final (ok, me) = await call('POST', '/api/me/name',
+          token: token, body: {'fullName': 'Азамат Серик'});
+      expect(ok, 200);
+      expect(me['fullName'], 'Азамат Серик');
+    });
+
     test('сменить город можно только на город из списка', () async {
       final (_, json) = await register({});
       expect(json['user']['id'], isNotNull);

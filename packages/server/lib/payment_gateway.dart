@@ -86,3 +86,23 @@ String describePayments(PaymentGateway gateway) {
       'Kaspi: ${of(gateway.kaspi.name, gateway.kaspi.isSandbox)}; '
       'выплаты: ${of(gateway.payouts.name, gateway.payouts.isSandbox)}';
 }
+
+/// О чём предупредить при запуске, глядя на настройки денег.
+///
+/// Без секрета вебхука сервер всё равно не верит вебхуку на слово — он
+/// переспрашивает провайдера. Но тогда любой может слать ему поддельные
+/// вебхуки, и на каждый сервер ходит к провайдеру. На тестовых деньгах
+/// это неважно, на настоящих — стоит видеть в журнале с первой строки.
+List<String> paymentWarnings(PaymentSetup setup) {
+  final gateway = setup.gateway;
+  String? missing(String key, bool real, String name) =>
+      real && (setup.webhookSecrets[key] ?? '').isEmpty
+          ? '$name подключён, а секрет вебхука не задан — '
+              'подпись не проверяется (переменная '
+              '${key.toUpperCase()}_WEBHOOK_SECRET)'
+          : null;
+  return [
+    ?missing('ioka', !gateway.card.isSandbox, 'ioka'),
+    ?missing('apipay', !gateway.kaspi.isSandbox, 'Kaspi'),
+  ];
+}

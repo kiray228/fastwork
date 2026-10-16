@@ -99,6 +99,7 @@ class AppUser {
   }
 
   AppUser copyWith({
+    String? fullName,
     int? completedShifts,
     double? rating,
     bool? isVerified,
@@ -109,7 +110,7 @@ class AppUser {
         id: id,
         phone: phone,
         email: email,
-        fullName: fullName,
+        fullName: fullName ?? this.fullName,
         city: city,
         rating: rating ?? this.rating,
         isVerified: isVerified ?? this.isVerified,

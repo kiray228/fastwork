@@ -1927,6 +1927,22 @@ void main() {
       expect(find.text('Начать работать'), findsOneWidget);
     });
 
+    testWidgets('имя исправляется в профиле', (tester) async {
+      await openApp(tester);
+
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Имя и фамилия'));
+      await tester.tap(find.text('Имя и фамилия'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, 'Ернар Калдыбек');
+      await tester.pump();
+      await tester.tap(find.text('Сохранить'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ернар Калдыбек'), findsOneWidget);
+    });
+
     testWidgets('аккаунт можно удалить — после предупреждения', (tester) async {
       await openApp(tester);
 

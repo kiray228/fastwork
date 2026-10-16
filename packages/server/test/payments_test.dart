@@ -248,6 +248,19 @@ void main() {
       expect(setup.webhookSecrets['apipay'], 's');
     });
 
+    test('настоящие деньги без секрета вебхука — предупреждение', () {
+      expect(paymentWarnings(resolvePayments({})), isEmpty,
+          reason: 'тестовый режим — предупреждать не о чем');
+      // Тестовый адрес ioka (stage) — тоже не настоящие деньги.
+      expect(paymentWarnings(resolvePayments({'IOKA_API_KEY': 'k'})), isEmpty);
+      const live = {'IOKA_API_KEY': 'k', 'IOKA_API_URL': 'https://api.ioka.kz'};
+      final noSecret = resolvePayments(live);
+      expect(paymentWarnings(noSecret).single, contains('IOKA_WEBHOOK_SECRET'));
+      final withSecret =
+          resolvePayments({...live, 'IOKA_WEBHOOK_SECRET': 's'});
+      expect(paymentWarnings(withSecret), isEmpty);
+    });
+
     test('можно включить только Kaspi — карта останется тестовой', () {
       final setup = resolvePayments({'APIPAY_API_KEY': 'a'});
       expect(setup.gateway.kaspi.isSandbox, isFalse);

@@ -357,4 +357,50 @@ void main() {
     // Не записывался — снимать нечего.
     expect(await repo.cancelApplication(5), BookingResult.notMine);
   });
+
+  group('время суток и оплата за смену', () {
+    Shift at(int id, int start, int end, {int rate = 110000}) => Shift(
+          id: id,
+          workDate: DateTime(2026, 9, 17),
+          title: 'смена',
+          company: 'Magnum',
+          address: 'ул. Абая, 1',
+          startMinutes: start,
+          endMinutes: end,
+          hourlyRate: rate,
+          workersNeeded: 1,
+          workersHired: 0,
+        );
+
+    test('границы частей дня — по началу смены', () {
+      expect(DayPart.of(5 * 60), DayPart.morning);
+      expect(DayPart.of(11 * 60 + 59), DayPart.morning);
+      expect(DayPart.of(12 * 60), DayPart.day);
+      expect(DayPart.of(17 * 60), DayPart.evening);
+      expect(DayPart.of(22 * 60), DayPart.night);
+      expect(DayPart.of(4 * 60 + 59), DayPart.night,
+          reason: 'смена в 4 утра — ночная, а не утренняя');
+    });
+
+    test('фильтр оставляет только выбранное время и не дешевле порога', () {
+      final shifts = [
+        at(1, 600, 1260), // утро, 11 ч — 11 000 ₸
+        at(2, 1080, 1320), // вечер, 4 ч — 4 400 ₸
+        at(3, 1320, 360), // ночь, 8 ч — 8 800 ₸
+        at(4, 1140, 1380, rate: 300000), // вечер, 4 ч — 12 000 ₸
+      ];
+      final evenings = applyFilter(
+          shifts, const ShiftFilter(dayParts: {DayPart.evening}));
+      expect(evenings.map((s) => s.id), [2, 4]);
+
+      final rich = applyFilter(shifts, const ShiftFilter(minPay: 1000000));
+      expect(rich.map((s) => s.id), [1, 4]);
+
+      const both = ShiftFilter(
+          dayParts: {DayPart.evening, DayPart.night}, minPay: 500000);
+      expect(applyFilter(shifts, both).map((s) => s.id), [4, 3]);
+      expect(both.activeCount, 3, reason: 'две части дня и порог оплаты');
+      expect(both.isEmpty, isFalse);
+    });
+  });
 }

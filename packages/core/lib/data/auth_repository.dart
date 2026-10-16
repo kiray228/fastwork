@@ -68,6 +68,10 @@ abstract class AuthRepository {
   /// Сменить город. От него зависит, какие смены человек видит.
   Future<AppUser?> changeCity(int userId, String city);
 
+  /// Исправить имя. Опечатка при регистрации иначе оставалась бы навсегда:
+  /// имя видит заказчик в списке записавшихся и в отзывах.
+  Future<AppUser?> changeName(int userId, String fullName);
+
   /// Удалить аккаунт.
   ///
   /// Магазины приложений требуют, чтобы аккаунт можно было удалить из
@@ -245,6 +249,14 @@ class DbAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<AppUser?> changeName(int userId, String fullName) async {
+    final name = checkedFullName(fullName);
+    await (db.update(db.userRows)..where((u) => u.id.equals(userId)))
+        .write(UserRowsCompanion(fullName: Value(name)));
+    return refresh(userId);
+  }
+
+  @override
   Future<void> deleteAccount(int userId) async {
     await deleteAccountIn(db, userId);
     await signOut();
@@ -408,6 +420,16 @@ class FakeAuthRepository implements AuthRepository {
   Future<void> signOut() async => _current = null;
 
   @override
+  Future<AppUser?> changeName(int userId, String fullName) async {
+    final name = checkedFullName(fullName);
+    final i = _users.indexWhere((u) => u.id == userId);
+    if (i < 0) return null;
+    _users[i] = _users[i].copyWith(fullName: name);
+    if (_current?.id == userId) _current = _users[i];
+    return _users[i];
+  }
+
+  @override
   Future<void> deleteAccount(int userId) async {
     _users.removeWhere((u) => u.id == userId);
     if (_current?.id == userId) _current = null;
@@ -538,4 +560,14 @@ Future<void> deleteAccountIn(
       isVerified: const Value(false),
     ));
   });
+}
+
+/// Имя без лишних пробелов — или отказ, если оно короче двух букв или
+/// длиннее восьмидесяти. Правило одно для телефона и сервера.
+String checkedFullName(String raw, {CoreStrings? strings}) {
+  final name = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
+  if (name.length < 2 || name.length > 80) {
+    throw UserError((strings ?? coreTr).badFullName);
+  }
+  return name;
 }

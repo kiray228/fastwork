@@ -172,6 +172,22 @@ class ProfilePage extends StatelessWidget {
     session.setUser(null);
   }
 
+  /// Исправить имя: опечатка при регистрации иначе осталась бы навсегда.
+  Future<void> _changeName(BuildContext context) async {
+    final current = session.user;
+    if (current == null) return;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => _NameDialog(initial: current.fullName),
+    );
+    if (name == null || name == current.fullName || !context.mounted) return;
+    final updated = await guarded(
+      context,
+      () => repos.auth.changeName(current.id, name),
+    );
+    if (updated != null) session.setUser(updated);
+  }
+
   /// Удалить аккаунт — с прямым предупреждением, что это навсегда.
   ///
   /// Если что-то держит аккаунт (записи, свои смены, деньги на балансе),
@@ -300,6 +316,11 @@ class ProfilePage extends StatelessWidget {
                       ),
                     ),
                   ),
+                _MenuRow(
+                  icon: Icons.person_outline_rounded,
+                  title: tr.auth.nameLabel,
+                  onTap: () => _changeName(context),
+                ),
                 _MenuRow(
                   icon: Icons.place_outlined,
                   title: tr.profile.menuCity,
@@ -590,6 +611,60 @@ class _MenuRow extends StatelessWidget {
         ],
       ),
       onTap: onTap,
+    );
+  }
+}
+
+/// Окно правки имени. Свой виджет — ради поля ввода, которое нужно
+/// освободить, когда окно закроется.
+class _NameDialog extends StatefulWidget {
+  final String initial;
+
+  const _NameDialog({required this.initial});
+
+  @override
+  State<_NameDialog> createState() => _NameDialogState();
+}
+
+class _NameDialogState extends State<_NameDialog> {
+  late final controller = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final name = controller.text.trim();
+    if (name.length < 2) return;
+    Navigator.of(context).pop(name);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(tr.auth.nameLabel),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        maxLength: 80,
+        textCapitalization: TextCapitalization.words,
+        textInputAction: TextInputAction.done,
+        onChanged: (_) => setState(() {}),
+        onSubmitted: (_) => _save(),
+        decoration: const InputDecoration(border: OutlineInputBorder()),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(tr.profile.cancel),
+        ),
+        TextButton(
+          onPressed: controller.text.trim().length >= 2 ? _save : null,
+          child: Text(tr.manager.save),
+        ),
+      ],
     );
   }
 }

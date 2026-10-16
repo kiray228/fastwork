@@ -251,6 +251,12 @@ abstract class CoreStrings {
   String get accountHasShifts;
   String accountHasBalance(String amount);
   String get deletedUserName;
+
+  /// Утро, день, вечер, ночь — с часами, чтобы не гадать, где граница.
+  String dayPart(DayPart part);
+
+  /// Имя слишком короткое или длинное.
+  String get badFullName;
 }
 
 /// Словарь того языка, на котором сейчас говорит приложение.

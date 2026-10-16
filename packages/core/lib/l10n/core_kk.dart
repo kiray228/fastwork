@@ -506,4 +506,13 @@ class CoreKk extends CoreStrings {
       'Балансыңызда $amount — алдымен ақшаны картаға шығарыңыз';
   @override
   String get deletedUserName => 'Аккаунт жойылды';
+  @override
+  String dayPart(DayPart part) => switch (part) {
+        DayPart.morning => 'Таң, 5–12',
+        DayPart.day => 'Күндіз, 12–17',
+        DayPart.evening => 'Кеш, 17–22',
+        DayPart.night => 'Түн, 22–5',
+      };
+  @override
+  String get badFullName => 'Аты-жөніңізді көрсетіңіз — 2-ден 80 әріпке дейін';
 }

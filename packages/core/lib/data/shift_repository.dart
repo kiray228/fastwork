@@ -338,6 +338,16 @@ List<Shift> applyFilter(List<Shift> shifts, ShiftFilter filter) {
   if (filter.onlyOpen) {
     result = result.where((s) => s.hasFreeSlots).toList();
   }
+  if (filter.dayParts.isNotEmpty) {
+    result = result
+        .where((s) => filter.dayParts.contains(DayPart.of(s.startMinutes)))
+        .toList();
+  }
+  if (filter.minPay > 0) {
+    // Сумма за смену, а не ставка в час: «от 10 000 за выход» человеку
+    // понятнее, чем «от 900 в час, но смена на одиннадцать часов».
+    result = result.where((s) => s.totalPay >= filter.minPay).toList();
+  }
 
   result = [...result];
   switch (filter.sort) {

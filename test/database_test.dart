@@ -1742,4 +1742,14 @@ void main() {
         reason: 'прошлые смены в фильтр не попадают');
     expect(await shifts.categories(), isEmpty);
   });
+
+  test('имя можно исправить, но не на пустое', () async {
+    final (_, worker, _) = await upcomingShift();
+    final fixed = await auth.changeName(worker.id, '  Азамат   Серикбаев ');
+    expect(fixed!.fullName, 'Азамат Серикбаев', reason: 'лишние пробелы убраны');
+    await expectLater(
+        auth.changeName(worker.id, ' я '), throwsA(isA<UserError>()));
+    await expectLater(
+        auth.changeName(worker.id, 'а' * 81), throwsA(isA<UserError>()));
+  });
 }
