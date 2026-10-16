@@ -195,6 +195,12 @@ abstract class ManagerStrings {
   String get confirmAllTitle;
   String confirmAllBody(int count, String each, String total);
   String confirmAllDone(int count);
+  String get inviteToShift;
+  String inviteSheetTitle(String name);
+  String get inviteNoShifts;
+  String invitedSnack(String name);
+  String inviteAlreadyBooked(String name);
+  String get inviteFailed;
 }
 
 class _Ru extends ManagerStrings {
@@ -549,6 +555,19 @@ class _Ru extends ManagerStrings {
       'Подтверждение не отменить — проверьте, что все действительно отработали.';
   @override
   String confirmAllDone(int count) => 'Засчитано: $count чел.';
+  @override
+  String get inviteToShift => 'Пригласить на смену';
+  @override
+  String inviteSheetTitle(String name) => 'Куда позвать: $name';
+  @override
+  String get inviteNoShifts =>
+      'Нет предстоящих оплаченных смен со свободными местами';
+  @override
+  String invitedSnack(String name) => 'Приглашение отправлено: $name';
+  @override
+  String inviteAlreadyBooked(String name) => '$name уже записан на эту смену';
+  @override
+  String get inviteFailed => 'Не получилось пригласить';
 }
 
 class _Kk extends ManagerStrings {
@@ -910,6 +929,19 @@ class _Kk extends ManagerStrings {
       'істегенін тексеріңіз.';
   @override
   String confirmAllDone(int count) => 'Расталды: $count адам';
+  @override
+  String get inviteToShift => 'Ауысымға шақыру';
+  @override
+  String inviteSheetTitle(String name) => 'Қайда шақыру: $name';
+  @override
+  String get inviteNoShifts =>
+      'Бос орны бар алдағы төленген ауысымдар жоқ';
+  @override
+  String invitedSnack(String name) => 'Шақыру жіберілді: $name';
+  @override
+  String inviteAlreadyBooked(String name) => '$name бұл ауысымға жазылып қойған';
+  @override
+  String get inviteFailed => 'Шақыру мүмкін болмады';
 }
 
 class _En extends ManagerStrings {
@@ -1265,4 +1297,17 @@ class _En extends ManagerStrings {
       'This can\'t be undone — make sure everyone has actually worked.';
   @override
   String confirmAllDone(int count) => 'Confirmed: $count';
+  @override
+  String get inviteToShift => 'Invite to a shift';
+  @override
+  String inviteSheetTitle(String name) => 'Invite $name to';
+  @override
+  String get inviteNoShifts =>
+      'No upcoming paid shifts with free places';
+  @override
+  String invitedSnack(String name) => 'Invitation sent to $name';
+  @override
+  String inviteAlreadyBooked(String name) => '$name has already booked this shift';
+  @override
+  String get inviteFailed => "Couldn't send the invitation";
 }

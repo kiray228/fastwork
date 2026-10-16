@@ -288,6 +288,13 @@ abstract class ShiftRepository {
   /// им приходит приглашение.
   Future<List<AppUser>> favoriteWorkers();
 
+  /// Позвать любимого исполнителя на свою смену, которая недобирает
+  /// людей. Приглашение приходит уведомлением; записывается он сам.
+  Future<BookingResult> inviteToShift({
+    required int shiftId,
+    required int workerId,
+  });
+
   /// Уведомления текущего пользователя — новые сверху.
   Future<List<AppNotification>> notifications();
 
@@ -3106,6 +3113,55 @@ class DbShiftRepository implements ShiftRepository {
   /// Начало сообщения для уведомления.
   static String _snippet(String text) =>
       text.length <= 120 ? text : '${text.substring(0, 119)}…';
+
+  @override
+  Future<BookingResult> inviteToShift({
+    required int shiftId,
+    required int workerId,
+  }) async {
+    final mine = await _myShiftOr(shiftId);
+    if (mine is BookingResult) return mine;
+    final shift = mine as Shift;
+    if (shift.isCancelled) return BookingResult.alreadyCancelled;
+    if (shift.hasStartedAt(clock())) return BookingResult.alreadyStarted;
+    // Неоплаченной смены нет в ленте — звать на неё некуда.
+    if (shift.awaitingPayment) return BookingResult.awaitingPayment;
+    if (!shift.hasFreeSlots) return BookingResult.noSlots;
+
+    // Только любимых: приглашение — знак доверия, а не рассылка всем
+    // подряд. Иначе заказчик мог бы слать уведомления кому угодно.
+    final favorite = await (db.select(db.favoriteRows)
+          ..where((f) =>
+              f.employerId.equals(_workerId) & f.workerId.equals(workerId)))
+        .getSingleOrNull();
+    if (favorite == null) return BookingResult.notMine;
+
+    final status = await _statusOf(shiftId, workerId);
+    if (status == ApplicationStatus.active ||
+        status == ApplicationStatus.completed) {
+      return BookingResult.alreadyBooked;
+    }
+
+    // Второе приглашение на ту же смену не шлём: одно уже лежит в
+    // колокольчике, а десять одинаковых — это уже навязчивость.
+    final already = await (db.select(db.notificationRows)
+          ..where((n) =>
+              n.userId.equals(workerId) &
+              n.shiftId.equals(shiftId) &
+              n.kind.equals(NotificationKind.invited.name))
+          ..limit(1))
+        .get();
+    if (already.isNotEmpty) return BookingResult.ok;
+
+    await _notify(
+      userId: workerId,
+      kind: NotificationKind.invited,
+      note: (t) => t.invited(shift.company, shift.title, shift.workDate,
+          _timeOf(shift), formatMoney(shift.totalPay)),
+      shiftId: shiftId,
+    );
+    return BookingResult.ok;
+  }
 
   @override
   Future<WorkerTaste> workerTaste() async {

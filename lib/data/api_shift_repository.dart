@@ -354,6 +354,14 @@ class ApiShiftRepository implements ShiftRepository {
   }
 
   @override
+  Future<BookingResult> inviteToShift({
+    required int shiftId,
+    required int workerId,
+  }) async =>
+      _result(await client
+          .post('/api/shifts/$shiftId/invite', {'worker': workerId}));
+
+  @override
   Future<WorkerTaste> workerTaste() async => WorkerTaste.fromJson(
       await client.get('/api/me/taste') as Map<String, dynamic>);
 

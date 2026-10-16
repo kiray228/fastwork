@@ -267,7 +267,10 @@ class ProfilePage extends StatelessWidget {
                     title: tr.profile.menuFavorites,
                     trailing: tr.profile.menuFavoritesHint,
                     onTap: () => Navigator.of(context).push(
-                      appRoute(FavoritesPage(repository: repos.shifts)),
+                      appRoute(FavoritesPage(
+                        repository: repos.shifts,
+                        managerId: user.id,
+                      )),
                     ),
                   ),
                 if (!user.isManager)
