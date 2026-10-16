@@ -61,6 +61,11 @@ abstract class ServerStrings {
   String get paymentAccepted;
   String get paymentFailedHint;
   String get paymentAcceptedHint;
+  String get requestTooLarge;
+  String get providerUnavailable;
+  String get unknownCity;
+  String get needCompany;
+  String get codeTooSoon;
 }
 
 class _Ru extends ServerStrings {
@@ -148,6 +153,18 @@ class _Ru extends ServerStrings {
   @override
   String get paymentAcceptedHint => 'Вернитесь в приложение fastwork — '
       'смена появится в ленте, как только банк подтвердит платёж.';
+  @override
+  String get requestTooLarge => 'Слишком большой запрос';
+  @override
+  String get providerUnavailable =>
+      'Платёжный сервис не ответил. Попробуйте ещё раз через минуту.';
+  @override
+  String get unknownCity => 'В этом городе fastwork пока не работает';
+  @override
+  String get needCompany => 'Укажите название компании';
+  @override
+  String get codeTooSoon =>
+      'Код уже отправлен. Новый можно запросить через минуту.';
 }
 
 class _Kk extends ServerStrings {
@@ -236,6 +253,18 @@ class _Kk extends ServerStrings {
   @override
   String get paymentAcceptedHint => 'fastwork қосымшасына оралыңыз — банк '
       'төлемді растаған соң ауысым таспада пайда болады.';
+  @override
+  String get requestTooLarge => 'Сұраныс тым үлкен';
+  @override
+  String get providerUnavailable =>
+      'Төлем қызметі жауап бермеді. Бір минуттан кейін қайталаңыз.';
+  @override
+  String get unknownCity => 'fastwork бұл қалада әлі жұмыс істемейді';
+  @override
+  String get needCompany => 'Компания атауын көрсетіңіз';
+  @override
+  String get codeTooSoon =>
+      'Код жіберілді. Жаңасын бір минуттан кейін сұрауға болады.';
 }
 
 class _En extends ServerStrings {
@@ -322,6 +351,18 @@ class _En extends ServerStrings {
   @override
   String get paymentAcceptedHint => 'Go back to the fastwork app — the shift '
       'will appear in the feed as soon as the bank confirms the payment.';
+  @override
+  String get requestTooLarge => 'The request is too large';
+  @override
+  String get providerUnavailable =>
+      "The payment service didn't respond. Please try again in a minute.";
+  @override
+  String get unknownCity => "fastwork doesn't work in this city yet";
+  @override
+  String get needCompany => 'Enter the company name';
+  @override
+  String get codeTooSoon =>
+      'A code was just sent. You can request a new one in a minute.';
 }
 
 /// Словарь языка текущего запроса.

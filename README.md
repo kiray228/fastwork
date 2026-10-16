@@ -91,7 +91,7 @@ fastwork/                 приложение на Flutter — всё, что �
 
 ```bash
 flutter pub get
-flutter test          # 259 тестов
+flutter test          # 282 теста
 flutter run           # без сервера — на локальной базе
 ```
 
@@ -101,7 +101,7 @@ flutter run           # без сервера — на локальной баз
 cd packages/server
 dart pub get
 dart run bin/server.dart      # http://localhost:8080
-dart test                     # 38 тестов: оплата, права доступа, вход
+dart test                     # 52 теста: оплата, права доступа, вход
 ```
 
 Подробности — в [`docs/`](docs/):
@@ -124,3 +124,4 @@ dart test                     # 38 тестов: оплата, права дос
 16. [Проверка на прочность и что появилось после неё](docs/16-audit-i-novoe.md)
 17. [Три языка: қазақша, русский, English](docs/17-yazyki.md)
 18. [Третий заход: «Точно выйду», подписки на виды работ, справка о заработке](docs/18-tretiy-zahod.md)
+19. [Четвёртый заход: вторая проверка на прочность](docs/19-chetvyortyy-zahod.md)

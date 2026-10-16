@@ -190,6 +190,15 @@ class Shift {
   /// поэтому верхняя граница не начало смены, а конец дня.
   DateTime get checkInOpensAt => startsAt.subtract(const Duration(hours: 1));
 
+  /// До какого момента можно отметиться: до конца дня смены, а у ночной —
+  /// до её конца утром. Раньше границей был только «тот же день», и
+  /// пришедший в 00:10 на смену 22:00–06:00 отметиться уже не мог, а на
+  /// смену в 00:30 нельзя было отметиться в 23:40 накануне.
+  DateTime get checkInClosesAt {
+    final dayEnd = DateTime(workDate.year, workDate.month, workDate.day + 1);
+    return endsAt.isAfter(dayEnd) ? endsAt : dayEnd;
+  }
+
   /// Можно ли отметиться прямо сейчас.
   ///
   /// Время снова передаём параметром, а не берём внутри: только так
@@ -197,8 +206,8 @@ class Shift {
   bool canCheckInAt(DateTime now) =>
       isApplied &&
       !isCheckedIn &&
-      isSameDay(now, workDate) &&
-      !now.isBefore(checkInOpensAt);
+      !now.isBefore(checkInOpensAt) &&
+      now.isBefore(checkInClosesAt);
 
   /// Смена уже прошла — по календарю, а не по подтверждению.
   bool isPastOn(DateTime now) =>
@@ -306,6 +315,10 @@ enum ShiftTag { night, noBreakDeduction, payoutTomorrow, fewSlots, urgent, noCan
 /// а мероприятие, и вести его стоит через поддержку.
 const kMaxWorkersPerShift = 100;
 
+/// Сколько раз можно ошибиться с кодом отметки. Код — четыре цифры, и без
+/// предела его перебрал бы скрипт; пять попыток хватает на опечатки.
+const kMaxCheckInAttempts = 5;
+
 /// Ставка не меньше 100 ₸ и не больше 100 000 ₸ в час, в тиынах.
 const kMinHourlyRate = 10000;
 const kMaxHourlyRate = 10000000;
@@ -345,6 +358,9 @@ String? shiftFormError({
   }
   bool inDay(int m) => m >= 0 && m < 1440;
   if (!inDay(startMinutes) || !inDay(endMinutes)) return t.formBadTime;
+  // 10:00–10:00 по формуле длительности — целые сутки. Почти наверняка
+  // это опечатка, а заплатил бы заказчик за 23 часа на каждое место.
+  if (startMinutes == endMinutes) return t.formBadTime;
   final draft = Shift(
     id: 0,
     workDate: workDate,

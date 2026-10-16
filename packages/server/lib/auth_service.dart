@@ -41,6 +41,9 @@ class AuthService {
   /// рассылке — ещё и разорить владельца сервера.
   static const maxCodesPerHour = 5;
 
+  /// Сколько ждать между кодами на одну почту.
+  static const codeCooldown = Duration(minutes: 1);
+
   // ---------------------------------------------------------------------
   // Коды
   // ---------------------------------------------------------------------
@@ -81,37 +84,53 @@ class AuthService {
           ..where((c) => c.createdAt.isSmallerThanValue(hourAgo)))
         .go();
 
-    final recent = await db.query(
-      '''
-      SELECT COUNT(*) AS c FROM auth_code_rows
-      WHERE email = ? AND created_at > ?
-      ''',
-      variables: [
-        Variable.withString(email),
-        Variable.withDateTime(hourAgo),
-      ],
-      readsFrom: {db.authCodeRows},
-    ).getSingle();
+    // Сначала занимаем место в счётчике — строкой с новым кодом, — и
+    // только потом считаем и отправляем. Раньше было наоборот: счётчик
+    // читали, потом ждали письмо секунд пятнадцать и лишь затем
+    // записывали. Сто запросов, пришедших разом, все видели «меньше
+    // пяти», и на чужую почту уходило сто писем.
+    final code = _generateCode();
+    final id = await db.into(db.authCodeRows).insert(
+          AuthCodeRowsCompanion.insert(
+            email: email,
+            codeHash: _hash(email, code),
+            createdAt: now,
+            expiresAt: now.add(codeLifetime),
+          ),
+        );
+    Future<void> forget() =>
+        (db.delete(db.authCodeRows)..where((c) => c.id.equals(id))).go();
 
-    if (recent.read<int>('c') >= maxCodesPerHour) {
-      throw AuthError(
-        serverTr.tooManyCodes,
-        status: 429,
-      );
+    // Считаем только тех, кто занял место раньше нас (по номеру строки).
+    // Из одновременных запросов пройдут первые, сколько позволяет предел.
+    final earlier = await (db.select(db.authCodeRows)
+          ..where((c) =>
+              c.email.equals(email) &
+              c.createdAt.isBiggerThanValue(hourAgo) &
+              c.id.isSmallerThanValue(id)))
+        .get();
+
+    if (earlier.length >= maxCodesPerHour) {
+      await forget();
+      throw AuthError(serverTr.tooManyCodes, status: 429);
+    }
+    // Новый код не раньше чем через минуту после прошлого: письма иногда
+    // идут с задержкой, и человек жмёт «ещё раз» трижды подряд — а потом
+    // вводит код из первого письма, который уже погашен.
+    final cooldownFrom = now.subtract(codeCooldown);
+    if (earlier.any((c) => c.createdAt.isAfter(cooldownFrom))) {
+      await forget();
+      throw AuthError(serverTr.codeTooSoon, status: 429);
     }
 
-    final code = _generateCode();
-
-    // Сначала отправляем, и только потом записываем.
-    //
-    // Порядок важен: если письмо не ушло, код записывать незачем — он
-    // всё равно никому не известен, а место в счётчике запросов займёт.
     try {
       await sender.send(email, code);
     } catch (error) {
       // Наружу отдаём понятную причину, а подробности пишем в лог:
-      // человеку они ни о чём не скажут, а нам понадобятся.
+      // человеку они ни о чём не скажут, а нам понадобятся. Письмо не
+      // ушло — код никому не известен, и место в счётчике он не занимает.
       stderr.writeln('Не удалось отправить код на $email: $error');
+      await forget();
       throw AuthError(
         serverTr.emailNotSent,
         status: 502,
@@ -124,17 +143,9 @@ class AuthService {
     // оно считает записи за последний час, а считать было нечего.
     // Погашенный код не подойдёт (у него истёк срок), зато остаётся
     // следом в истории запросов.
-    await (db.update(db.authCodeRows)..where((c) => c.email.equals(email)))
+    await (db.update(db.authCodeRows)
+          ..where((c) => c.email.equals(email) & c.id.isNotValue(id)))
         .write(AuthCodeRowsCompanion(expiresAt: Value(now)));
-
-    await db.into(db.authCodeRows).insert(
-          AuthCodeRowsCompanion.insert(
-            email: email,
-            codeHash: _hash(email, code),
-            createdAt: now,
-            expiresAt: now.add(codeLifetime),
-          ),
-        );
 
     return sender.name;
   }

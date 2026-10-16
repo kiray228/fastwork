@@ -556,5 +556,123 @@ void main() {
       // История отработанного — это уже начисленные деньги.
       expect((await wallet.summary()).balance, greaterThan(0));
     });
+
+    test('два невыхода разом не возвращают заказчику лишнего', () async {
+      final second = await auth.register(
+        phone: '77000000003',
+        fullName: 'Азамат Серик',
+        city: 'Алматы',
+        acceptedTermsVersion: kTermsVersion,
+      );
+      final id = await publish();
+      await book(id);
+      session.setUser(second);
+      expect(await shifts.apply(id), BookingResult.ok);
+
+      session.setUser(manager);
+      clock.setHour(23); // смена прошла, не пришёл никто
+      // Две отметки одновременно. Раньше обе читали «возвращено 0» и одна
+      // из записей о возврате терялась — а потом остаток смены
+      // возвращался заказчику ещё раз.
+      await Future.wait([
+        shifts.markNoShow(shiftId: id, workerId: worker.id),
+        shifts.markNoShow(shiftId: id, workerId: second.id),
+      ]);
+
+      final refunds = gateway.operations
+          .where((op) => op.startsWith('refund:'))
+          .map((op) => int.parse(op.substring('refund:'.length)))
+          .fold<int>(0, (sum, x) => sum + x);
+      expect(refunds, 2 * 1258400, reason: 'вернули ровно внесённое');
+
+      final history = await summaryOf(manager);
+      final net = history.entries.fold<int>(0, (sum, e) => sum + e.amount);
+      expect(net, 0, reason: 'смена не состоялась — заказчик при своих');
+    });
+
+    test('доплата, дошедшая после начала смены, возвращается', () async {
+      final id = await publish();
+      await book(id);
+      session.setUser(manager);
+      final before = (await shifts.shiftById(id))!;
+      final edit = await shifts.updateShift(
+        shiftId: id,
+        workDate: before.workDate,
+        title: before.title,
+        address: before.address,
+        startMinutes: before.startMinutes,
+        endMinutes: before.endMinutes,
+        hourlyRate: 150000,
+        workersNeeded: before.workersNeeded,
+      );
+      expect(edit.result, BookingResult.paymentRequired);
+
+      // Счёт в Kaspi оплатили через час после начала смены.
+      clock.setHour(11);
+      await shifts.completeSandboxPayment(edit.checkout!.id, card: card);
+
+      expect((await shifts.shiftById(id))!.hourlyRate, 110000,
+          reason: 'условия идущей смены не меняются');
+      expect(gateway.operations.last, 'refund:${edit.checkout!.amount}');
+    });
+
+    test('тестовую оплату не принимают, если выплаты настоящие', () async {
+      // Карта и Kaspi тестовые, а вывод на карту — настоящий. «Оплатив»
+      // смену понарошку, исполнитель вывел бы за неё живые деньги.
+      final mixed = PaymentGateway(
+        card: SandboxProvider(PaymentMethod.card),
+        kaspi: SandboxProvider(PaymentMethod.kaspi),
+        payouts: _RealPayouts(),
+      );
+      expect(mixed.accepts(PaymentMethod.card), isFalse);
+      expect(mixed.sandboxFor(PaymentMethod.kaspi), isNull);
+      expect(gateway.accepts(PaymentMethod.card), isTrue,
+          reason: 'когда всё тестовое — можно');
+
+      session.setUser(manager);
+      final strict = DbShiftRepository(db, session,
+          payments: mixed, clock: clock.call);
+      final now = DateTime.now();
+      await expectLater(
+        strict.createShift(
+          method: PaymentMethod.card,
+          workDate: DateTime(now.year, now.month, now.day),
+          title: 'Услуги грузчика',
+          company: 'Magnum',
+          address: 'ул. Абая, 1',
+          startMinutes: 600,
+          endMinutes: 1320,
+          hourlyRate: 110000,
+          workersNeeded: 2,
+          createdBy: manager.id,
+          city: 'Алматы',
+        ),
+        throwsA(isA<PaymentDeclined>()),
+      );
+    });
+
+    test('на свою смену заказчик не записывается', () async {
+      final id = await publish();
+      session.setUser(manager);
+      expect(await shifts.apply(id), BookingResult.ownShift);
+    });
   });
+}
+
+/// Выплаты «как настоящие»: тесту важно только, что они не тестовые.
+class _RealPayouts implements PayoutProvider {
+  @override
+  String get name => 'ioka';
+  @override
+  bool get isSandbox => false;
+  @override
+  Future<ProviderCheckout> startPayout({
+    required int amount,
+    required String reference,
+    required String description,
+  }) =>
+      throw UnimplementedError();
+  @override
+  Future<ProviderResult> checkPayout(String operation) =>
+      throw UnimplementedError();
 }

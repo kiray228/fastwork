@@ -683,6 +683,7 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
           BookingResult.ok =>
             tr.manager.noShowMarked(applicant.user.fullName),
           BookingResult.notStarted => tr.manager.noShowTooEarly,
+          BookingResult.checkedIn => tr.manager.noShowCheckedIn,
           _ => tr.manager.noShowFailed,
         }),
         behavior: SnackBarBehavior.floating,

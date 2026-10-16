@@ -216,6 +216,9 @@ class CoreEn extends CoreStrings {
   String get paymentNotSandbox =>
       'This payment goes through the payment service, not the test mode';
   @override
+  String get paymentMethodOff =>
+      'This payment method is not available yet — choose another one';
+  @override
   String get payoutNotSandbox =>
       'This withdrawal goes through the payment service, not the test mode';
   @override

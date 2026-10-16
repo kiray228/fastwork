@@ -42,6 +42,9 @@ enum BookingResult {
   timeConflict, // в это время человек уже записан на другую смену
   alreadyFinished, // запись уже закрыта: выход подтверждён или отмечен невыход
   wrongCode, // код отметки не совпал с кодом на экране заказчика
+  tooManyAttempts, // код отметки вводили неверно слишком много раз
+  ownShift, // на свою же смену заказчик записаться не может
+  checkedIn, // человек отметился по коду — невыход так просто не поставить
   notFound,
 }
 
@@ -63,7 +66,12 @@ class ShiftEditResult {
 
   static ShiftEditResult fromJson(Map<String, dynamic> json) =>
       ShiftEditResult(
-        BookingResult.values.byName(json['result'] as String),
+        // Не `byName`: новый ответ сервера, которого старое приложение не
+        // знает, ронял бы его на правке смены. Незнакомое — «не нашлось».
+        BookingResult.values.firstWhere(
+          (r) => r.name == json['result'],
+          orElse: () => BookingResult.notFound,
+        ),
         checkout: json['checkout'] == null
             ? null
             : PaymentCheckout.fromJson(
@@ -602,6 +610,9 @@ class DbShiftRepository implements ShiftRepository {
       // Отменённой смены в ленте нет, но открытый экран мог остаться
       // открытым с прошлого раза — и кнопка на нём ещё живая.
       if (shift.isCancelled) return BookingResult.alreadyCancelled;
+      // Записаться на свою смену — значит самому себе подтвердить выход,
+      // начислить заработок и оставить отзыв о своей же компании.
+      if (shift.createdBy == _workerId) return BookingResult.ownShift;
       if (shift.isApplied) return BookingResult.alreadyBooked;
       // Запись на эту смену уже закрыта: выход подтверждён (и оплачен)
       // или отмечен невыход. Раньше здесь запись молча возвращалась в
@@ -635,11 +646,17 @@ class DbShiftRepository implements ShiftRepository {
           .getSingleOrNull();
 
       if (existing != null) {
-        // Запись уже была и её отменяли — возвращаем в активные.
+        // Запись уже была и её отменяли — возвращаем в активные. С чистого
+        // листа: «точно выйду» и отметка относились к прошлой записи, и
+        // заказчик не должен видеть подтверждение, которого никто не давал.
         await (db.update(db.applicationRows)
               ..where((a) => a.id.equals(existing.id)))
             .write(const ApplicationRowsCompanion(
           status: Value(ApplicationStatus.active),
+          comingConfirmedAt: Value(null),
+          checkedInAt: Value(null),
+          checkInVerified: Value(false),
+          checkInAttempts: Value(0),
         ));
         await _leaveWaitlist(shiftId);
         await _notifyApplied(shift);
@@ -772,6 +789,10 @@ class DbShiftRepository implements ShiftRepository {
   Future<List<Shift>> myShifts({required bool archived}) async {
     final now = clock();
     final today = DateTime(now.year, now.month, now.day);
+    // Ночная смена 22:00–06:00 после полуночи ещё идёт, хотя её день уже
+    // вчерашний. Поэтому живые записи берём со вчерашнего дня, а куда их
+    // отнести, решаем ниже по концу смены.
+    final yesterday = DateTime(now.year, now.month, now.day - 1);
 
     // «Архив» — не отдельная таблица, а другое условие в том же запросе.
     // В работе: запись жива и день ещё не прошёл.
@@ -788,11 +809,15 @@ class DbShiftRepository implements ShiftRepository {
       WHERE a.worker_id = $_workerId AND $condition
       ORDER BY s.work_date ${archived ? 'DESC' : 'ASC'}, s.start_minutes
       ''',
-      variables: [Variable.withDateTime(today)],
+      variables: [Variable.withDateTime(archived ? today : yesterday)],
       readsFrom: {db.shiftRows, db.applicationRows},
     ).get();
 
-    return rows.map(_toShift).toList();
+    // В работе — живая запись на сегодня и дальше или ночная смена,
+    // которая ещё не кончилась.
+    bool inWork(Shift s) =>
+        s.isApplied && (!s.workDate.isBefore(today) || s.isAheadAt(now));
+    return rows.map(_toShift).where((s) => inWork(s) != archived).toList();
   }
 
   @override
@@ -865,6 +890,24 @@ class DbShiftRepository implements ShiftRepository {
 
     var verified = false;
     if (code != null) {
+      // Четыре цифры — всего десять тысяч вариантов. Без счётчика их
+      // перебрал бы скрипт из дома, и отметка «на месте · код» ничего бы
+      // не доказывала. Попытку засчитываем до сравнения и одной командой
+      // «прибавь, если ещё можно», как у кода входа: иначе сто
+      // одновременных запросов все увидели бы «ноль попыток».
+      final counted = await db.customUpdate(
+        db.portableSql('UPDATE application_rows '
+            'SET check_in_attempts = check_in_attempts + 1 '
+            'WHERE shift_id = ? AND worker_id = ? AND check_in_attempts < ?'),
+        variables: [
+          Variable.withInt(shiftId),
+          Variable.withInt(_workerId),
+          Variable.withInt(kMaxCheckInAttempts),
+        ],
+        updates: {db.applicationRows},
+      );
+      if (counted == 0) return BookingResult.tooManyAttempts;
+
       final row = await (db.select(db.shiftRows)
             ..where((s) => s.id.equals(shiftId)))
           .getSingle();
@@ -1010,10 +1053,15 @@ class DbShiftRepository implements ShiftRepository {
     if (shift is BookingResult) return shift;
     shift as Shift;
 
-    final status = await _statusOf(shiftId, workerId);
+    final application = await _applicationOf(shiftId, workerId);
+    final status = application?.status;
     if (status == null) return BookingResult.notFound;
     if (status == ApplicationStatus.noShow) return BookingResult.ok;
     if (status != ApplicationStatus.active) return BookingResult.alreadyBooked;
+    // Человек отметился кодом, который видно только на точке, — значит,
+    // он был на месте. Поставить ему невыход значило бы забрать его
+    // заработок себе. Если он и правда ушёл — это разбирает поддержка.
+    if (application!.checkInVerified) return BookingResult.checkedIn;
     // Не вышел — значит, смена началась без него. До начала это ещё
     // не невыход, а деньги за место заказчик забрал бы раньше времени.
     if (!shift.hasStartedAt(clock())) return BookingResult.notStarted;
@@ -2236,13 +2284,15 @@ class DbShiftRepository implements ShiftRepository {
       '${formatTime(shift.startMinutes)}–${formatTime(shift.endMinutes)}';
 
   /// Состояние записи человека на смену. null — записи нет.
-  Future<String?> _statusOf(int shiftId, int workerId) async {
-    final row = await (db.select(db.applicationRows)
-          ..where((a) =>
-              a.shiftId.equals(shiftId) & a.workerId.equals(workerId)))
-        .getSingleOrNull();
-    return row?.status;
-  }
+  Future<String?> _statusOf(int shiftId, int workerId) async =>
+      (await _applicationOf(shiftId, workerId))?.status;
+
+  /// Запись человека на смену целиком. null — записи нет.
+  Future<ApplicationRow?> _applicationOf(int shiftId, int workerId) =>
+      (db.select(db.applicationRows)
+            ..where((a) =>
+                a.shiftId.equals(shiftId) & a.workerId.equals(workerId)))
+          .getSingleOrNull();
 
   /// Оплата смены, если сервис её ещё держит.
   Future<PaymentRow?> _heldPayment(int shiftId) =>
@@ -2266,6 +2316,12 @@ class DbShiftRepository implements ShiftRepository {
 
   /// Номер для счёта Kaspi. Для карты номер не нужен.
   String? _phoneFor(PaymentMethod method, String? phone) {
+    // Через эту проверку проходит каждая оплата: смены, повтор, доплата.
+    // Тестовый способ при настоящих выплатах не принимаем — см.
+    // `PaymentGateway.accepts`.
+    if (!payments.accepts(method)) {
+      throw PaymentDeclined(_t.paymentMethodOff);
+    }
     if (method != PaymentMethod.kaspi) return null;
     final normalized = normalizeKzPhone(phone ?? '');
     if (normalized == null) {
@@ -2400,9 +2456,20 @@ class DbShiftRepository implements ShiftRepository {
         .write(ChargeRowsCompanion(
       status: const Value(CheckoutStatus.paid),
       paidAt: Value(clock()),
-      message: Value(paidWith),
     ));
     if (won == 0) return;
+
+    // Пометку «заменена новой правкой» читаем из базы уже после того, как
+    // оплата стала «оплаченной». В руках у нас может быть копия минутной
+    // давности — опрос оплат читает их все разом, — и пометки в ней ещё
+    // нет. А после нашего обновления новая правка эту оплату уже не
+    // тронет: она помечает только ждущие.
+    final fresh = await (db.select(db.chargeRows)
+          ..where((c) => c.id.equals(charge.id)))
+        .getSingle();
+    final superseded = fresh.message == _superseded;
+    await (db.update(db.chargeRows)..where((c) => c.id.equals(charge.id)))
+        .write(ChargeRowsCompanion(message: Value(paidWith)));
 
     final shift = await _loadShift(charge.shiftId);
     final funding = await _funding(charge.shiftId);
@@ -2421,7 +2488,7 @@ class DbShiftRepository implements ShiftRepository {
 
     // Доплата за правку, которую уже заменила более новая: её условия не
     // действуют, деньги — назад.
-    if (isTopup && charge.message == _superseded) {
+    if (isTopup && superseded) {
       await _refundCharge(
           charge, charge.amount, (t) => t.refundSuperseded(shift.title));
       return;
@@ -2452,6 +2519,15 @@ class DbShiftRepository implements ShiftRepository {
       return;
     }
 
+    // Доплата дошла, когда смена уже началась: человек мог оплатить счёт
+    // в Kaspi через час. Менять день, время или ставку посреди смены
+    // нельзя — так же, как нельзя править её после начала. Деньги назад.
+    if (shift.hasStartedAt(clock())) {
+      await _refundCharge(
+          charge, charge.amount, (t) => t.refundNotApplied(shift.title));
+      return;
+    }
+
     final edit = _ShiftEdit.fromJson(
         jsonDecode(charge.payload ?? '{}') as Map<String, dynamic>);
     final applied = await _applyEdit(shift, edit);
@@ -2472,15 +2548,59 @@ class DbShiftRepository implements ShiftRepository {
     await provider.refund(operation: charge.operation, amount: amount);
   }
 
+  /// Отложить сумму к возврату по операции — одной командой.
+  ///
+  /// «Прочитал, сколько уже вернули, прибавил, записал» не годится. Две
+  /// отметки «не вышел», сделанные разом, прочитали бы одно и то же, и
+  /// один возврат пропал бы из учёта, хотя провайдер вернул оба. Потом
+  /// остаток смены посчитался бы больше настоящего, и заказчик получил бы
+  /// эти деньги второй раз. Условие в UPDATE заодно не даёт вернуть по
+  /// операции больше, чем по ней взяли. false — места под возврат нет.
+  Future<bool> _reserveRefund(int chargeId, int amount) async {
+    final changed = await db.customUpdate(
+      db.portableSql('UPDATE charge_rows SET refunded = refunded + ? '
+          'WHERE id = ? AND refunded + ? <= amount'),
+      variables: [
+        Variable.withInt(amount),
+        Variable.withInt(chargeId),
+        Variable.withInt(amount),
+      ],
+      updates: {db.chargeRows},
+    );
+    return changed > 0;
+  }
+
+  /// Провайдер отказал в возврате — снять отложенную сумму обратно.
+  Future<void> _releaseRefund(int chargeId, int amount) => db.customUpdate(
+        db.portableSql(
+            'UPDATE charge_rows SET refunded = refunded - ? WHERE id = ?'),
+        variables: [Variable.withInt(amount), Variable.withInt(chargeId)],
+        updates: {db.chargeRows},
+      );
+
+  /// Вернуть по операции: сначала отложить в учёте, потом у провайдера.
+  ///
+  /// Порядок важен: отложенное видят все параллельные возвраты, и вдвоём
+  /// они не вернут больше, чем взяли. Если провайдер откажет, отложенное
+  /// снимается, а ошибка идёт дальше.
+  Future<bool> _refundPart(ChargeRow charge, int amount) async {
+    if (!await _reserveRefund(charge.id, amount)) return false;
+    try {
+      await _providerRefund(charge, amount);
+    } catch (_) {
+      await _releaseRefund(charge.id, amount);
+      rethrow;
+    }
+    return true;
+  }
+
   /// Вернуть всю или часть одной операции.
   Future<void> _refundCharge(
     ChargeRow charge,
     int amount,
     String Function(CoreStrings t) title,
   ) async {
-    await _providerRefund(charge, amount);
-    await (db.update(db.chargeRows)..where((c) => c.id.equals(charge.id)))
-        .write(ChargeRowsCompanion(refunded: Value(charge.refunded + amount)));
+    if (!await _refundPart(charge, amount)) return;
     await _record(
       userId: charge.payerId,
       shiftId: charge.shiftId,
@@ -2510,16 +2630,24 @@ class DbShiftRepository implements ShiftRepository {
         .get();
 
     var left = amount;
-    for (final charge in charges) {
+    for (var charge in charges) {
+      // Строку перечитываем перед каждой попыткой: пока шёл возврат по
+      // прошлой операции, параллельный запрос мог отложить что-то здесь.
+      for (var tries = 0; left > 0 && tries < 3; tries++) {
+        charge = await (db.select(db.chargeRows)
+              ..where((c) => c.id.equals(charge.id)))
+            .getSingle();
+        final part = [left, charge.amount - charge.refunded]
+            .reduce((a, b) => a < b ? a : b);
+        if (part <= 0) break;
+        if (await _refundPart(charge, part)) {
+          left -= part;
+          break;
+        }
+      }
       if (left == 0) break;
-      final part = [left, charge.amount - charge.refunded]
-          .reduce((a, b) => a < b ? a : b);
-      if (part <= 0) continue;
-      await _providerRefund(charge, part);
-      await (db.update(db.chargeRows)..where((c) => c.id.equals(charge.id)))
-          .write(ChargeRowsCompanion(refunded: Value(charge.refunded + part)));
-      left -= part;
     }
+    if (left == amount) return; // вернуть оказалось нечего
 
     await _record(
       userId: payerId,
@@ -2564,6 +2692,18 @@ class DbShiftRepository implements ShiftRepository {
     final payment = await _heldPayment(shift.id);
     if (payment == null) return;
 
+    // Сначала забираем право вернуть остаток — условием «если ещё держим».
+    // Два запроса разом (последняя отметка и открытый список смен) оба
+    // увидели бы «держим» и вернули бы остаток дважды. Сработает только
+    // одно обновление; второму возвращать уже нечего.
+    final claimed = await (db.update(db.paymentRows)
+          ..where((p) =>
+              p.id.equals(payment.id) & p.status.equals(PaymentStatus.held)))
+        .write(const PaymentRowsCompanion(
+      status: Value(PaymentStatus.refunded),
+    ));
+    if (claimed == 0) return;
+
     final charges = await (db.select(db.chargeRows)
           ..where((c) =>
               c.shiftId.equals(shift.id) &
@@ -2582,18 +2722,23 @@ class DbShiftRepository implements ShiftRepository {
       rest -= ShiftCost(slotPay: e.amount, slots: 1).total;
     }
 
-    if (rest > 0) {
+    if (rest <= 0) return;
+    try {
       await _refund(
         shift.id,
         payment.payerId,
         rest,
         title ?? (t) => t.refundCancelled(shift.title),
       );
+    } catch (_) {
+      // Провайдер не ответил — деньги всё ещё у сервиса. Возвращаем оплате
+      // «держим», чтобы следующая попытка вернула их заново.
+      await (db.update(db.paymentRows)..where((p) => p.id.equals(payment.id)))
+          .write(const PaymentRowsCompanion(
+        status: Value(PaymentStatus.held),
+      ));
+      rethrow;
     }
-    await (db.update(db.paymentRows)..where((p) => p.id.equals(payment.id)))
-        .write(const PaymentRowsCompanion(
-      status: Value(PaymentStatus.refunded),
-    ));
   }
 
   /// Учебная смена считается оплаченной — её «оплатил» сам сервис.
@@ -2721,7 +2866,7 @@ class DbShiftRepository implements ShiftRepository {
     if (count > 0) return;
 
     for (final demo in buildDemoShifts()) {
-      await _insertDemo(demo, hiredFrom: 100);
+      await _insertDemo(demo);
     }
   }
 
@@ -2851,7 +2996,7 @@ class DbShiftRepository implements ShiftRepository {
   /// из них не увидит демо-отклик как свой. (Старые демо-смены брали
   /// номера с сотого — на живом сервере сотый человек однажды обнаружил
   /// бы себя записанным на смену, на которую не записывался.)
-  Future<void> _insertDemo(Shift demo, {int? hiredFrom}) async {
+  Future<void> _insertDemo(Shift demo) async {
     final id = await db.into(db.shiftRows).insert(
           ShiftRowsCompanion.insert(
             workDate: demo.workDate,
@@ -2881,7 +3026,7 @@ class DbShiftRepository implements ShiftRepository {
       await db.into(db.applicationRows).insert(
             ApplicationRowsCompanion.insert(
               shiftId: id,
-              workerId: hiredFrom == null ? -1 - i : hiredFrom + i,
+              workerId: -1 - i,
               status: ApplicationStatus.active,
               createdAt: clock(),
             ),

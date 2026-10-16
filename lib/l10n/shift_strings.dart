@@ -173,6 +173,8 @@ abstract class ShiftStrings {
   String get map2Gis;
   String get mapYandex;
   String get mapGoogle;
+  String get bookOwnShift;
+  String get checkInLocked;
 }
 
 class _Ru extends ShiftStrings {
@@ -477,6 +479,12 @@ class _Ru extends ShiftStrings {
   String get mapYandex => 'Яндекс Карты';
   @override
   String get mapGoogle => 'Google Карты';
+  @override
+  String get bookOwnShift =>
+      'Это ваша смена — записаться на неё можно только исполнителю';
+  @override
+  String get checkInLocked =>
+      'Код введён неверно слишком много раз — отметьтесь у старшего смены';
 }
 
 class _Kk extends ShiftStrings {
@@ -768,6 +776,12 @@ class _Kk extends ShiftStrings {
   String get mapYandex => 'Яндекс Карталар';
   @override
   String get mapGoogle => 'Google Карталар';
+  @override
+  String get bookOwnShift =>
+      'Бұл сіздің ауысымыңыз — оған тек орындаушы жазыла алады';
+  @override
+  String get checkInLocked =>
+      'Код тым көп рет қате енгізілді — ауысым жетекшісіне белгіленіңіз';
 }
 
 class _En extends ShiftStrings {
@@ -1057,4 +1071,10 @@ class _En extends ShiftStrings {
   String get mapYandex => 'Yandex Maps';
   @override
   String get mapGoogle => 'Google Maps';
+  @override
+  String get bookOwnShift =>
+      'This is your own shift — only workers can book it';
+  @override
+  String get checkInLocked =>
+      'Too many wrong codes — ask the shift lead to mark you';
 }

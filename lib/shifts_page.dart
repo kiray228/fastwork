@@ -293,6 +293,7 @@ class _ShiftsPageState extends State<ShiftsPage> {
           BookingResult.ok => tr.feed.checkInAccepted,
           BookingResult.alreadyBooked => tr.feed.alreadyCheckedIn,
           BookingResult.wrongCode => tr.feed.wrongCheckInCode,
+          BookingResult.tooManyAttempts => tr.feed.checkInLocked,
           BookingResult.tooEarlyToCheckIn => tr.feed.checkInTooEarly,
           _ => tr.feed.checkInFailed,
         }),

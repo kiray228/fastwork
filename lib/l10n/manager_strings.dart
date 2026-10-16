@@ -180,6 +180,7 @@ abstract class ManagerStrings {
 
   /// «★ 4.8 · 3 смены у вас · Алматы».
   String favoriteStats(String rating, String shifts, String city);
+  String get noShowCheckedIn;
 }
 
 class _Ru extends ManagerStrings {
@@ -496,6 +497,10 @@ class _Ru extends ManagerStrings {
   @override
   String favoriteStats(String rating, String shifts, String city) =>
       '★ $rating · $shifts у вас · $city';
+  @override
+  String get noShowCheckedIn =>
+      'Человек отметился кодом на месте — невыход не поставить. '
+      'Если он ушёл раньше, напишите в поддержку';
 }
 
 class _Kk extends ManagerStrings {
@@ -817,6 +822,10 @@ class _Kk extends ManagerStrings {
   @override
   String favoriteStats(String rating, String shifts, String city) =>
       '★ $rating · сізде $shifts · $city';
+  @override
+  String get noShowCheckedIn =>
+      'Адам орнында кодпен белгіленді — келмеді деп белгілеуге болмайды. '
+      'Ерте кетіп қалса, қолдау қызметіне жазыңыз';
 }
 
 class _En extends ManagerStrings {
@@ -1135,4 +1144,8 @@ class _En extends ManagerStrings {
   @override
   String favoriteStats(String rating, String shifts, String city) =>
       '★ $rating · $shifts with you · $city';
+  @override
+  String get noShowCheckedIn =>
+      'This person checked in on site with the code — you can\'t mark a '
+      'no-show. If they left early, contact support';
 }
