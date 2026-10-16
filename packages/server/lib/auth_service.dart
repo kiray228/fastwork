@@ -230,12 +230,29 @@ class AuthService {
     ).join();
   }
 
+  /// Отпечаток токена — то, что лежит в базе вместо самого токена.
+  ///
+  /// Раньше токены хранились как есть, и любая утечка базы (резервная
+  /// копия, чужой доступ к хостингу) сразу давала войти в каждый аккаунт.
+  /// По отпечатку токен не восстановить, а для входа нужен сам токен.
+  ///
+  /// Без соли и без медленного хэша — и это не небрежность. Медленные
+  /// хэши нужны паролям: их придумывают люди, и перебрать их можно. Токен
+  /// — 32 случайных символа, перебирать там нечего, а sha256 позволяет
+  /// найти строку по отпечатку одним запросом.
+  static String hashToken(String token) =>
+      sha256.convert(utf8.encode(token)).toString();
+
+  /// Так выглядел токен, пока хранился как есть: 32 буквы и цифры.
+  /// Отпечаток длиннее — 64 шестнадцатеричных знака, — так их и отличаем.
+  static bool _isLegacy(String value) => value.length == 32;
+
   /// Выдать токен. `userId` пустой — почта подтверждена, аккаунта ещё нет.
   Future<String> issue({required String email, int? userId}) async {
     final token = _generateToken();
     await db.into(db.authTokenRows).insert(
           AuthTokenRowsCompanion.insert(
-            token: token,
+            token: hashToken(token),
             email: email,
             userId: Value(userId),
             createdAt: DateTime.now(),
@@ -243,6 +260,29 @@ class AuthService {
         );
     return token;
   }
+
+  /// Заменить токены, записанные как есть, их отпечатками.
+  ///
+  /// Вызывается при запуске сервера. Токены не сбрасываем: у нас есть
+  /// сами токены, отпечаток из них получается на месте — и люди остаются
+  /// в аккаунтах. Сбросить всех ради смены способа хранения значило бы
+  /// заставить каждого снова ждать код на почту без всякой пользы:
+  /// украденный раньше токен и так перестанет жить через `tokenLifetime`.
+  ///
+  /// Повторный запуск ничего не портит: отпечатки уже не той длины, и
+  /// их не трогаем. Возвращает, сколько токенов заменено.
+  Future<int> hashLegacyTokens() async {
+    final rows = await db.select(db.authTokenRows).get();
+    var hashed = 0;
+    for (final row in rows.where((r) => _isLegacy(r.token))) {
+      hashed += await _rekey(row.token);
+    }
+    return hashed;
+  }
+
+  Future<int> _rekey(String plain) =>
+      (db.update(db.authTokenRows)..where((t) => t.token.equals(plain)))
+          .write(AuthTokenRowsCompanion(token: Value(hashToken(plain))));
 
   /// Сколько живёт вход. Потом — снова код на почту.
   ///
@@ -253,9 +293,14 @@ class AuthService {
 
   /// Что стоит за токеном. Просроченный — всё равно что неизвестный.
   Future<AuthTokenRow?> lookup(String token) async {
-    final row = await (db.select(db.authTokenRows)
-          ..where((t) => t.token.equals(token)))
-        .getSingleOrNull();
+    var row = await _row(token);
+    // Токен, выданный старой версией уже после того, как эта перевела
+    // базу на отпечатки: при обновлении сервера старый ещё какое-то время
+    // отвечает. Переводим его сейчас. Только токены старого вида — иначе
+    // украденный из базы отпечаток сам сошёл бы за токен.
+    if (row == null && _isLegacy(token) && await _rekey(token) > 0) {
+      row = await _row(token);
+    }
     if (row == null) return null;
     if (DateTime.now().difference(row.createdAt) > tokenLifetime) {
       await revoke(token);
@@ -264,14 +309,21 @@ class AuthService {
     return row;
   }
 
+  Future<AuthTokenRow?> _row(String token) =>
+      (db.select(db.authTokenRows)
+            ..where((t) => t.token.equals(hashToken(token))))
+          .getSingleOrNull();
+
   /// Привязать токен к созданному аккаунту.
   Future<void> bind(String token, int userId) async {
-    await (db.update(db.authTokenRows)..where((t) => t.token.equals(token)))
+    await (db.update(db.authTokenRows)
+          ..where((t) => t.token.equals(hashToken(token))))
         .write(AuthTokenRowsCompanion(userId: Value(userId)));
   }
 
   Future<void> revoke(String token) async {
-    await (db.delete(db.authTokenRows)..where((t) => t.token.equals(token)))
+    await (db.delete(db.authTokenRows)
+          ..where((t) => t.token.equals(hashToken(token))))
         .go();
   }
 }

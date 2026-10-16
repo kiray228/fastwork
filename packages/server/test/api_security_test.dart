@@ -294,12 +294,61 @@ void main() {
 
       // Токену четыре месяца.
       await (db.update(db.authTokenRows)
-            ..where((t) => t.token.equals(workerToken)))
+            ..where((t) => t.token.equals(AuthService.hashToken(workerToken))))
           .write(AuthTokenRowsCompanion(
         createdAt: Value(DateTime.now().subtract(const Duration(days: 120))),
       ));
       final (stale, _) = await call('GET', '/api/me', token: workerToken);
       expect(stale, 401);
+    });
+
+    test('в базе лежит отпечаток токена, а не сам токен', () async {
+      final rows = await db.select(db.authTokenRows).get();
+      expect(rows.map((r) => r.token), isNot(contains(workerToken)));
+      expect(rows.map((r) => r.token),
+          contains(AuthService.hashToken(workerToken)));
+
+      // Утёкший из базы отпечаток за токен не сходит.
+      final (status, _) = await call('GET', '/api/me',
+          token: AuthService.hashToken(workerToken));
+      expect(status, 401);
+    });
+
+    test('токены, записанные как есть, переводятся без выхода из аккаунта',
+        () async {
+      // Так токен лежал до перехода на отпечатки.
+      const legacy = 'AbCdEfGhIjKlMnOpQrStUvWxYz012345';
+      await db.into(db.authTokenRows).insert(AuthTokenRowsCompanion.insert(
+            token: legacy,
+            email: 'worker@example.kz',
+            userId: Value(workerId),
+            createdAt: DateTime.now(),
+          ));
+
+      final auth = AuthService(db, ConsoleCodeSender());
+      expect(await auth.hashLegacyTokens(), 1);
+      expect(await auth.hashLegacyTokens(), 0, reason: 'повтор ничего не портит');
+
+      final stored = await db.select(db.authTokenRows).get();
+      expect(stored.map((r) => r.token), isNot(contains(legacy)));
+      final (status, _) = await call('GET', '/api/me', token: legacy);
+      expect(status, 200);
+    });
+
+    test('старый токен, записанный после перевода, переводится при входе',
+        () async {
+      const legacy = 'ZyXwVuTsRqPoNmLkJiHgFeDcBa543210';
+      await db.into(db.authTokenRows).insert(AuthTokenRowsCompanion.insert(
+            token: legacy,
+            email: 'worker@example.kz',
+            userId: Value(workerId),
+            createdAt: DateTime.now(),
+          ));
+
+      final (status, _) = await call('GET', '/api/me', token: legacy);
+      expect(status, 200);
+      final stored = await db.select(db.authTokenRows).get();
+      expect(stored.map((r) => r.token), isNot(contains(legacy)));
     });
 
     test('после трёх попыток код не подойдёт, даже верный', () async {
