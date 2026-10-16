@@ -8,6 +8,7 @@
 
 import 'payment.dart';
 import 'shift.dart';
+import 'user.dart';
 
 class EmployerStats {
   /// Смен за последние 30 дней — прошедших и идущих, без отменённых и
@@ -67,3 +68,50 @@ EmployerStats employerStats(
     open: live.where((s) => !s.hasStartedAt(now) && s.hasFreeSlots).length,
   );
 }
+
+/// Сводка дня смены для заказчика: на кого рассчитывать.
+///
+/// На смене в двадцать человек по списку не видно главного — сколько уже
+/// на месте и кого не хватает. Четыре числа над списком отвечают на это
+/// одним взглядом.
+class AttendanceSummary {
+  /// Записались — без тех, кто снял запись.
+  final int booked;
+
+  /// Накануне подтвердили «точно выйду».
+  final int coming;
+
+  /// Отметились на месте или уже засчитаны.
+  final int onSite;
+
+  /// Смена началась, а человек не отметился и заказчик его ещё не
+  /// отмечал. Им стоит написать. До начала смены — 0.
+  final int missing;
+
+  const AttendanceSummary({
+    required this.booked,
+    required this.coming,
+    required this.onSite,
+    required this.missing,
+  });
+
+  factory AttendanceSummary.of(
+    List<ShiftApplicant> people, {
+    required bool started,
+  }) {
+    final present = [
+      for (final p in people)
+        if (!p.isNoShow) p,
+    ];
+    bool here(ShiftApplicant p) => p.isCheckedIn || p.isConfirmed;
+    return AttendanceSummary(
+      booked: people.length,
+      coming: present.where((p) => p.isComingConfirmed).length,
+      onSite: present.where(here).length,
+      missing: started
+          ? present.where((p) => p.isUnmarked && !here(p)).length
+          : 0,
+    );
+  }
+}
+
