@@ -132,6 +132,10 @@ abstract class ShiftRepository {
   /// Виды работ (ключи категорий), о новых сменах которых сообщать.
   Future<Set<String>> followedCategories();
 
+  /// Что подходит текущему исполнителю: подписки и то, где он уже
+  /// отработал. Для «Сначала подходящие» и отметки «Вам подходит».
+  Future<WorkerTaste> workerTaste();
+
   /// Подписаться на вид работ (`follow: true`) или отписаться: новая
   /// смена этого вида в городе человека придёт уведомлением.
   Future<void> followCategory(String category, {required bool follow});
@@ -367,6 +371,15 @@ List<Shift> applyFilter(List<Shift> shifts, ShiftFilter filter) {
       result.sort((a, b) => b.totalPay.compareTo(a.totalPay));
     case ShiftSort.payAsc:
       result.sort((a, b) => a.totalPay.compareTo(b.totalPay));
+    case ShiftSort.forYou:
+      // Подходящие выше, внутри — как обычно, по времени.
+      final taste = filter.taste;
+      result.sort((a, b) {
+        final byScore = taste.score(b).compareTo(taste.score(a));
+        return byScore != 0
+            ? byScore
+            : a.startMinutes.compareTo(b.startMinutes);
+      });
   }
   return result;
 }
@@ -3074,6 +3087,26 @@ class DbShiftRepository implements ShiftRepository {
   /// Начало сообщения для уведомления.
   static String _snippet(String text) =>
       text.length <= 120 ? text : '${text.substring(0, 119)}…';
+
+  @override
+  Future<WorkerTaste> workerTaste() async {
+    final worked = await db.query(
+      'SELECT DISTINCT s.company, s.category FROM application_rows a '
+      'JOIN shift_rows s ON s.id = a.shift_id '
+      "WHERE a.worker_id = ? AND a.status = 'completed'",
+      variables: [Variable.withInt(_workerId)],
+      readsFrom: {db.applicationRows, db.shiftRows},
+    ).get();
+    final companies = await (db.select(db.companyFollowRows)
+          ..where((f) => f.userId.equals(_workerId)))
+        .get();
+    return WorkerTaste(
+      followedCompanies: {for (final f in companies) f.company},
+      workedCompanies: {for (final r in worked) r.read<String>('company')},
+      followedCategories: await followedCategories(),
+      workedCategories: {for (final r in worked) r.read<String>('category')},
+    );
+  }
 
   /// Как подписать действующего в тексте уведомления.
   String _nameIn(CoreStrings t) => session.user?.fullName ?? t.someone;

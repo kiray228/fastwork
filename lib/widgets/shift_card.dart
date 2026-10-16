@@ -14,11 +14,16 @@ class ShiftCard extends StatelessWidget {
   /// Рейтинг текущего пользователя — по нему решается допуск к смене.
   final double userRating;
 
+  /// Смена подходит человеку: компания или вид работ, где он уже
+  /// работал или на которые подписан. Показывается ярлыком.
+  final bool forYou;
+
   const ShiftCard({
     super.key,
     required this.shift,
     required this.onTap,
     this.userRating = 5,
+    this.forYou = false,
   });
 
   @override
@@ -112,6 +117,12 @@ class ShiftCard extends StatelessWidget {
               spacing: 6,
               runSpacing: 6,
               children: [
+                if (forYou)
+                  TagChip(
+                    text: tr.feed.forYouTag,
+                    icon: Icons.auto_awesome_rounded,
+                    color: AppColors.brand,
+                  ),
                 CategoryChip(category: shift.category),
                 // Деньги уже у сервиса — самое важное, что исполнитель
                 // может узнать о заказчике до записи.

@@ -148,6 +148,7 @@ class CoreRu extends CoreStrings {
         ShiftSort.byTime => 'Сначала ранние',
         ShiftSort.payDesc => 'Сначала дорогие',
         ShiftSort.payAsc => 'Сначала дешёвые',
+        ShiftSort.forYou => 'Сначала подходящие',
       };
 
   @override

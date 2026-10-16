@@ -435,6 +435,12 @@ class Api {
       });
     });
 
+    router.get('/api/me/taste', (Request request) async {
+      return _authorized(request, (user) async {
+        return _json((await _shiftsFor(user).workerTaste()).toJson());
+      });
+    });
+
     router.get('/api/me/limit', (Request request) async {
       return _authorized(request, (user) async {
         final raw = request.url.queryParameters['month'];

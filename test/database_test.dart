@@ -1869,4 +1869,17 @@ void main() {
     await expectLater(
         shifts.sendChatMessage(shiftId, '   '), throwsA(isA<UserError>()));
   });
+
+  test('подходящее человеку — из подписок и отработанных смен', () async {
+    final (_, workerId, _) = await workedShift(); // Magnum, отработана
+    session.setUser((await auth.refresh(workerId))!);
+    await shifts.followCategory('loader', follow: true);
+    await shifts.followCompany('Zara', follow: true);
+
+    final taste = await shifts.workerTaste();
+    expect(taste.workedCompanies, {'Magnum'});
+    expect(taste.followedCompanies, {'Zara'});
+    expect(taste.followedCategories, {'loader'});
+    expect(taste.workedCategories, isNotEmpty);
+  });
 }

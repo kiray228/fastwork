@@ -94,6 +94,7 @@ abstract class FeedStrings {
   String get filterPay;
   String get filterPayAny;
   String filterPayFrom(String amount);
+  String get forYouTag;
 }
 
 class _Ru extends FeedStrings {
@@ -226,6 +227,8 @@ class _Ru extends FeedStrings {
   String get filterPayAny => 'Любая';
   @override
   String filterPayFrom(String amount) => 'от $amount';
+  @override
+  String get forYouTag => 'Вам подходит';
 }
 
 class _Kk extends FeedStrings {
@@ -362,6 +365,8 @@ class _Kk extends FeedStrings {
   String get filterPayAny => 'Кез келген';
   @override
   String filterPayFrom(String amount) => '$amount бастап';
+  @override
+  String get forYouTag => 'Сізге лайық';
 }
 
 class _En extends FeedStrings {
@@ -494,4 +499,6 @@ class _En extends FeedStrings {
   String get filterPayAny => 'Any';
   @override
   String filterPayFrom(String amount) => '$amount+';
+  @override
+  String get forYouTag => 'For you';
 }

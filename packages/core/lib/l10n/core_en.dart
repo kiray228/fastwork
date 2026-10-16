@@ -146,6 +146,7 @@ class CoreEn extends CoreStrings {
         ShiftSort.byTime => 'Earliest first',
         ShiftSort.payDesc => 'Highest pay first',
         ShiftSort.payAsc => 'Lowest pay first',
+        ShiftSort.forYou => 'Best for you first',
       };
 
   @override

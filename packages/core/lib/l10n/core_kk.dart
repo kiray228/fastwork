@@ -141,6 +141,7 @@ class CoreKk extends CoreStrings {
         ShiftSort.byTime => 'Алдымен ерте басталатындар',
         ShiftSort.payDesc => 'Алдымен көп төленетіндер',
         ShiftSort.payAsc => 'Алдымен аз төленетіндер',
+        ShiftSort.forYou => 'Алдымен сізге лайықтылар',
       };
 
   @override
