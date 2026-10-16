@@ -191,6 +191,10 @@ abstract class ManagerStrings {
   String get minRatingHelp;
   String get minRatingAny;
   String minRatingFrom(String rating);
+  String confirmAllButton(int count);
+  String get confirmAllTitle;
+  String confirmAllBody(int count, String each, String total);
+  String confirmAllDone(int count);
 }
 
 class _Ru extends ManagerStrings {
@@ -534,6 +538,17 @@ class _Ru extends ManagerStrings {
   String get minRatingAny => 'Все';
   @override
   String minRatingFrom(String rating) => 'от ★ $rating';
+  @override
+  String confirmAllButton(int count) =>
+      'Засчитать всех отметившихся · $count';
+  @override
+  String get confirmAllTitle => 'Засчитать выход всем отметившимся?';
+  @override
+  String confirmAllBody(int count, String each, String total) =>
+      'Отметились на месте: $count чел. Каждый получит $each, всего $total. '
+      'Подтверждение не отменить — проверьте, что все действительно отработали.';
+  @override
+  String confirmAllDone(int count) => 'Засчитано: $count чел.';
 }
 
 class _Kk extends ManagerStrings {
@@ -883,6 +898,18 @@ class _Kk extends ManagerStrings {
   String get minRatingAny => 'Барлығы';
   @override
   String minRatingFrom(String rating) => '★ $rating бастап';
+  @override
+  String confirmAllButton(int count) =>
+      'Белгіленгендердің бәрін растау · $count';
+  @override
+  String get confirmAllTitle => 'Белгіленгендердің бәрінің келгенін растайсыз ба?';
+  @override
+  String confirmAllBody(int count, String each, String total) =>
+      'Орнында белгіленгендер: $count адам. Әрқайсысы $each алады, барлығы '
+      '$total. Растауды кері қайтару мүмкін емес — бәрі шынымен жұмыс '
+      'істегенін тексеріңіз.';
+  @override
+  String confirmAllDone(int count) => 'Расталды: $count адам';
 }
 
 class _En extends ManagerStrings {
@@ -1228,4 +1255,14 @@ class _En extends ManagerStrings {
   String get minRatingAny => 'Anyone';
   @override
   String minRatingFrom(String rating) => '★ $rating+';
+  @override
+  String confirmAllButton(int count) => 'Confirm everyone checked in · $count';
+  @override
+  String get confirmAllTitle => 'Confirm attendance for everyone checked in?';
+  @override
+  String confirmAllBody(int count, String each, String total) =>
+      '$count people checked in. Each will receive $each, $total in total. '
+      'This can\'t be undone — make sure everyone has actually worked.';
+  @override
+  String confirmAllDone(int count) => 'Confirmed: $count';
 }

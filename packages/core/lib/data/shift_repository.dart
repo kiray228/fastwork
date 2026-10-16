@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 
 import '../category.dart';
 import '../l10n/core_strings.dart';
+import '../lang.dart';
 import '../demo.dart';
 import '../errors.dart';
 import '../mrp.dart';
@@ -781,15 +782,12 @@ class DbShiftRepository implements ShiftRepository {
     final waiting = await (db.select(db.waitlistRows)
           ..where((w) => w.shiftId.equals(shift.id)))
         .get();
-    for (final w in waiting) {
-      if (w.workerId == _workerId) continue;
-      await _notify(
-        userId: w.workerId,
-        kind: NotificationKind.slotFreed,
-        note: (t) => t.slotFreed(shift.title, shift.workDate),
-        shiftId: shift.id,
-      );
-    }
+    await _notifyMany(
+      userIds: waiting.map((w) => w.workerId),
+      kind: NotificationKind.slotFreed,
+      note: (t) => t.slotFreed(shift.title, shift.workDate),
+      shiftId: shift.id,
+    );
   }
 
   Future<void> _notifyApplied(Shift shift) => _notify(
@@ -1327,17 +1325,18 @@ class DbShiftRepository implements ShiftRepository {
     ).get();
 
     final told = <int>{};
-    for (final r in rows) {
-      final userId = r.read<int>('user_id');
-      if (userId == employer || !told.add(userId)) continue;
-      await _notify(
-        userId: userId,
-        kind: NotificationKind.newShift,
-        note: (t) => t.newShift(shift.company, shift.title, shift.workDate,
-            _timeOf(shift), formatMoney(shift.totalPay)),
-        shiftId: shift.id,
-      );
-    }
+    await _notifyMany(
+      userIds: [
+        for (final r in rows)
+          if (r.read<int>('user_id') != employer &&
+              told.add(r.read<int>('user_id')))
+            r.read<int>('user_id'),
+      ],
+      kind: NotificationKind.newShift,
+      note: (t) => t.newShift(shift.company, shift.title, shift.workDate,
+          _timeOf(shift), formatMoney(shift.totalPay)),
+      shiftId: shift.id,
+    );
 
     final byCategory = await db.query(
       '''
@@ -1355,22 +1354,23 @@ class DbShiftRepository implements ShiftRepository {
       readsFrom: {db.categoryFollowRows, db.userRows, db.favoriteRows},
     ).get();
 
-    for (final r in byCategory) {
-      final userId = r.read<int>('user_id');
-      if (userId == employer || !told.add(userId)) continue;
-      await _notify(
-        userId: userId,
-        kind: NotificationKind.newShift,
-        note: (t) => t.newShiftInCategory(
-            t.category(shift.category),
-            shift.company,
-            shift.title,
-            shift.workDate,
-            _timeOf(shift),
-            formatMoney(shift.totalPay)),
-        shiftId: shift.id,
-      );
-    }
+    await _notifyMany(
+      userIds: [
+        for (final r in byCategory)
+          if (r.read<int>('user_id') != employer &&
+              told.add(r.read<int>('user_id')))
+            r.read<int>('user_id'),
+      ],
+      kind: NotificationKind.newShift,
+      note: (t) => t.newShiftInCategory(
+          t.category(shift.category),
+          shift.company,
+          shift.title,
+          shift.workDate,
+          _timeOf(shift),
+          formatMoney(shift.totalPay)),
+      shiftId: shift.id,
+    );
   }
 
   @override
@@ -1906,15 +1906,13 @@ class DbShiftRepository implements ShiftRepository {
       readsFrom: {db.favoriteRows, db.userRows},
     ).get();
 
-    for (final r in rows) {
-      await _notify(
-        userId: r.read<int>('worker_id'),
-        kind: NotificationKind.invited,
-        note: (t) => t.invited(shift.company, shift.title, shift.workDate,
-            _timeOf(shift), formatMoney(shift.totalPay)),
-        shiftId: shift.id,
-      );
-    }
+    await _notifyMany(
+      userIds: rows.map((r) => r.read<int>('worker_id')),
+      kind: NotificationKind.invited,
+      note: (t) => t.invited(shift.company, shift.title, shift.workDate,
+          _timeOf(shift), formatMoney(shift.totalPay)),
+      shiftId: shift.id,
+    );
   }
 
   @override
@@ -2926,6 +2924,60 @@ class DbShiftRepository implements ShiftRepository {
             remindedStart: Value(remindedStart),
           ),
         );
+  }
+
+  /// Одно и то же событие многим сразу: подписчикам, любимым, листу
+  /// ожидания.
+  ///
+  /// Раньше на каждого получателя шло два запроса: узнать язык и записать
+  /// уведомление. У популярной компании сотни подписчиков, и смена
+  /// публиковалась секундами — а публикация идёт прямо в ответе на «оплата
+  /// прошла». Теперь языки читаются одним запросом, текст пишется по разу
+  /// на язык, а уведомления ложатся в базу одной пачкой.
+  Future<void> _notifyMany({
+    required Iterable<int> userIds,
+    required NotificationKind kind,
+    required Note Function(CoreStrings t) note,
+    int? shiftId,
+  }) async {
+    // Себе и «никому» не пишем — как в `_notify`.
+    final ids = {
+      for (final id in userIds)
+        if (id != 0 && id != _workerId) id,
+    }.toList();
+    if (ids.isEmpty) return;
+
+    final languages = <int, String?>{};
+    // Порциями: у баз есть предел на число подстановок в одном запросе.
+    for (var i = 0; i < ids.length; i += 500) {
+      final part = ids.sublist(i, i + 500 > ids.length ? ids.length : i + 500);
+      final rows = await (db.selectOnly(db.userRows)
+            ..addColumns([db.userRows.id, db.userRows.language])
+            ..where(db.userRows.id.isIn(part)))
+          .get();
+      for (final r in rows) {
+        languages[r.read(db.userRows.id)!] = r.read(db.userRows.language);
+      }
+    }
+
+    final texts = <String?, Note>{};
+    Note textFor(String? code) => texts.putIfAbsent(
+          code,
+          () => note(code == null ? _t : CoreStrings.of(Lang.fromCode(code))),
+        );
+
+    final now = clock();
+    await db.batch((b) => b.insertAll(db.notificationRows, [
+          for (final id in ids)
+            NotificationRowsCompanion.insert(
+              userId: id,
+              kind: kind.name,
+              title: textFor(languages[id]).title,
+              body: textFor(languages[id]).body,
+              shiftId: Value(shiftId),
+              createdAt: now,
+            ),
+        ]));
   }
 
   /// Как подписать действующего в тексте уведомления.

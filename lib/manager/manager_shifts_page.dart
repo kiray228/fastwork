@@ -670,6 +670,73 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
     setState(() => state = result);
   }
 
+  /// Кого можно засчитать разом: отметились на месте, а заказчик ещё не
+  /// ставил ни «Вышел», ни «Не вышел». Только после начала смены.
+  List<ShiftApplicant> _readyToConfirm(List<ShiftApplicant> all) {
+    if (!DateTime.now().isAfter(widget.shift.startsAt)) return const [];
+    return [
+      for (final a in all)
+        if (a.isUnmarked && a.isCheckedIn && !pending.contains(a.user.id)) a,
+    ];
+  }
+
+  /// Засчитать выход всем отметившимся — одним подтверждением.
+  ///
+  /// По одному, а не одним запросом: у хранилища каждое подтверждение —
+  /// своё начисление и своё уведомление, и правило «второй раз не
+  /// платит» уже живёт там. Сорвался кто-то один — остальные засчитаны,
+  /// а он остаётся в списке с обычной кнопкой.
+  Future<void> _confirmAll(List<ShiftApplicant> people) async {
+    final each = widget.shift.totalPay;
+    final agreed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(tr.manager.confirmAllTitle),
+        content: Text(tr.manager.confirmAllBody(
+          people.length,
+          formatMoney(each),
+          formatMoney(each * people.length),
+        )),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(tr.manager.dialogCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(tr.manager.showedUp),
+          ),
+        ],
+      ),
+    );
+    if (agreed != true || !mounted) return;
+
+    setState(() => pending.addAll(people.map((a) => a.user.id)));
+    var done = 0;
+    try {
+      for (final person in people) {
+        final result = await guarded(
+          context,
+          () => widget.repository.confirmAttendance(
+            shiftId: widget.shift.id,
+            workerId: person.user.id,
+          ),
+        );
+        if (result == BookingResult.ok) done++;
+        if (!mounted) return;
+      }
+    } finally {
+      if (mounted) {
+        setState(() => pending.removeAll(people.map((a) => a.user.id)));
+      }
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(tr.manager.confirmAllDone(done)),
+      behavior: SnackBarBehavior.floating,
+    ));
+    await _load();
+  }
+
   /// Люди, по которым запрос ещё в пути: их кнопки погашены, чтобы второе
   /// нажатие не ушло следом за первым.
   final Set<int> pending = {};
@@ -841,10 +908,30 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
                 itemCount: value.length + 1,
                 itemBuilder: (context, index) {
                   if (index == 0) {
+                    final ready = _readyToConfirm(value);
                     return Column(
                       children: [
                         if (code != null) _CheckInCodeCard(code: code!),
                         _AttendanceHint(shift: widget.shift),
+                        // На большой смене жать «Вышел» каждому — десятки
+                        // касаний и окон. Отметившихся можно засчитать
+                        // разом, одним подтверждением с итоговой суммой.
+                        if (ready.length >= 2)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                onPressed: pending.isEmpty
+                                    ? () => _confirmAll(ready)
+                                    : null,
+                                icon: const Icon(Icons.done_all_rounded,
+                                    size: 18),
+                                label: Text(
+                                    tr.manager.confirmAllButton(ready.length)),
+                              ),
+                            ),
+                          ),
                       ],
                     );
                   }
