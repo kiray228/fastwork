@@ -922,6 +922,13 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
                     final ready = _readyToConfirm(value);
                     return Column(
                       children: [
+                        _DaySummary(
+                          summary: AttendanceSummary.of(
+                            value,
+                            started:
+                                DateTime.now().isAfter(widget.shift.startsAt),
+                          ),
+                        ),
                         if (code != null) _CheckInCodeCard(code: code!),
                         _AttendanceHint(shift: widget.shift),
                         // На большой смене жать «Вышел» каждому — десятки
@@ -952,6 +959,9 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
                     index: index,
                     child: _ApplicantTile(
                       applicant: item,
+                      // Смена идёт, а человека нет на месте и о нём ничего
+                      // не известно — ему стоит написать.
+                      missing: canMark && item.isUnmarked && !item.isCheckedIn,
                       // Отмечать можно только после начала смены: раньше
                       // просто не о чем говорить — человек ещё не опоздал.
                       //
@@ -1105,8 +1115,12 @@ class _ApplicantTile extends StatelessWidget {
   /// Открыть отзывы о человеке — нажатием на его имя.
   final VoidCallback? onProfile;
 
+  /// Смена началась, а человек не отметился.
+  final bool missing;
+
   const _ApplicantTile({
     required this.applicant,
+    this.missing = false,
     this.onConfirm,
     this.onNoShow,
     this.onFavorite,
@@ -1269,6 +1283,12 @@ class _ApplicantTile extends StatelessWidget {
                     icon: Icons.thumb_up_alt_outlined,
                     color: AppColors.brand,
                   )
+                else if (missing)
+                  TagChip(
+                    text: tr.manager.statusNotCheckedIn,
+                    icon: Icons.schedule_rounded,
+                    color: AppColors.warning,
+                  )
                 else
                   TagChip(text: tr.manager.statusBooked),
               ],
@@ -1361,3 +1381,58 @@ class _ApplicantTile extends StatelessWidget {
     );
   }
 }
+
+/// Четыре числа над списком записавшихся: записались, точно выйдут, на
+/// месте, не отметились.
+class _DaySummary extends StatelessWidget {
+  final AttendanceSummary summary;
+
+  const _DaySummary({required this.summary});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget cell(int value, String label, Color color) => Expanded(
+          child: Column(
+            children: [
+              Text(
+                '$value',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                style: const TextStyle(fontSize: 11.5, color: AppColors.muted),
+              ),
+            ],
+          ),
+        );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: SurfaceCard(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            cell(summary.booked, tr.manager.daySummaryBooked,
+                Theme.of(context).colorScheme.onSurface),
+            cell(summary.coming, tr.manager.daySummaryComing, AppColors.brand),
+            cell(summary.onSite, tr.manager.daySummaryOnSite, AppColors.success),
+            cell(
+              summary.missing,
+              tr.manager.daySummaryMissing,
+              summary.missing > 0 ? AppColors.warning : AppColors.muted,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

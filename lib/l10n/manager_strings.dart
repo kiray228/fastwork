@@ -201,6 +201,11 @@ abstract class ManagerStrings {
   String invitedSnack(String name);
   String inviteAlreadyBooked(String name);
   String get inviteFailed;
+  String get statusNotCheckedIn;
+  String get daySummaryBooked;
+  String get daySummaryComing;
+  String get daySummaryOnSite;
+  String get daySummaryMissing;
 }
 
 class _Ru extends ManagerStrings {
@@ -568,6 +573,16 @@ class _Ru extends ManagerStrings {
   String inviteAlreadyBooked(String name) => '$name уже записан на эту смену';
   @override
   String get inviteFailed => 'Не получилось пригласить';
+  @override
+  String get statusNotCheckedIn => 'Не отметился';
+  @override
+  String get daySummaryBooked => 'записались';
+  @override
+  String get daySummaryComing => 'точно выйдут';
+  @override
+  String get daySummaryOnSite => 'на месте';
+  @override
+  String get daySummaryMissing => 'не отметились';
 }
 
 class _Kk extends ManagerStrings {
@@ -942,6 +957,16 @@ class _Kk extends ManagerStrings {
   String inviteAlreadyBooked(String name) => '$name бұл ауысымға жазылып қойған';
   @override
   String get inviteFailed => 'Шақыру мүмкін болмады';
+  @override
+  String get statusNotCheckedIn => 'Белгіленбеді';
+  @override
+  String get daySummaryBooked => 'жазылды';
+  @override
+  String get daySummaryComing => 'келетінін растады';
+  @override
+  String get daySummaryOnSite => 'орнында';
+  @override
+  String get daySummaryMissing => 'белгіленбеді';
 }
 
 class _En extends ManagerStrings {
@@ -1310,4 +1335,14 @@ class _En extends ManagerStrings {
   String inviteAlreadyBooked(String name) => '$name has already booked this shift';
   @override
   String get inviteFailed => "Couldn't send the invitation";
+  @override
+  String get statusNotCheckedIn => 'Not checked in';
+  @override
+  String get daySummaryBooked => 'booked';
+  @override
+  String get daySummaryComing => 'confirmed';
+  @override
+  String get daySummaryOnSite => 'on site';
+  @override
+  String get daySummaryMissing => 'not checked in';
 }

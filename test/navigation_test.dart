@@ -1297,6 +1297,38 @@ void main() {
       expect(find.text('Засчитано: 3 чел.'), findsOneWidget);
     });
 
+    testWidgets('над списком — сводка дня, неотметившийся помечен',
+        (tester) async {
+      final now = DateTime.now();
+      final repo = _CrowdShiftRepository(Shift(
+        id: 1,
+        workDate: DateTime(now.year, now.month, now.day - 1),
+        title: 'Услуги фасовщика',
+        company: 'Magnum',
+        address: 'г. Алматы, ул. Абая, 1',
+        startMinutes: 600,
+        endMinutes: 1260,
+        hourlyRate: 100000,
+        workersNeeded: 5,
+        workersHired: 0,
+        createdBy: 1,
+      ));
+      await openApp(
+        tester,
+        role: UserRole.manager,
+        repos: buildRepos(
+          shifts: repo,
+          signedIn: testUser(role: UserRole.manager),
+        ),
+      );
+      await tester.tap(find.text('Услуги фасовщика'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('не отметились'), findsOneWidget);
+      // Из четверых не отметился один — четырнадцатый.
+      expect(find.text('Не отметился'), findsOneWidget);
+    });
+
     testWidgets('исполнитель пишет заказчику быстрой фразой', (tester) async {
       final repo = FakeShiftRepository(clock: morning(), userRating: 5.0);
       expect(await repo.apply(1), BookingResult.ok);

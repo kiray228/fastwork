@@ -1,6 +1,7 @@
 import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/stats.dart';
+import 'package:fastwork_core/user.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Ярлыки, зависящие от времени, и сводка заказчика — без экранов.
@@ -98,5 +99,41 @@ void main() {
       expect(stats.fillPercent, isNull);
       expect(stats.spentThisMonth, 0);
     });
+  });
+
+  test('сводка дня: кто на месте и кого не хватает', () {
+    ShiftApplicant person(int id,
+            {String status = 'active',
+            bool checkedIn = false,
+            bool coming = false}) =>
+        ShiftApplicant(
+          user: AppUser(
+            id: id,
+            phone: '$id',
+            fullName: 'Человек $id',
+            city: 'Алматы',
+            rating: 4.5,
+            isVerified: false,
+          ),
+          status: status,
+          checkedInAt: checkedIn ? DateTime(2026, 9, 17, 9) : null,
+          comingConfirmedAt: coming ? DateTime(2026, 9, 16, 20) : null,
+        );
+    final people = [
+      person(1, checkedIn: true, coming: true),
+      person(2, status: 'completed'),
+      person(3, coming: true),
+      person(4),
+      person(5, status: 'no_show'),
+    ];
+
+    final during = AttendanceSummary.of(people, started: true);
+    expect(during.booked, 5);
+    expect(during.coming, 2);
+    expect(during.onSite, 2, reason: 'отметился и засчитанный');
+    expect(during.missing, 2, reason: 'третий и четвёртый; невыход не в счёт');
+
+    final before = AttendanceSummary.of(people, started: false);
+    expect(before.missing, 0, reason: 'до начала опоздавших нет');
   });
 }
