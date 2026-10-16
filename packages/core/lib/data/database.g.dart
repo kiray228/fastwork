@@ -5332,6 +5332,8 @@ class $AuthTokenRowsTable extends AuthTokenRows
 }
 
 class AuthTokenRow extends DataClass implements Insertable<AuthTokenRow> {
+  /// Отпечаток токена (sha256), а не сам токен: утечка базы не должна
+  /// открывать аккаунты. См. `AuthService.hashToken` на сервере.
   final String token;
 
   /// Чей токен. null — почта подтверждена, аккаунт ещё не создан.
@@ -5621,6 +5623,15 @@ class $NotificationRowsTable extends NotificationRows
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _peerIdMeta = const VerificationMeta('peerId');
+  @override
+  late final GeneratedColumn<int> peerId = GeneratedColumn<int>(
+    'peer_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -5632,6 +5643,7 @@ class $NotificationRowsTable extends NotificationRows
     createdAt,
     readAt,
     remindedStart,
+    peerId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5709,6 +5721,12 @@ class $NotificationRowsTable extends NotificationRows
         ),
       );
     }
+    if (data.containsKey('peer_id')) {
+      context.handle(
+        _peerIdMeta,
+        peerId.isAcceptableOrUnknown(data['peer_id']!, _peerIdMeta),
+      );
+    }
     return context;
   }
 
@@ -5754,6 +5772,10 @@ class $NotificationRowsTable extends NotificationRows
         DriftSqlType.dateTime,
         data['${effectivePrefix}reminded_start'],
       ),
+      peerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}peer_id'],
+      ),
     );
   }
 
@@ -5793,6 +5815,10 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
   /// уже не напоминал. Теперь «уже напомнили» значит «напомнили об этом
   /// самом начале». null — напоминание из версий до схемы 23.
   final DateTime? remindedStart;
+
+  /// С кем переписка — только у уведомлений о сообщениях. Заказчику по
+  /// нему открывается нужный разговор: на смене их столько, сколько людей.
+  final int? peerId;
   const NotificationRow({
     required this.id,
     required this.userId,
@@ -5803,6 +5829,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
     required this.createdAt,
     this.readAt,
     this.remindedStart,
+    this.peerId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -5821,6 +5848,9 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
     }
     if (!nullToAbsent || remindedStart != null) {
       map['reminded_start'] = Variable<DateTime>(remindedStart);
+    }
+    if (!nullToAbsent || peerId != null) {
+      map['peer_id'] = Variable<int>(peerId);
     }
     return map;
   }
@@ -5842,6 +5872,9 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
       remindedStart: remindedStart == null && nullToAbsent
           ? const Value.absent()
           : Value(remindedStart),
+      peerId: peerId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(peerId),
     );
   }
 
@@ -5860,6 +5893,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       readAt: serializer.fromJson<DateTime?>(json['readAt']),
       remindedStart: serializer.fromJson<DateTime?>(json['remindedStart']),
+      peerId: serializer.fromJson<int?>(json['peerId']),
     );
   }
   @override
@@ -5875,6 +5909,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'readAt': serializer.toJson<DateTime?>(readAt),
       'remindedStart': serializer.toJson<DateTime?>(remindedStart),
+      'peerId': serializer.toJson<int?>(peerId),
     };
   }
 
@@ -5888,6 +5923,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
     DateTime? createdAt,
     Value<DateTime?> readAt = const Value.absent(),
     Value<DateTime?> remindedStart = const Value.absent(),
+    Value<int?> peerId = const Value.absent(),
   }) => NotificationRow(
     id: id ?? this.id,
     userId: userId ?? this.userId,
@@ -5900,6 +5936,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
     remindedStart: remindedStart.present
         ? remindedStart.value
         : this.remindedStart,
+    peerId: peerId.present ? peerId.value : this.peerId,
   );
   NotificationRow copyWithCompanion(NotificationRowsCompanion data) {
     return NotificationRow(
@@ -5914,6 +5951,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
       remindedStart: data.remindedStart.present
           ? data.remindedStart.value
           : this.remindedStart,
+      peerId: data.peerId.present ? data.peerId.value : this.peerId,
     );
   }
 
@@ -5928,7 +5966,8 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
           ..write('shiftId: $shiftId, ')
           ..write('createdAt: $createdAt, ')
           ..write('readAt: $readAt, ')
-          ..write('remindedStart: $remindedStart')
+          ..write('remindedStart: $remindedStart, ')
+          ..write('peerId: $peerId')
           ..write(')'))
         .toString();
   }
@@ -5944,6 +5983,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
     createdAt,
     readAt,
     remindedStart,
+    peerId,
   );
   @override
   bool operator ==(Object other) =>
@@ -5957,7 +5997,8 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
           other.shiftId == this.shiftId &&
           other.createdAt == this.createdAt &&
           other.readAt == this.readAt &&
-          other.remindedStart == this.remindedStart);
+          other.remindedStart == this.remindedStart &&
+          other.peerId == this.peerId);
 }
 
 class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
@@ -5970,6 +6011,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
   final Value<DateTime> createdAt;
   final Value<DateTime?> readAt;
   final Value<DateTime?> remindedStart;
+  final Value<int?> peerId;
   const NotificationRowsCompanion({
     this.id = const Value.absent(),
     this.userId = const Value.absent(),
@@ -5980,6 +6022,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
     this.createdAt = const Value.absent(),
     this.readAt = const Value.absent(),
     this.remindedStart = const Value.absent(),
+    this.peerId = const Value.absent(),
   });
   NotificationRowsCompanion.insert({
     this.id = const Value.absent(),
@@ -5991,6 +6034,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
     required DateTime createdAt,
     this.readAt = const Value.absent(),
     this.remindedStart = const Value.absent(),
+    this.peerId = const Value.absent(),
   }) : userId = Value(userId),
        kind = Value(kind),
        title = Value(title),
@@ -6006,6 +6050,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? readAt,
     Expression<DateTime>? remindedStart,
+    Expression<int>? peerId,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -6017,6 +6062,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
       if (createdAt != null) 'created_at': createdAt,
       if (readAt != null) 'read_at': readAt,
       if (remindedStart != null) 'reminded_start': remindedStart,
+      if (peerId != null) 'peer_id': peerId,
     });
   }
 
@@ -6030,6 +6076,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
     Value<DateTime>? createdAt,
     Value<DateTime?>? readAt,
     Value<DateTime?>? remindedStart,
+    Value<int?>? peerId,
   }) {
     return NotificationRowsCompanion(
       id: id ?? this.id,
@@ -6041,6 +6088,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
       createdAt: createdAt ?? this.createdAt,
       readAt: readAt ?? this.readAt,
       remindedStart: remindedStart ?? this.remindedStart,
+      peerId: peerId ?? this.peerId,
     );
   }
 
@@ -6074,6 +6122,9 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
     if (remindedStart.present) {
       map['reminded_start'] = Variable<DateTime>(remindedStart.value);
     }
+    if (peerId.present) {
+      map['peer_id'] = Variable<int>(peerId.value);
+    }
     return map;
   }
 
@@ -6088,7 +6139,8 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
           ..write('shiftId: $shiftId, ')
           ..write('createdAt: $createdAt, ')
           ..write('readAt: $readAt, ')
-          ..write('remindedStart: $remindedStart')
+          ..write('remindedStart: $remindedStart, ')
+          ..write('peerId: $peerId')
           ..write(')'))
         .toString();
   }
@@ -10233,6 +10285,457 @@ class CategoryFollowRowsCompanion extends UpdateCompanion<CategoryFollowRow> {
   }
 }
 
+class $ShiftMessageRowsTable extends ShiftMessageRows
+    with TableInfo<$ShiftMessageRowsTable, ShiftMessageRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ShiftMessageRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _shiftIdMeta = const VerificationMeta(
+    'shiftId',
+  );
+  @override
+  late final GeneratedColumn<int> shiftId = GeneratedColumn<int>(
+    'shift_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES shift_rows (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _workerIdMeta = const VerificationMeta(
+    'workerId',
+  );
+  @override
+  late final GeneratedColumn<int> workerId = GeneratedColumn<int>(
+    'worker_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _authorIdMeta = const VerificationMeta(
+    'authorId',
+  );
+  @override
+  late final GeneratedColumn<int> authorId = GeneratedColumn<int>(
+    'author_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _readAtMeta = const VerificationMeta('readAt');
+  @override
+  late final GeneratedColumn<DateTime> readAt = GeneratedColumn<DateTime>(
+    'read_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    shiftId,
+    workerId,
+    authorId,
+    body,
+    createdAt,
+    readAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'shift_message_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ShiftMessageRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('shift_id')) {
+      context.handle(
+        _shiftIdMeta,
+        shiftId.isAcceptableOrUnknown(data['shift_id']!, _shiftIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_shiftIdMeta);
+    }
+    if (data.containsKey('worker_id')) {
+      context.handle(
+        _workerIdMeta,
+        workerId.isAcceptableOrUnknown(data['worker_id']!, _workerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_workerIdMeta);
+    }
+    if (data.containsKey('author_id')) {
+      context.handle(
+        _authorIdMeta,
+        authorId.isAcceptableOrUnknown(data['author_id']!, _authorIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_authorIdMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('read_at')) {
+      context.handle(
+        _readAtMeta,
+        readAt.isAcceptableOrUnknown(data['read_at']!, _readAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ShiftMessageRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ShiftMessageRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      shiftId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}shift_id'],
+      )!,
+      workerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}worker_id'],
+      )!,
+      authorId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}author_id'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      readAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}read_at'],
+      ),
+    );
+  }
+
+  @override
+  $ShiftMessageRowsTable createAlias(String alias) {
+    return $ShiftMessageRowsTable(attachedDatabase, alias);
+  }
+}
+
+class ShiftMessageRow extends DataClass implements Insertable<ShiftMessageRow> {
+  final int id;
+
+  /// Смену удалили — переписка о ней больше никому не нужна.
+  final int shiftId;
+  final int workerId;
+  final int authorId;
+  final String body;
+  final DateTime createdAt;
+
+  /// Когда собеседник прочитал. null — ещё нет.
+  final DateTime? readAt;
+  const ShiftMessageRow({
+    required this.id,
+    required this.shiftId,
+    required this.workerId,
+    required this.authorId,
+    required this.body,
+    required this.createdAt,
+    this.readAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['shift_id'] = Variable<int>(shiftId);
+    map['worker_id'] = Variable<int>(workerId);
+    map['author_id'] = Variable<int>(authorId);
+    map['body'] = Variable<String>(body);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || readAt != null) {
+      map['read_at'] = Variable<DateTime>(readAt);
+    }
+    return map;
+  }
+
+  ShiftMessageRowsCompanion toCompanion(bool nullToAbsent) {
+    return ShiftMessageRowsCompanion(
+      id: Value(id),
+      shiftId: Value(shiftId),
+      workerId: Value(workerId),
+      authorId: Value(authorId),
+      body: Value(body),
+      createdAt: Value(createdAt),
+      readAt: readAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(readAt),
+    );
+  }
+
+  factory ShiftMessageRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ShiftMessageRow(
+      id: serializer.fromJson<int>(json['id']),
+      shiftId: serializer.fromJson<int>(json['shiftId']),
+      workerId: serializer.fromJson<int>(json['workerId']),
+      authorId: serializer.fromJson<int>(json['authorId']),
+      body: serializer.fromJson<String>(json['body']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      readAt: serializer.fromJson<DateTime?>(json['readAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'shiftId': serializer.toJson<int>(shiftId),
+      'workerId': serializer.toJson<int>(workerId),
+      'authorId': serializer.toJson<int>(authorId),
+      'body': serializer.toJson<String>(body),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'readAt': serializer.toJson<DateTime?>(readAt),
+    };
+  }
+
+  ShiftMessageRow copyWith({
+    int? id,
+    int? shiftId,
+    int? workerId,
+    int? authorId,
+    String? body,
+    DateTime? createdAt,
+    Value<DateTime?> readAt = const Value.absent(),
+  }) => ShiftMessageRow(
+    id: id ?? this.id,
+    shiftId: shiftId ?? this.shiftId,
+    workerId: workerId ?? this.workerId,
+    authorId: authorId ?? this.authorId,
+    body: body ?? this.body,
+    createdAt: createdAt ?? this.createdAt,
+    readAt: readAt.present ? readAt.value : this.readAt,
+  );
+  ShiftMessageRow copyWithCompanion(ShiftMessageRowsCompanion data) {
+    return ShiftMessageRow(
+      id: data.id.present ? data.id.value : this.id,
+      shiftId: data.shiftId.present ? data.shiftId.value : this.shiftId,
+      workerId: data.workerId.present ? data.workerId.value : this.workerId,
+      authorId: data.authorId.present ? data.authorId.value : this.authorId,
+      body: data.body.present ? data.body.value : this.body,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      readAt: data.readAt.present ? data.readAt.value : this.readAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ShiftMessageRow(')
+          ..write('id: $id, ')
+          ..write('shiftId: $shiftId, ')
+          ..write('workerId: $workerId, ')
+          ..write('authorId: $authorId, ')
+          ..write('body: $body, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('readAt: $readAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, shiftId, workerId, authorId, body, createdAt, readAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ShiftMessageRow &&
+          other.id == this.id &&
+          other.shiftId == this.shiftId &&
+          other.workerId == this.workerId &&
+          other.authorId == this.authorId &&
+          other.body == this.body &&
+          other.createdAt == this.createdAt &&
+          other.readAt == this.readAt);
+}
+
+class ShiftMessageRowsCompanion extends UpdateCompanion<ShiftMessageRow> {
+  final Value<int> id;
+  final Value<int> shiftId;
+  final Value<int> workerId;
+  final Value<int> authorId;
+  final Value<String> body;
+  final Value<DateTime> createdAt;
+  final Value<DateTime?> readAt;
+  const ShiftMessageRowsCompanion({
+    this.id = const Value.absent(),
+    this.shiftId = const Value.absent(),
+    this.workerId = const Value.absent(),
+    this.authorId = const Value.absent(),
+    this.body = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.readAt = const Value.absent(),
+  });
+  ShiftMessageRowsCompanion.insert({
+    this.id = const Value.absent(),
+    required int shiftId,
+    required int workerId,
+    required int authorId,
+    required String body,
+    required DateTime createdAt,
+    this.readAt = const Value.absent(),
+  }) : shiftId = Value(shiftId),
+       workerId = Value(workerId),
+       authorId = Value(authorId),
+       body = Value(body),
+       createdAt = Value(createdAt);
+  static Insertable<ShiftMessageRow> custom({
+    Expression<int>? id,
+    Expression<int>? shiftId,
+    Expression<int>? workerId,
+    Expression<int>? authorId,
+    Expression<String>? body,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? readAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (shiftId != null) 'shift_id': shiftId,
+      if (workerId != null) 'worker_id': workerId,
+      if (authorId != null) 'author_id': authorId,
+      if (body != null) 'body': body,
+      if (createdAt != null) 'created_at': createdAt,
+      if (readAt != null) 'read_at': readAt,
+    });
+  }
+
+  ShiftMessageRowsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? shiftId,
+    Value<int>? workerId,
+    Value<int>? authorId,
+    Value<String>? body,
+    Value<DateTime>? createdAt,
+    Value<DateTime?>? readAt,
+  }) {
+    return ShiftMessageRowsCompanion(
+      id: id ?? this.id,
+      shiftId: shiftId ?? this.shiftId,
+      workerId: workerId ?? this.workerId,
+      authorId: authorId ?? this.authorId,
+      body: body ?? this.body,
+      createdAt: createdAt ?? this.createdAt,
+      readAt: readAt ?? this.readAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (shiftId.present) {
+      map['shift_id'] = Variable<int>(shiftId.value);
+    }
+    if (workerId.present) {
+      map['worker_id'] = Variable<int>(workerId.value);
+    }
+    if (authorId.present) {
+      map['author_id'] = Variable<int>(authorId.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (readAt.present) {
+      map['read_at'] = Variable<DateTime>(readAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ShiftMessageRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('shiftId: $shiftId, ')
+          ..write('workerId: $workerId, ')
+          ..write('authorId: $authorId, ')
+          ..write('body: $body, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('readAt: $readAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -10269,6 +10772,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $CompanyFollowRowsTable(this);
   late final $CategoryFollowRowsTable categoryFollowRows =
       $CategoryFollowRowsTable(this);
+  late final $ShiftMessageRowsTable shiftMessageRows = $ShiftMessageRowsTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -10295,6 +10801,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     waitlistRows,
     companyFollowRows,
     categoryFollowRows,
+    shiftMessageRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -10332,6 +10839,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('waitlist_rows', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'shift_rows',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('shift_message_rows', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -10494,6 +11008,26 @@ final class $$ShiftRowsTableReferences
     ).filter((f) => f.shiftId.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_waitlistRowsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$ShiftMessageRowsTable, List<ShiftMessageRow>>
+  _shiftMessageRowsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.shiftMessageRows,
+    aliasName: 'shift_rows__id__shift_message_rows__shift_id',
+  );
+
+  $$ShiftMessageRowsTableProcessedTableManager get shiftMessageRowsRefs {
+    final manager = $$ShiftMessageRowsTableTableManager(
+      $_db,
+      $_db.shiftMessageRows,
+    ).filter((f) => f.shiftId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _shiftMessageRowsRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -10755,6 +11289,31 @@ class $$ShiftRowsTableFilterComposer
           }) => $$WaitlistRowsTableFilterComposer(
             $db: $db,
             $table: $db.waitlistRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> shiftMessageRowsRefs(
+    Expression<bool> Function($$ShiftMessageRowsTableFilterComposer f) f,
+  ) {
+    final $$ShiftMessageRowsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.shiftMessageRows,
+      getReferencedColumn: (t) => t.shiftId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ShiftMessageRowsTableFilterComposer(
+            $db: $db,
+            $table: $db.shiftMessageRows,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -11121,6 +11680,31 @@ class $$ShiftRowsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> shiftMessageRowsRefs<T extends Object>(
+    Expression<T> Function($$ShiftMessageRowsTableAnnotationComposer a) f,
+  ) {
+    final $$ShiftMessageRowsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.shiftMessageRows,
+      getReferencedColumn: (t) => t.shiftId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ShiftMessageRowsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.shiftMessageRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$ShiftRowsTableTableManager
@@ -11143,6 +11727,7 @@ class $$ShiftRowsTableTableManager
             bool paymentRowsRefs,
             bool chargeRowsRefs,
             bool waitlistRowsRefs,
+            bool shiftMessageRowsRefs,
           })
         > {
   $$ShiftRowsTableTableManager(_$AppDatabase db, $ShiftRowsTable table)
@@ -11264,6 +11849,7 @@ class $$ShiftRowsTableTableManager
                 paymentRowsRefs = false,
                 chargeRowsRefs = false,
                 waitlistRowsRefs = false,
+                shiftMessageRowsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -11274,6 +11860,7 @@ class $$ShiftRowsTableTableManager
                     if (paymentRowsRefs) db.paymentRows,
                     if (chargeRowsRefs) db.chargeRows,
                     if (waitlistRowsRefs) db.waitlistRows,
+                    if (shiftMessageRowsRefs) db.shiftMessageRows,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -11404,6 +11991,27 @@ class $$ShiftRowsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (shiftMessageRowsRefs)
+                        await $_getPrefetchedData<
+                          ShiftRow,
+                          $ShiftRowsTable,
+                          ShiftMessageRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ShiftRowsTableReferences
+                              ._shiftMessageRowsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ShiftRowsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).shiftMessageRowsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.shiftId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -11431,6 +12039,7 @@ typedef $$ShiftRowsTableProcessedTableManager =
         bool paymentRowsRefs,
         bool chargeRowsRefs,
         bool waitlistRowsRefs,
+        bool shiftMessageRowsRefs,
       })
     >;
 typedef $$ApplicationRowsTableCreateCompanionBuilder =
@@ -14321,6 +14930,7 @@ typedef $$NotificationRowsTableCreateCompanionBuilder =
       required DateTime createdAt,
       Value<DateTime?> readAt,
       Value<DateTime?> remindedStart,
+      Value<int?> peerId,
     });
 typedef $$NotificationRowsTableUpdateCompanionBuilder =
     NotificationRowsCompanion Function({
@@ -14333,6 +14943,7 @@ typedef $$NotificationRowsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime?> readAt,
       Value<DateTime?> remindedStart,
+      Value<int?> peerId,
     });
 
 class $$NotificationRowsTableFilterComposer
@@ -14386,6 +14997,11 @@ class $$NotificationRowsTableFilterComposer
 
   ColumnFilters<DateTime> get remindedStart => $composableBuilder(
     column: $table.remindedStart,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get peerId => $composableBuilder(
+    column: $table.peerId,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -14443,6 +15059,11 @@ class $$NotificationRowsTableOrderingComposer
     column: $table.remindedStart,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get peerId => $composableBuilder(
+    column: $table.peerId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$NotificationRowsTableAnnotationComposer
@@ -14482,6 +15103,9 @@ class $$NotificationRowsTableAnnotationComposer
     column: $table.remindedStart,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get peerId =>
+      $composableBuilder(column: $table.peerId, builder: (column) => column);
 }
 
 class $$NotificationRowsTableTableManager
@@ -14530,6 +15154,7 @@ class $$NotificationRowsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> readAt = const Value.absent(),
                 Value<DateTime?> remindedStart = const Value.absent(),
+                Value<int?> peerId = const Value.absent(),
               }) => NotificationRowsCompanion(
                 id: id,
                 userId: userId,
@@ -14540,6 +15165,7 @@ class $$NotificationRowsTableTableManager
                 createdAt: createdAt,
                 readAt: readAt,
                 remindedStart: remindedStart,
+                peerId: peerId,
               ),
           createCompanionCallback:
               ({
@@ -14552,6 +15178,7 @@ class $$NotificationRowsTableTableManager
                 required DateTime createdAt,
                 Value<DateTime?> readAt = const Value.absent(),
                 Value<DateTime?> remindedStart = const Value.absent(),
+                Value<int?> peerId = const Value.absent(),
               }) => NotificationRowsCompanion.insert(
                 id: id,
                 userId: userId,
@@ -14562,6 +15189,7 @@ class $$NotificationRowsTableTableManager
                 createdAt: createdAt,
                 readAt: readAt,
                 remindedStart: remindedStart,
+                peerId: peerId,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -17136,6 +17764,360 @@ typedef $$CategoryFollowRowsTableProcessedTableManager =
       CategoryFollowRow,
       PrefetchHooks Function()
     >;
+typedef $$ShiftMessageRowsTableCreateCompanionBuilder =
+    ShiftMessageRowsCompanion Function({
+      Value<int> id,
+      required int shiftId,
+      required int workerId,
+      required int authorId,
+      required String body,
+      required DateTime createdAt,
+      Value<DateTime?> readAt,
+    });
+typedef $$ShiftMessageRowsTableUpdateCompanionBuilder =
+    ShiftMessageRowsCompanion Function({
+      Value<int> id,
+      Value<int> shiftId,
+      Value<int> workerId,
+      Value<int> authorId,
+      Value<String> body,
+      Value<DateTime> createdAt,
+      Value<DateTime?> readAt,
+    });
+
+final class $$ShiftMessageRowsTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $ShiftMessageRowsTable, ShiftMessageRow> {
+  $$ShiftMessageRowsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ShiftRowsTable _shiftIdTable(_$AppDatabase db) =>
+      db.shiftRows.createAlias('shift_message_rows__shift_id__shift_rows__id');
+
+  $$ShiftRowsTableProcessedTableManager get shiftId {
+    final $_column = $_itemColumn<int>('shift_id')!;
+
+    final manager = $$ShiftRowsTableTableManager(
+      $_db,
+      $_db.shiftRows,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_shiftIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$ShiftMessageRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $ShiftMessageRowsTable> {
+  $$ShiftMessageRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get workerId => $composableBuilder(
+    column: $table.workerId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get authorId => $composableBuilder(
+    column: $table.authorId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get readAt => $composableBuilder(
+    column: $table.readAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ShiftRowsTableFilterComposer get shiftId {
+    final $$ShiftRowsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftId,
+      referencedTable: $db.shiftRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ShiftRowsTableFilterComposer(
+            $db: $db,
+            $table: $db.shiftRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ShiftMessageRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ShiftMessageRowsTable> {
+  $$ShiftMessageRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get workerId => $composableBuilder(
+    column: $table.workerId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get authorId => $composableBuilder(
+    column: $table.authorId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get readAt => $composableBuilder(
+    column: $table.readAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ShiftRowsTableOrderingComposer get shiftId {
+    final $$ShiftRowsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftId,
+      referencedTable: $db.shiftRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ShiftRowsTableOrderingComposer(
+            $db: $db,
+            $table: $db.shiftRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ShiftMessageRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ShiftMessageRowsTable> {
+  $$ShiftMessageRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get workerId =>
+      $composableBuilder(column: $table.workerId, builder: (column) => column);
+
+  GeneratedColumn<int> get authorId =>
+      $composableBuilder(column: $table.authorId, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get readAt =>
+      $composableBuilder(column: $table.readAt, builder: (column) => column);
+
+  $$ShiftRowsTableAnnotationComposer get shiftId {
+    final $$ShiftRowsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftId,
+      referencedTable: $db.shiftRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ShiftRowsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.shiftRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ShiftMessageRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ShiftMessageRowsTable,
+          ShiftMessageRow,
+          $$ShiftMessageRowsTableFilterComposer,
+          $$ShiftMessageRowsTableOrderingComposer,
+          $$ShiftMessageRowsTableAnnotationComposer,
+          $$ShiftMessageRowsTableCreateCompanionBuilder,
+          $$ShiftMessageRowsTableUpdateCompanionBuilder,
+          (ShiftMessageRow, $$ShiftMessageRowsTableReferences),
+          ShiftMessageRow,
+          PrefetchHooks Function({bool shiftId})
+        > {
+  $$ShiftMessageRowsTableTableManager(
+    _$AppDatabase db,
+    $ShiftMessageRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ShiftMessageRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ShiftMessageRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ShiftMessageRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> shiftId = const Value.absent(),
+                Value<int> workerId = const Value.absent(),
+                Value<int> authorId = const Value.absent(),
+                Value<String> body = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> readAt = const Value.absent(),
+              }) => ShiftMessageRowsCompanion(
+                id: id,
+                shiftId: shiftId,
+                workerId: workerId,
+                authorId: authorId,
+                body: body,
+                createdAt: createdAt,
+                readAt: readAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int shiftId,
+                required int workerId,
+                required int authorId,
+                required String body,
+                required DateTime createdAt,
+                Value<DateTime?> readAt = const Value.absent(),
+              }) => ShiftMessageRowsCompanion.insert(
+                id: id,
+                shiftId: shiftId,
+                workerId: workerId,
+                authorId: authorId,
+                body: body,
+                createdAt: createdAt,
+                readAt: readAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$ShiftMessageRowsTable, ShiftMessageRow>(table),
+                  $$ShiftMessageRowsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({shiftId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (shiftId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.shiftId,
+                        referencedTable: $$ShiftMessageRowsTableReferences
+                            ._shiftIdTable(db),
+                        referencedColumn: $$ShiftMessageRowsTableReferences
+                            ._shiftIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$ShiftMessageRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ShiftMessageRowsTable,
+      ShiftMessageRow,
+      $$ShiftMessageRowsTableFilterComposer,
+      $$ShiftMessageRowsTableOrderingComposer,
+      $$ShiftMessageRowsTableAnnotationComposer,
+      $$ShiftMessageRowsTableCreateCompanionBuilder,
+      $$ShiftMessageRowsTableUpdateCompanionBuilder,
+      (ShiftMessageRow, $$ShiftMessageRowsTableReferences),
+      ShiftMessageRow,
+      PrefetchHooks Function({bool shiftId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -17182,4 +18164,6 @@ class $AppDatabaseManager {
       $$CompanyFollowRowsTableTableManager(_db, _db.companyFollowRows);
   $$CategoryFollowRowsTableTableManager get categoryFollowRows =>
       $$CategoryFollowRowsTableTableManager(_db, _db.categoryFollowRows);
+  $$ShiftMessageRowsTableTableManager get shiftMessageRows =>
+      $$ShiftMessageRowsTableTableManager(_db, _db.shiftMessageRows);
 }

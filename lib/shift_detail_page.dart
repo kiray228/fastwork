@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'data/session.dart';
+import 'chat_page.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'company_page.dart';
 import 'links.dart';
@@ -347,6 +348,22 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
       appBar: AppBar(
         title: Text(tr.shift.title),
         actions: [
+          // Писать заказчику может тот, кто на смену записан (или был):
+          // «опаздываю», «где вход», «заболел».
+          if (current.myStatus != null)
+            IconButton(
+              tooltip: tr.shift.chatWithEmployer,
+              icon: const Icon(Icons.chat_bubble_outline_rounded),
+              onPressed: () => Navigator.of(context).push(
+                appRoute(
+                  ChatPage(
+                    repository: widget.repository,
+                    shiftId: current.id,
+                    subtitle: '${current.company} · ${current.title}',
+                  ),
+                ),
+              ),
+            ),
           IconButton(
             onPressed: () => _copy(
               shiftShareText(

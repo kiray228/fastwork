@@ -257,6 +257,12 @@ abstract class CoreStrings {
 
   /// Имя слишком короткое или длинное.
   String get badFullName;
+
+  // Переписка по смене.
+  String get chatNotAllowed;
+  String get chatEmpty;
+  String chatTooLong(int max);
+  Note chatMessage(String name, String title, String text);
 }
 
 /// Словарь того языка, на котором сейчас говорит приложение.

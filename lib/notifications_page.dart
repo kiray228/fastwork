@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/notification.dart';
+import 'chat_page.dart';
 import 'data/session.dart';
 import 'l10n/strings.dart';
 import 'shift_detail_page.dart';
@@ -63,6 +64,22 @@ class _NotificationsPageState extends State<NotificationsPage> {
   void _open(AppNotification notification) {
     final shiftId = notification.shiftId;
     if (shiftId == null) return;
+    // Сообщение открывает сам разговор. Заказчику — с тем, кто написал:
+    // на смене их столько, сколько записавшихся.
+    if (notification.kind == NotificationKind.message) {
+      final employer = widget.session.user?.isManager ?? false;
+      Navigator.of(context).push(
+        appRoute(
+          ChatPage(
+            repository: widget.repository,
+            shiftId: shiftId,
+            workerId: employer ? notification.peerId : null,
+            subtitle: notification.title,
+          ),
+        ),
+      );
+      return;
+    }
     Navigator.of(context).push(
       appRoute(
         ShiftDetailPage(
@@ -133,6 +150,7 @@ class _NotificationTile extends StatelessWidget {
         NotificationKind.invited => (Icons.favorite_rounded, AppColors.accent),
         NotificationKind.slotFreed => (Icons.event_seat_rounded, AppColors.brand),
         NotificationKind.reminder => (Icons.alarm_rounded, AppColors.brand),
+        NotificationKind.message => (Icons.chat_rounded, AppColors.brand),
         NotificationKind.newShift =>
           (Icons.notifications_active_rounded, AppColors.brand),
       };

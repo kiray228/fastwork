@@ -512,4 +512,17 @@ class CoreEn extends CoreStrings {
       };
   @override
   String get badFullName => 'Enter your full name — 2 to 80 characters';
+  @override
+  String get chatNotAllowed =>
+      'Only the employer and the people booked on this shift can chat';
+  @override
+  String get chatEmpty => 'Write a message';
+  @override
+  String chatTooLong(int max) =>
+      'The message is too long — up to $max characters';
+  @override
+  Note chatMessage(String name, String title, String text) => (
+        title: 'Message from $name',
+        body: '"$title": $text',
+      );
 }

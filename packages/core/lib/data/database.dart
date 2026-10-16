@@ -669,6 +669,28 @@ class NotificationRows extends Table {
   /// уже не напоминал. Теперь «уже напомнили» значит «напомнили об этом
   /// самом начале». null — напоминание из версий до схемы 23.
   DateTimeColumn get remindedStart => dateTime().nullable()();
+
+  /// С кем переписка — только у уведомлений о сообщениях. Заказчику по
+  /// нему открывается нужный разговор: на смене их столько, сколько людей.
+  IntColumn get peerId => integer().nullable()();
+}
+
+/// Сообщения переписки по смене. Ключ разговора — смена и исполнитель:
+/// у каждого записавшегося своя переписка с заказчиком.
+class ShiftMessageRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+
+  /// Смену удалили — переписка о ней больше никому не нужна.
+  IntColumn get shiftId =>
+      integer().references(ShiftRows, #id, onDelete: KeyAction.cascade)();
+
+  IntColumn get workerId => integer()();
+  IntColumn get authorId => integer()();
+  TextColumn get body => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  /// Когда собеседник прочитал. null — ещё нет.
+  DateTimeColumn get readAt => dateTime().nullable()();
 }
 
 // ---------------------------------------------------------------------------
@@ -698,6 +720,7 @@ class NotificationRows extends Table {
     WaitlistRows,
     CompanyFollowRows,
     CategoryFollowRows,
+    ShiftMessageRows,
   ],
 )
 /// Описание базы: какие таблицы и какой версии схема.
@@ -829,6 +852,7 @@ class AppDatabase extends _$AppDatabase {
       'idx_worker_reviews_worker': 'worker_review_rows (worker_id)',
       'idx_company_follows_company': 'company_follow_rows (company)',
       'idx_category_follows_category': 'category_follow_rows (category)',
+      'idx_shift_messages_thread': 'shift_message_rows (shift_id, worker_id)',
     };
     for (final MapEntry(key: name, value: on) in indexes.entries) {
       await customStatement('CREATE INDEX IF NOT EXISTS $name ON $on');
@@ -836,7 +860,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -951,6 +975,11 @@ class AppDatabase extends _$AppDatabase {
           if (from < 23) {
             await addColumnIfMissing(
                 m, notificationRows, notificationRows.remindedStart);
+          }
+          if (from < 24) {
+            await m.createTable(shiftMessageRows);
+            await addColumnIfMissing(
+                m, notificationRows, notificationRows.peerId);
           }
         },
         beforeOpen: (details) async {

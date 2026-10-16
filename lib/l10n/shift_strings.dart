@@ -177,6 +177,14 @@ abstract class ShiftStrings {
   String get checkInLocked;
   String get statusCancelled;
   String get statusNoShow;
+  String get chatTitle;
+  String get chatWithEmployer;
+  String get chatWithWorker;
+  String get chatHint;
+  String get chatEmptyTitle;
+  String get chatEmptySubtitle;
+  List<String> get chatQuickWorker;
+  List<String> get chatQuickEmployer;
 }
 
 class _Ru extends ShiftStrings {
@@ -491,6 +499,33 @@ class _Ru extends ShiftStrings {
   String get statusCancelled => 'Смена отменена заказчиком';
   @override
   String get statusNoShow => 'Заказчик отметил невыход';
+  @override
+  String get chatTitle => 'Переписка';
+  @override
+  String get chatWithEmployer => 'Написать заказчику';
+  @override
+  String get chatWithWorker => 'Написать исполнителю';
+  @override
+  String get chatHint => 'Сообщение';
+  @override
+  String get chatEmptyTitle => 'Сообщений пока нет';
+  @override
+  String get chatEmptySubtitle =>
+      'Договоритесь о деталях: где вход, во сколько прийти, что взять с собой';
+  @override
+  List<String> get chatQuickWorker => const [
+        'Опаздываю на 15 минут',
+        'Я на месте',
+        'Подскажите, где вход?',
+        'Что взять с собой?',
+      ];
+  @override
+  List<String> get chatQuickEmployer => const [
+        'Где вы?',
+        'Вход со двора',
+        'Подойдите к старшему смены',
+        'Спасибо за работу!',
+      ];
 }
 
 class _Kk extends ShiftStrings {
@@ -792,6 +827,33 @@ class _Kk extends ShiftStrings {
   String get statusCancelled => 'Ауысымды тапсырыс беруші болдырмады';
   @override
   String get statusNoShow => 'Тапсырыс беруші келмеді деп белгіледі';
+  @override
+  String get chatTitle => 'Хат алмасу';
+  @override
+  String get chatWithEmployer => 'Тапсырыс берушіге жазу';
+  @override
+  String get chatWithWorker => 'Орындаушыға жазу';
+  @override
+  String get chatHint => 'Хабарлама';
+  @override
+  String get chatEmptyTitle => 'Әзірге хабарлама жоқ';
+  @override
+  String get chatEmptySubtitle =>
+      'Егжей-тегжейін келісіңіз: кіреберіс қайда, қашан келу, не алу керек';
+  @override
+  List<String> get chatQuickWorker => const [
+        '15 минутқа кешігемін',
+        'Мен орнындамын',
+        'Кіреберіс қайда екенін айтасыз ба?',
+        'Өзіммен не алу керек?',
+      ];
+  @override
+  List<String> get chatQuickEmployer => const [
+        'Қайдасыз?',
+        'Кіреберіс аулада',
+        'Ауысым жетекшісіне барыңыз',
+        'Жұмысыңызға рахмет!',
+      ];
 }
 
 class _En extends ShiftStrings {
@@ -1091,4 +1153,31 @@ class _En extends ShiftStrings {
   String get statusCancelled => 'The employer cancelled this shift';
   @override
   String get statusNoShow => 'The employer marked a no-show';
+  @override
+  String get chatTitle => 'Chat';
+  @override
+  String get chatWithEmployer => 'Message the employer';
+  @override
+  String get chatWithWorker => 'Message the worker';
+  @override
+  String get chatHint => 'Message';
+  @override
+  String get chatEmptyTitle => 'No messages yet';
+  @override
+  String get chatEmptySubtitle =>
+      'Sort out the details: where the entrance is, when to come, what to bring';
+  @override
+  List<String> get chatQuickWorker => const [
+        "I'm 15 minutes late",
+        "I'm here",
+        'Where is the entrance?',
+        'What should I bring?',
+      ];
+  @override
+  List<String> get chatQuickEmployer => const [
+        'Where are you?',
+        'The entrance is from the yard',
+        'Please find the shift lead',
+        'Thanks for your work!',
+      ];
 }

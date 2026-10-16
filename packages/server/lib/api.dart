@@ -641,6 +641,32 @@ class Api {
       });
     });
 
+    // Переписка по смене. Кто с кем может говорить, решает хранилище:
+    // заказчик смены — с любым записавшимся (номер в `worker`),
+    // исполнитель — только о своей записи.
+    router.get('/api/shifts/<id|[0-9]+>/chat',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        final worker = int.tryParse(request.url.queryParameters['worker'] ?? '');
+        final messages = await _shiftsFor(user)
+            .chatMessages(int.parse(id), workerId: worker);
+        return _json([for (final m in messages) m.toJson()]);
+      });
+    });
+
+    router.post('/api/shifts/<id|[0-9]+>/chat',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        final body = await _body(request);
+        await _shiftsFor(user).sendChatMessage(
+          int.parse(id),
+          body['text'] as String? ?? '',
+          workerId: body['worker'] as int?,
+        );
+        return _json({'ok': true});
+      });
+    });
+
     // Код отметки — только заказчику этой смены.
     router.get('/api/shifts/<id|[0-9]+>/code',
         (Request request, String id) async {

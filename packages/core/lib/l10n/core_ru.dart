@@ -512,4 +512,17 @@ class CoreRu extends CoreStrings {
       };
   @override
   String get badFullName => 'Укажите имя и фамилию — от 2 до 80 букв';
+  @override
+  String get chatNotAllowed =>
+      'Переписка открыта только заказчику смены и тем, кто на неё записан';
+  @override
+  String get chatEmpty => 'Напишите сообщение';
+  @override
+  String chatTooLong(int max) =>
+      'Слишком длинное сообщение — не больше $max знаков';
+  @override
+  Note chatMessage(String name, String title, String text) => (
+        title: 'Сообщение: $name',
+        body: '«$title»: $text',
+      );
 }

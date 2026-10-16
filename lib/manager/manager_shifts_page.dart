@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/app_preferences.dart';
 import '../data/repositories.dart';
 import '../data/session.dart';
+import '../chat_page.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_core/shift.dart';
@@ -960,6 +961,16 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
                           : null,
                       onFavorite:
                           item.isConfirmed ? () => _toggleFavorite(item) : null,
+                      onChat: () => Navigator.of(context).push(
+                        appRoute(
+                          ChatPage(
+                            repository: widget.repository,
+                            shiftId: widget.shift.id,
+                            workerId: item.user.id,
+                            subtitle: item.user.fullName,
+                          ),
+                        ),
+                      ),
                     ),
                   );
                 },
@@ -1069,11 +1080,15 @@ class _ApplicantTile extends StatelessWidget {
   /// В любимые — только тех, кто отработал. null — сердечка нет.
   final VoidCallback? onFavorite;
 
+  /// Написать этому человеку.
+  final VoidCallback? onChat;
+
   const _ApplicantTile({
     required this.applicant,
     this.onConfirm,
     this.onNoShow,
     this.onFavorite,
+    this.onChat,
   });
 
   @override
@@ -1154,6 +1169,21 @@ class _ApplicantTile extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (onChat != null)
+                  IconButton(
+                    onPressed: onChat,
+                    tooltip: tr.shift.chatWithWorker,
+                    // Узкая кнопка: строка с именем и рейтингом на узком
+                    // телефоне и так занята почти целиком.
+                    visualDensity: VisualDensity.compact,
+                    constraints:
+                        const BoxConstraints.tightFor(width: 36, height: 40),
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      color: AppColors.brand,
+                    ),
+                  ),
                 if (onFavorite != null)
                   IconButton(
                     onPressed: onFavorite,

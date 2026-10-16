@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:drift/drift.dart';
 
 import '../category.dart';
+import '../chat.dart';
 import '../l10n/core_strings.dart';
 import '../lang.dart';
 import '../demo.dart';
@@ -293,6 +294,14 @@ abstract class ShiftRepository {
 
   /// Отметить все уведомления прочитанными.
   Future<void> markNotificationsRead();
+
+  /// Переписка по смене. Исполнителю — его разговор с заказчиком;
+  /// заказчику — разговор с исполнителем `workerId`. Открыть — значит
+  /// прочитать то, что написал собеседник.
+  Future<List<ShiftMessage>> chatMessages(int shiftId, {int? workerId});
+
+  /// Написать в переписку по смене. Собеседнику придёт уведомление.
+  Future<void> sendChatMessage(int shiftId, String text, {int? workerId});
 
   /// Учебные данные: пара уже отработанных смен для нового пользователя,
   /// чтобы архив, кошелёк и отзывы не пустовали. Вызывать можно сколько
@@ -2905,6 +2914,7 @@ class DbShiftRepository implements ShiftRepository {
     int? shiftId,
     bool toSelf = false,
     DateTime? remindedStart,
+    int? peerId,
   }) async {
     // Некому — например, смена учебная, её никто не создавал.
     if (userId == null || userId == 0) return;
@@ -2922,6 +2932,7 @@ class DbShiftRepository implements ShiftRepository {
             shiftId: Value(shiftId),
             createdAt: clock(),
             remindedStart: Value(remindedStart),
+            peerId: Value(peerId),
           ),
         );
   }
@@ -2980,6 +2991,90 @@ class DbShiftRepository implements ShiftRepository {
         ]));
   }
 
+  // -------------------------------------------------------------------------
+  // Переписка по смене
+  // -------------------------------------------------------------------------
+
+  /// С каким исполнителем переписка — или отказ.
+  ///
+  /// Заказчик смены выбирает собеседника сам (`workerId`), исполнитель
+  /// переписывается только о своей записи. Собеседник обязан быть на смене
+  /// записан — хоть когда-то: и отменившему запись бывает что уточнить.
+  Future<(Shift, int)> _chatOf(int shiftId, int? workerId) async {
+    final shift = await _loadShift(shiftId);
+    if (shift == null) throw UserError(_t.chatNotAllowed);
+    final worker = shift.createdBy == _workerId ? workerId : _workerId;
+    if (worker == null || worker == shift.createdBy) {
+      throw UserError(_t.chatNotAllowed);
+    }
+    if (await _applicationOf(shiftId, worker) == null) {
+      throw UserError(_t.chatNotAllowed);
+    }
+    return (shift, worker);
+  }
+
+  @override
+  Future<List<ShiftMessage>> chatMessages(int shiftId, {int? workerId}) async {
+    final (_, worker) = await _chatOf(shiftId, workerId);
+    // Открыл — значит прочитал всё, что написал собеседник.
+    await (db.update(db.shiftMessageRows)
+          ..where((m) =>
+              m.shiftId.equals(shiftId) &
+              m.workerId.equals(worker) &
+              m.authorId.equals(_workerId).not() &
+              m.readAt.isNull()))
+        .write(ShiftMessageRowsCompanion(readAt: Value(clock())));
+    final rows = await (db.select(db.shiftMessageRows)
+          ..where((m) => m.shiftId.equals(shiftId) & m.workerId.equals(worker))
+          ..orderBy([
+            (m) => OrderingTerm.asc(m.createdAt),
+            (m) => OrderingTerm.asc(m.id),
+          ]))
+        .get();
+    return [
+      for (final r in rows)
+        ShiftMessage(
+          id: r.id,
+          shiftId: r.shiftId,
+          workerId: r.workerId,
+          authorId: r.authorId,
+          text: r.body,
+          createdAt: r.createdAt,
+          mine: r.authorId == _workerId,
+        ),
+    ];
+  }
+
+  @override
+  Future<void> sendChatMessage(
+    int shiftId,
+    String text, {
+    int? workerId,
+  }) async {
+    final body = checkedMessage(text, strings: _t);
+    final (shift, worker) = await _chatOf(shiftId, workerId);
+    await db.into(db.shiftMessageRows).insert(ShiftMessageRowsCompanion.insert(
+          shiftId: shiftId,
+          workerId: worker,
+          authorId: _workerId,
+          body: body,
+          createdAt: clock(),
+        ));
+    // Собеседник узнаёт колокольчиком — с началом сообщения, чтобы
+    // «опаздываю на 15 минут» читалось без перехода в переписку.
+    await _notify(
+      userId: _workerId == worker ? shift.createdBy : worker,
+      kind: NotificationKind.message,
+      note: (t) => t.chatMessage(_nameIn(t), shift.title, _snippet(body)),
+      shiftId: shiftId,
+      peerId: _workerId,
+    );
+  }
+
+  /// Начало сообщения для уведомления.
+  static String _snippet(String text) =>
+      text.length <= 120 ? text : '${text.substring(0, 119)}…';
+
   /// Как подписать действующего в тексте уведомления.
   String _nameIn(CoreStrings t) => session.user?.fullName ?? t.someone;
 
@@ -3002,6 +3097,7 @@ class DbShiftRepository implements ShiftRepository {
               shiftId: r.shiftId,
               createdAt: r.createdAt,
               readAt: r.readAt,
+              peerId: r.peerId,
             ))
         .toList();
   }
@@ -3307,4 +3403,16 @@ class _ShiftEdit {
         duties: (json['duties'] as List<dynamic>? ?? []).cast<String>(),
         dressCode: json['dressCode'] as String?,
       );
+}
+
+/// Текст сообщения без пробелов по краям — или отказ: пустое и слишком
+/// длинное не отправляются. Правило одно для телефона, сервера и тестов.
+String checkedMessage(String raw, {CoreStrings? strings}) {
+  final t = strings ?? coreTr;
+  final text = raw.trim();
+  if (text.isEmpty) throw UserError(t.chatEmpty);
+  if (text.length > kMaxMessageLength) {
+    throw UserError(t.chatTooLong(kMaxMessageLength));
+  }
+  return text;
 }

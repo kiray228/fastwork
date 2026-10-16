@@ -515,4 +515,17 @@ class CoreKk extends CoreStrings {
       };
   @override
   String get badFullName => 'Аты-жөніңізді көрсетіңіз — 2-ден 80 әріпке дейін';
+  @override
+  String get chatNotAllowed =>
+      'Хат алмасу тек ауысым тапсырыс берушісі мен оған жазылғандарға ашық';
+  @override
+  String get chatEmpty => 'Хабарлама жазыңыз';
+  @override
+  String chatTooLong(int max) =>
+      'Хабарлама тым ұзын — $max таңбадан аспауы керек';
+  @override
+  Note chatMessage(String name, String title, String text) => (
+        title: 'Хабарлама: $name',
+        body: '«$title»: $text',
+      );
 }

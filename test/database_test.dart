@@ -1813,4 +1813,60 @@ void main() {
       expect(mine.single.title, expected.title);
     }
   });
+
+  // ---------------------------------------------------------------------
+  // ПЕРЕПИСКА ПО СМЕНЕ
+  // ---------------------------------------------------------------------
+
+  test('исполнитель и заказчик переписываются, собеседник узнаёт об этом',
+      () async {
+    final (shiftId, worker, manager) = await upcomingShift();
+
+    session.setUser(worker);
+    await shifts.sendChatMessage(shiftId, '  Опаздываю на 15 минут  ');
+
+    session.setUser(manager);
+    final note = (await shifts.notifications())
+        .firstWhere((n) => n.kind == NotificationKind.message);
+    expect(note.peerId, worker.id, reason: 'по нему откроется разговор');
+    expect(note.body, contains('Опаздываю на 15 минут'));
+
+    final thread = await shifts.chatMessages(shiftId, workerId: worker.id);
+    expect(thread.single.text, 'Опаздываю на 15 минут');
+    expect(thread.single.mine, isFalse);
+    await shifts.sendChatMessage(shiftId, 'Хорошо, ждём', workerId: worker.id);
+
+    session.setUser(worker);
+    final mine = await shifts.chatMessages(shiftId);
+    expect(mine.map((m) => (m.text, m.mine)), [
+      ('Опаздываю на 15 минут', true),
+      ('Хорошо, ждём', false),
+    ]);
+  });
+
+  test('чужую переписку не прочитать и в неё не написать', () async {
+    final (shiftId, worker, _) = await upcomingShift();
+    final stranger = await auth.register(
+      phone: '77070000001',
+      fullName: 'Посторонний',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    session.setUser(worker);
+    await shifts.sendChatMessage(shiftId, 'Где вход?');
+
+    // Не записан на смену — ни читать, ни писать.
+    session.setUser(stranger);
+    await expectLater(
+        shifts.chatMessages(shiftId), throwsA(isA<UserError>()));
+    await expectLater(shifts.chatMessages(shiftId, workerId: worker.id),
+        throwsA(isA<UserError>()),
+        reason: 'чужой номер в запросе не помогает');
+    await expectLater(shifts.sendChatMessage(shiftId, 'привет'),
+        throwsA(isA<UserError>()));
+    // Пустое не отправляется.
+    session.setUser(worker);
+    await expectLater(
+        shifts.sendChatMessage(shiftId, '   '), throwsA(isA<UserError>()));
+  });
 }
