@@ -1219,6 +1219,46 @@ void main() {
       expect(find.text('Я на месте'), findsNothing);
     });
 
+    testWidgets('отметившихся можно засчитать разом', (tester) async {
+      final now = DateTime.now();
+      final repo = _CrowdShiftRepository(
+        Shift(
+          id: 1,
+          // Вчерашняя: отмечать уже можно, в какой бы час ни шёл тест.
+          workDate: DateTime(now.year, now.month, now.day - 1),
+          title: 'Услуги фасовщика',
+          company: 'Magnum',
+          address: 'г. Алматы, ул. Абая, 1',
+          startMinutes: 600,
+          endMinutes: 1260,
+          hourlyRate: 100000,
+          workersNeeded: 5,
+          workersHired: 0,
+          createdBy: 1,
+        ),
+      );
+      await openApp(
+        tester,
+        role: UserRole.manager,
+        repos: buildRepos(
+          shifts: repo,
+          signedIn: testUser(role: UserRole.manager),
+        ),
+      );
+
+      await tester.tap(find.text('Услуги фасовщика'));
+      await tester.pumpAndSettle();
+      // Трое отметились, четвёртый — нет: его засчитывают по отдельности.
+      await tester.tap(find.text('Засчитать всех отметившихся · 3'));
+      await tester.pumpAndSettle();
+      expect(find.text('Засчитать выход всем отметившимся?'), findsOneWidget);
+      await tester.tap(find.text('Вышел').last);
+      await tester.pumpAndSettle();
+
+      expect(repo.confirmed, [11, 12, 13]);
+      expect(find.text('Засчитано: 3 чел.'), findsOneWidget);
+    });
+
     testWidgets('заказчик подтверждает выход', (tester) async {
       final now = DateTime.now();
       final repo = FakeShiftRepository(
@@ -2015,4 +2055,43 @@ extension on AppRepositories {
         support: support,
         wallet: wallet,
       );
+}
+
+/// Смена, на которую записались четверо, а трое из них отметились.
+///
+/// В обычном хранилище в памяти один человек на всё — а здесь нужна
+/// толпа, поэтому список записавшихся подставляем сами.
+class _CrowdShiftRepository extends FakeShiftRepository {
+  final List<int> confirmed = [];
+
+  _CrowdShiftRepository(Shift shift) : super(shifts: [shift]);
+
+  AppUser _person(int id) => AppUser(
+        id: id,
+        phone: '7700000000$id',
+        fullName: 'Исполнитель $id',
+        city: 'Алматы',
+        rating: 4.5,
+        completedShifts: 3,
+        isVerified: false,
+      );
+
+  @override
+  Future<List<ShiftApplicant>> applicantsFor(int shiftId) async => [
+        for (final id in [11, 12, 13, 14])
+          ShiftApplicant(
+            user: _person(id),
+            status: confirmed.contains(id) ? 'completed' : 'active',
+            checkedInAt: id == 14 ? null : DateTime.now(),
+          ),
+      ];
+
+  @override
+  Future<BookingResult> confirmAttendance({
+    required int shiftId,
+    required int workerId,
+  }) async {
+    confirmed.add(workerId);
+    return BookingResult.ok;
+  }
 }

@@ -7,6 +7,7 @@ import 'package:fastwork/data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/data/user_language.dart';
 import 'package:fastwork_core/errors.dart';
+import 'package:fastwork_core/l10n/core_strings.dart';
 import 'package:fastwork_core/lang.dart';
 import 'package:fastwork_core/mrp.dart';
 import 'package:fastwork_core/notification.dart';
@@ -1751,5 +1752,65 @@ void main() {
         auth.changeName(worker.id, ' я '), throwsA(isA<UserError>()));
     await expectLater(
         auth.changeName(worker.id, 'а' * 81), throwsA(isA<UserError>()));
+  });
+
+  test('подписчики на разных языках — по одному уведомлению на своём языке',
+      () async {
+    final manager = await auth.register(
+      phone: '77060000001',
+      fullName: 'Айгуль Досова',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      role: UserRole.manager,
+      company: 'Magnum',
+    );
+    final followers = <AppUser, Lang?>{};
+    for (final (i, lang) in [Lang.kk, Lang.en, null].indexed) {
+      final user = await auth.register(
+        phone: '7706000001$i',
+        fullName: 'Подписчик $i',
+        city: 'Алматы',
+        acceptedTermsVersion: kTermsVersion,
+      );
+      if (lang != null) await rememberLanguage(db, user.id, lang);
+      session.setUser(user);
+      await shifts.followCompany('Magnum', follow: true);
+      // И на вид работ — уведомление всё равно одно.
+      await shifts.followCategory('cashier', follow: true);
+      followers[user] = lang;
+    }
+
+    session.setUser(manager);
+    final shiftId = await shifts.publishShift(
+      workDate: daysAgo(-2),
+      title: 'Услуги кассира',
+      company: 'Magnum',
+      address: 'г. Алматы, пр. Абая, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 2,
+      createdBy: manager.id,
+      city: 'Алматы',
+      category: 'cashier',
+      card: testCard,
+    );
+
+    for (final MapEntry(key: user, value: lang) in followers.entries) {
+      session.setUser(user);
+      final mine = (await shifts.notifications())
+          .where((n) => n.kind == NotificationKind.newShift)
+          .toList();
+      expect(mine, hasLength(1), reason: 'одно уведомление на смену');
+      // Без своего языка — на языке того, кто публиковал (здесь русский).
+      final shift = (await shifts.shiftById(shiftId))!;
+      final expected = CoreStrings.of(lang ?? Lang.ru).newShift(
+          'Magnum',
+          shift.title,
+          shift.workDate,
+          '10:00–20:00',
+          formatMoney(shift.totalPay));
+      expect(mine.single.title, expected.title);
+    }
   });
 }
