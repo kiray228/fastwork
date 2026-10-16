@@ -327,6 +327,21 @@ class CompanyFollowRows extends Table {
       ];
 }
 
+/// Компании, которые исполнитель не хочет видеть в ленте: не сошлись
+/// характерами, не заплатили вовремя, далеко ездить. Хранится у аккаунта,
+/// а не на телефоне: скрыл на сайте — не видит и в приложении.
+class HiddenCompanyRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer()();
+  TextColumn get company => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {userId, company},
+      ];
+}
+
 /// Подписки исполнителей на виды работ: «сообщать о новых сменах
 /// грузчика».
 ///
@@ -721,6 +736,7 @@ class ShiftMessageRows extends Table {
     CompanyFollowRows,
     CategoryFollowRows,
     ShiftMessageRows,
+    HiddenCompanyRows,
   ],
 )
 /// Описание базы: какие таблицы и какой версии схема.
@@ -860,7 +876,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 25;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -980,6 +996,9 @@ class AppDatabase extends _$AppDatabase {
             await m.createTable(shiftMessageRows);
             await addColumnIfMissing(
                 m, notificationRows, notificationRows.peerId);
+          }
+          if (from < 25) {
+            await m.createTable(hiddenCompanyRows);
           }
         },
         beforeOpen: (details) async {

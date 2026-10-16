@@ -99,6 +99,10 @@ abstract class FeedStrings {
   String get interestsBody;
   String get interestsAction;
   String get interestsHide;
+  String get hideCompany;
+  String get unhideCompany;
+  String companyHiddenSnack(String name);
+  String companyShownSnack(String name);
 }
 
 class _Ru extends FeedStrings {
@@ -242,6 +246,14 @@ class _Ru extends FeedStrings {
   String get interestsAction => 'Выбрать';
   @override
   String get interestsHide => 'Скрыть';
+  @override
+  String get hideCompany => 'Не показывать в ленте';
+  @override
+  String get unhideCompany => 'Снова показывать в ленте';
+  @override
+  String companyHiddenSnack(String name) => 'Смен «$name» больше нет в вашей ленте';
+  @override
+  String companyShownSnack(String name) => 'Смены «$name» снова в ленте';
 }
 
 class _Kk extends FeedStrings {
@@ -389,6 +401,14 @@ class _Kk extends FeedStrings {
   String get interestsAction => 'Таңдау';
   @override
   String get interestsHide => 'Жасыру';
+  @override
+  String get hideCompany => 'Лентада көрсетпеу';
+  @override
+  String get unhideCompany => 'Лентада қайта көрсету';
+  @override
+  String companyHiddenSnack(String name) => '«$name» ауысымдары енді лентаңызда жоқ';
+  @override
+  String companyShownSnack(String name) => '«$name» ауысымдары қайта лентада';
 }
 
 class _En extends FeedStrings {
@@ -532,4 +552,12 @@ class _En extends FeedStrings {
   String get interestsAction => 'Choose';
   @override
   String get interestsHide => 'Hide';
+  @override
+  String get hideCompany => 'Hide from my feed';
+  @override
+  String get unhideCompany => 'Show in my feed again';
+  @override
+  String companyHiddenSnack(String name) => '$name is hidden from your feed';
+  @override
+  String companyShownSnack(String name) => '$name is back in your feed';
 }
