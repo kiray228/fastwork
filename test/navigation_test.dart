@@ -375,6 +375,15 @@ void main() {
       expect(preferences.interestsHidden, isTrue);
     });
 
+    testWidgets('вечером пустой «сегодня» сменяется всеми днями', (tester) async {
+      // 23:00 — все сегодняшние смены уже начались, записаться не на что.
+      final repo = FakeShiftRepository(clock: TestClock.today(hour: 23).call);
+      await openApp(tester, repos: buildRepos(shifts: repo));
+
+      expect(find.text('На этот день смен нет'), findsNothing);
+      expect(find.text('Подробнее'), findsWidgets);
+    });
+
     testWidgets('заполненная смена открывается — там лист ожидания',
         (tester) async {
       await openApp(tester);

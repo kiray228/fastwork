@@ -57,6 +57,9 @@ class _ShiftsPageState extends State<ShiftsPage> {
 
   int selectedDay = 0;
 
+  /// Лента ещё ни разу не загружалась — см. конец `_load`.
+  bool _firstLoad = true;
+
   /// Три состояния вместо «списка или null»: грузим, получилось, сбой.
   /// Раньше при ошибке базы экран навсегда застревал на кружке — теперь
   /// он покажет, что случилось, и предложит повторить.
@@ -213,6 +216,24 @@ class _ShiftsPageState extends State<ShiftsPage> {
     // Пока мы ждали ответа, пользователь мог уйти с экрана.
     // Тогда обновлять уже нечего — и Flutter ругнётся, если попробовать.
     if (!mounted || seq != _loadSeq) return;
+
+    // Первый взгляд днём: утренние смены уже начались, записаться сегодня
+    // не на что, хотя завтра и дальше смены есть. Пустая лента при первом
+    // запуске выглядит как неработающее приложение — поэтому вместо неё
+    // сразу «Все дни». Только в первый раз: выбранный руками пустой день
+    // остаётся пустым, как человек и просил.
+    if (result case Ready(value: (final loaded, final days, _, _))
+        when _firstLoad) {
+      _firstLoad = false;
+      if (selectedDay == 0 && loaded.isEmpty && days.isNotEmpty) {
+        setState(() {
+          selectedDay = DateStrip.allDays;
+          state = const Loading();
+        });
+        await _load();
+        return;
+      }
+    }
 
     setState(() {
       switch (result) {
