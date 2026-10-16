@@ -103,6 +103,7 @@ class _ShiftsPageState extends State<ShiftsPage> {
     final now = DateTime.now();
     today = DateTime(now.year, now.month, now.day);
     _load();
+    _loadTaste();
     _loadUnread();
     _loadUpcoming();
     widget.shownAgain?.addListener(_onShownAgain);
@@ -237,6 +238,20 @@ class _ShiftsPageState extends State<ShiftsPage> {
   ///
   /// Раньше, чтобы узнать, когда и куда идти, нужно было открыть «Мои» и
   /// найти смену в списке. Теперь главное — на главном экране.
+  /// Что подходит человеку — отдельно и молча, как колокольчик: не
+  /// узнали — лента та же, просто без отметок «Вам подходит».
+  Future<void> _loadTaste() async {
+    try {
+      final taste = await repository.workerTaste();
+      if (!mounted || taste.isEmpty) return;
+      setState(() => filter = filter.copyWith(taste: taste));
+      // Сортировку «Сначала подходящие» пересчитываем с новым знанием.
+      if (filter.sort == ShiftSort.forYou) await _load();
+    } catch (_) {
+      // Без подсказок лента всё равно полезна.
+    }
+  }
+
   Future<void> _loadUpcoming() async {
     try {
       final mine = await repository.myShifts(archived: false);
@@ -474,6 +489,7 @@ class _ShiftsPageState extends State<ShiftsPage> {
                             child: ShiftCard(
                               shift: shift,
                               userRating: widget.session.rating,
+                              forYou: filter.taste.matches(shift),
                               onTap: () => _openShift(shift),
                             ),
                           ),
@@ -495,6 +511,7 @@ class _ShiftsPageState extends State<ShiftsPage> {
                         child: ShiftCard(
                           shift: value[index],
                           userRating: widget.session.rating,
+                          forYou: filter.taste.matches(value[index]),
                           onTap: () => _openShift(value[index]),
                         ),
                       ),

@@ -348,6 +348,10 @@ class ApiShiftRepository implements ShiftRepository {
   }
 
   @override
+  Future<WorkerTaste> workerTaste() async => WorkerTaste.fromJson(
+      await client.get('/api/me/taste') as Map<String, dynamic>);
+
+  @override
   Future<List<ShiftMessage>> chatMessages(int shiftId, {int? workerId}) async {
     final data = await client.get('/api/shifts/$shiftId/chat', {
       if (workerId != null) 'worker': '$workerId',

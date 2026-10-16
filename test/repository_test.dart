@@ -403,4 +403,54 @@ void main() {
       expect(both.isEmpty, isFalse);
     });
   });
+
+  group('подходящие вам', () {
+    Shift job(int id, String company, String category, int start) => Shift(
+          id: id,
+          workDate: DateTime(2026, 9, 17),
+          title: 'смена',
+          company: company,
+          address: 'ул. Абая, 1',
+          category: category,
+          startMinutes: start,
+          endMinutes: start + 240,
+          hourlyRate: 110000,
+          workersNeeded: 1,
+          workersHired: 0,
+        );
+
+    const taste = WorkerTaste(
+      followedCompanies: {'Magnum'},
+      workedCompanies: {'Small'},
+      followedCategories: {'loader'},
+    );
+
+    test('подписка весит больше опыта, а чужое — ноль', () {
+      expect(taste.score(job(1, 'Magnum', 'cashier', 600)), 3);
+      expect(taste.score(job(2, 'Small', 'loader', 600)), 4);
+      expect(taste.score(job(3, 'Zara', 'cashier', 600)), 0);
+      expect(taste.matches(job(3, 'Zara', 'cashier', 600)), isFalse);
+      expect(WorkerTaste.none.isEmpty, isTrue);
+    });
+
+    test('«Сначала подходящие» — по очкам, при равенстве по времени', () {
+      final shifts = [
+        job(1, 'Zara', 'cashier', 480),
+        job(2, 'Magnum', 'cashier', 720),
+        job(3, 'Small', 'loader', 900),
+        job(4, 'Magnum', 'cashier', 600),
+      ];
+      const filter = ShiftFilter(sort: ShiftSort.forYou, taste: taste);
+      expect(applyFilter(shifts, filter).map((s) => s.id), [3, 4, 2, 1]);
+      expect(filter.activeCount, 0, reason: 'знание о человеке — не условие');
+    });
+
+    test('знание о человеке переживает дорогу через сервер', () {
+      final back = WorkerTaste.fromJson(taste.toJson());
+      expect(back.followedCompanies, {'Magnum'});
+      expect(back.workedCompanies, {'Small'});
+      expect(back.followedCategories, {'loader'});
+      expect(back.workedCategories, isEmpty);
+    });
+  });
 }

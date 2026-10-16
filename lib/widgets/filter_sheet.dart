@@ -102,8 +102,10 @@ class _FilterSheetState extends State<_FilterSheet> {
                     ),
                   ),
                   TextButton(
-                    onPressed: () =>
-                        setState(() => draft = const ShiftFilter()),
+                    // Очищаются условия, а не знание о человеке: отметки
+                    // «Вам подходит» после «Очистить» не пропадают.
+                    onPressed: () => setState(
+                        () => draft = ShiftFilter(taste: draft.taste)),
                     child: Text(tr.feed.clear),
                   ),
                 ],

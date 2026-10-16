@@ -337,6 +337,16 @@ void main() {
       expect(find.text('Записаться на смену'), findsOneWidget);
     });
 
+    testWidgets('смены подписанной компании помечены «Вам подходит»',
+        (tester) async {
+      final repo = FakeShiftRepository(clock: morning());
+      final today = await repo.shiftsOn(DateTime.now());
+      await repo.followCompany(today.first.company, follow: true);
+      await openApp(tester, repos: buildRepos(shifts: repo));
+
+      expect(find.text('Вам подходит'), findsWidgets);
+    });
+
     testWidgets('заполненная смена открывается — там лист ожидания',
         (tester) async {
       await openApp(tester);

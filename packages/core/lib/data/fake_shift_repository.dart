@@ -370,6 +370,20 @@ class FakeShiftRepository implements ShiftRepository {
   Future<Set<String>> followedCategories() async => {..._followedCategories};
 
   @override
+  Future<WorkerTaste> workerTaste() async {
+    final worked = [
+      for (final s in _shifts)
+        if (_myStatuses[s.id] == ApplicationStatus.completed) s,
+    ];
+    return WorkerTaste(
+      followedCompanies: {..._followed},
+      workedCompanies: {for (final s in worked) s.company},
+      followedCategories: {..._followedCategories},
+      workedCategories: {for (final s in worked) s.category},
+    );
+  }
+
+  @override
   Future<void> followCategory(String category, {required bool follow}) async =>
       follow
           ? _followedCategories.add(category)
