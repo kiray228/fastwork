@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../data/app_preferences.dart';
 import '../data/repositories.dart';
@@ -893,7 +894,27 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(tr.manager.applicantsTitle)),
+      appBar: AppBar(
+        title: Text(tr.manager.applicantsTitle),
+        actions: [
+          // Список для проходной или рабочего чата: охране нужны имена,
+          // старшему смены — ещё и телефоны.
+          if (state case Ready(:final value) when value.isNotEmpty)
+            IconButton(
+              tooltip: tr.manager.copyApplicants,
+              icon: const Icon(Icons.copy_all_rounded),
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(
+                    text: applicantsText(widget.shift, value)));
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(tr.manager.applicantsCopied),
+                  behavior: SnackBarBehavior.floating,
+                ));
+              },
+            ),
+        ],
+      ),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 260),
         child: switch (state) {
@@ -1434,5 +1455,23 @@ class _DaySummary extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Список записавшихся текстом — для охраны на проходной или рабочего
+/// чата. Только те, кого ждут на смене: невышедшие в него не попадают.
+String applicantsText(Shift shift, List<ShiftApplicant> people) {
+  final expected = [
+    for (final p in people)
+      if (!p.isNoShow) p,
+  ];
+  return [
+    '${shift.title} — ${shift.company}',
+    '${tr.core.dayMonth(shift.workDate)}, '
+        '${formatTime(shift.startMinutes)}–${formatTime(shift.endMinutes)}, '
+        '${shift.address}',
+    '',
+    for (final (i, p) in expected.indexed)
+      '${i + 1}. ${p.user.fullName}, ${formatKzPhone(p.user.phone)}',
+  ].join('\n');
 }
 

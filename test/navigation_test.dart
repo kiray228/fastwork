@@ -1329,6 +1329,18 @@ void main() {
       expect(find.text('Не отметился'), findsOneWidget);
     });
 
+    testWidgets('над «Моими сменами» — сколько смен впереди и сколько за них',
+        (tester) async {
+      final repo = FakeShiftRepository(clock: morning(), userRating: 5.0);
+      expect(await repo.apply(1), BookingResult.ok);
+      await openApp(tester, repos: buildRepos(shifts: repo));
+      await tester.tap(find.text('Мои'));
+      await tester.pumpAndSettle();
+
+      final pay = formatMoney((await repo.shiftById(1))!.totalPay);
+      expect(find.text('Впереди 1 смена · $pay'), findsOneWidget);
+    });
+
     testWidgets('исполнитель пишет заказчику быстрой фразой', (tester) async {
       final repo = FakeShiftRepository(clock: morning(), userRating: 5.0);
       expect(await repo.apply(1), BookingResult.ok);

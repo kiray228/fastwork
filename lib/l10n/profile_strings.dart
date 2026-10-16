@@ -164,6 +164,7 @@ abstract class ProfileStrings {
   String get deleteAccountTitle;
   String get deleteAccountBody;
   String get deleteAccountConfirm;
+  String upcomingTotal(String shifts, String amount);
 }
 
 class _Ru extends ProfileStrings {
@@ -427,6 +428,9 @@ class _Ru extends ProfileStrings {
       'нужна для учёта. Вернуть аккаунт не получится.';
   @override
   String get deleteAccountConfirm => 'Удалить';
+  @override
+  String upcomingTotal(String shifts, String amount) =>
+      'Впереди $shifts · $amount';
 }
 
 class _Kk extends ProfileStrings {
@@ -683,6 +687,9 @@ class _Kk extends ProfileStrings {
       'қалады — ол есеп үшін керек. Аккаунтты қайтару мүмкін емес.';
   @override
   String get deleteAccountConfirm => 'Жою';
+  @override
+  String upcomingTotal(String shifts, String amount) =>
+      'Алда $shifts · $amount';
 }
 
 class _En extends ProfileStrings {
@@ -937,4 +944,7 @@ class _En extends ProfileStrings {
       'without your name — it is needed for accounting. This cannot be undone.';
   @override
   String get deleteAccountConfirm => 'Delete';
+  @override
+  String upcomingTotal(String shifts, String amount) =>
+      'Ahead: $shifts · $amount';
 }

@@ -206,6 +206,8 @@ abstract class ManagerStrings {
   String get daySummaryComing;
   String get daySummaryOnSite;
   String get daySummaryMissing;
+  String get copyApplicants;
+  String get applicantsCopied;
 }
 
 class _Ru extends ManagerStrings {
@@ -583,6 +585,11 @@ class _Ru extends ManagerStrings {
   String get daySummaryOnSite => 'на месте';
   @override
   String get daySummaryMissing => 'не отметились';
+  @override
+  String get copyApplicants => 'Скопировать список';
+  @override
+  String get applicantsCopied =>
+      'Список скопирован — можно передать охране или в рабочий чат';
 }
 
 class _Kk extends ManagerStrings {
@@ -967,6 +974,11 @@ class _Kk extends ManagerStrings {
   String get daySummaryOnSite => 'орнында';
   @override
   String get daySummaryMissing => 'белгіленбеді';
+  @override
+  String get copyApplicants => 'Тізімді көшіру';
+  @override
+  String get applicantsCopied =>
+      'Тізім көшірілді — күзетке немесе жұмыс чатына беруге болады';
 }
 
 class _En extends ManagerStrings {
@@ -1345,4 +1357,9 @@ class _En extends ManagerStrings {
   String get daySummaryOnSite => 'on site';
   @override
   String get daySummaryMissing => 'not checked in';
+  @override
+  String get copyApplicants => 'Copy the list';
+  @override
+  String get applicantsCopied =>
+      'List copied — share it with security or a work chat';
 }
