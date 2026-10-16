@@ -98,7 +98,8 @@ class _WalletPageState extends State<WalletPage> {
     // него сразу, как только вывод начат.
     setState(() => state = const Loading());
     await _load();
-    if (result == null || !mounted) return;
+    // Не прошло — причину окно уже показало, и деньги вернулись на баланс.
+    if (result == null || result.isFailed || !mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(result.isPaid
@@ -134,101 +135,106 @@ class _WalletPageState extends State<WalletPage> {
       appBar: AppBar(title: Text(title)),
       body: summary == null
           ? const TileListSkeleton(count: 3)
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-              children: [
-                if (widget.isManager)
-                  const _EscrowExplainer()
-                else
-                  _BalanceCard(
-                    summary: summary,
-                    onWithdraw: summary.balance >= kMinWithdrawal
-                        ? () => _withdraw(summary.balance)
-                        : null,
-                  ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: HelpLink(
-                    label: widget.isManager
-                        ? tr.wallet.escrowHelpLink
-                        : tr.wallet.payoutsHelpLink,
-                    onTap: () => openHelpStory(
-                      context,
-                      widget.isManager ? 'm.pay' : 'payouts',
+          // Потянуть вниз — узнать, дошла ли выплата.
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                children: [
+                  if (widget.isManager)
+                    const _EscrowExplainer()
+                  else
+                    _BalanceCard(
+                      summary: summary,
+                      onWithdraw: summary.balance >= kMinWithdrawal
+                          ? () => _withdraw(summary.balance)
+                          : null,
                     ),
-                  ),
-                ),
-                if (summary.sandbox) ...[
-                  const SizedBox(height: 14),
-                  const _SandboxNotice(),
-                ],
-                // График — когда есть что показать: восемь пустых недель
-                // у новичка только напоминали бы, что он ещё не работал.
-                if (!widget.isManager && summary.earnedTotal > 0) ...[
-                  const SizedBox(height: 14),
-                  EarningsChart(
-                    weeks: weeklyEarnings(summary.entries, DateTime.now()),
-                  ),
-                  if (widget.user != null)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: () => Navigator.of(context).push(
-                          appRoute(EarningsStatementPage(
-                            repository: widget.repository,
-                            user: widget.user!,
-                          )),
-                        ),
-                        icon: const Icon(Icons.description_outlined, size: 18),
-                        label: Text(tr.wallet.statementLink),
-                      ),
-                    ),
-                ],
-                if (limit != null) ...[
-                  const SizedBox(height: 14),
-                  EarningsLimitCard(limit: limit!),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: HelpLink(
-                      label: tr.wallet.limitHelpLink(kEarningsLimitMrp),
+                      label: widget.isManager
+                          ? tr.wallet.escrowHelpLink
+                          : tr.wallet.payoutsHelpLink,
                       onTap: () => openHelpStory(
                         context,
-                        'limit',
-                        data: StoryData(
-                          loadLimit: limitLoader(widget.repository),
-                        ),
+                        widget.isManager ? 'm.pay' : 'payouts',
                       ),
                     ),
                   ),
-                ],
-                const SizedBox(height: 14),
-                SurfaceCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SectionHeader(
-                        icon: Icons.receipt_long_outlined,
-                        title: tr.wallet.historyTitle,
-                      ),
-                      const SizedBox(height: 14),
-                      if (summary.entries.isEmpty)
-                        Text(
-                          widget.isManager
-                              ? tr.wallet.managerHistoryEmpty
-                              : tr.wallet.workerHistoryEmpty,
-                          style: const TextStyle(
-                            fontSize: 13.5,
-                            color: AppColors.muted,
-                            height: 1.4,
+                  if (summary.sandbox) ...[
+                    const SizedBox(height: 14),
+                    const _SandboxNotice(),
+                  ],
+                  // График — когда есть что показать: восемь пустых недель
+                  // у новичка только напоминали бы, что он ещё не работал.
+                  if (!widget.isManager && summary.earnedTotal > 0) ...[
+                    const SizedBox(height: 14),
+                    EarningsChart(
+                      weeks: weeklyEarnings(summary.entries, DateTime.now()),
+                    ),
+                    if (widget.user != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () => Navigator.of(context).push(
+                            appRoute(EarningsStatementPage(
+                              repository: widget.repository,
+                              user: widget.user!,
+                            )),
                           ),
-                        )
-                      else
-                        for (final entry in summary.entries)
-                          _EntryRow(entry: entry),
-                    ],
+                          icon: const Icon(Icons.description_outlined, size: 18),
+                          label: Text(tr.wallet.statementLink),
+                        ),
+                      ),
+                  ],
+                  if (limit != null) ...[
+                    const SizedBox(height: 14),
+                    EarningsLimitCard(limit: limit!),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: HelpLink(
+                        label: tr.wallet.limitHelpLink(kEarningsLimitMrp),
+                        onTap: () => openHelpStory(
+                          context,
+                          'limit',
+                          data: StoryData(
+                            loadLimit: limitLoader(widget.repository),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  SurfaceCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SectionHeader(
+                          icon: Icons.receipt_long_outlined,
+                          title: tr.wallet.historyTitle,
+                        ),
+                        const SizedBox(height: 14),
+                        if (summary.entries.isEmpty)
+                          Text(
+                            widget.isManager
+                                ? tr.wallet.managerHistoryEmpty
+                                : tr.wallet.workerHistoryEmpty,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              color: AppColors.muted,
+                              height: 1.4,
+                            ),
+                          )
+                        else
+                          for (final entry in summary.entries)
+                            _EntryRow(entry: entry),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
     );
   }

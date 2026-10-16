@@ -842,14 +842,16 @@ void main() {
         (tester) async {
       final shifts = await fillShiftForm(tester);
 
-      // Начали оплату и передумали — окно закрыли.
+      // Начали оплату и передумали — окно закрыли. Смена уже создана,
+      // и экран говорит об этом, а не делает вид, что ничего не было:
+      // иначе заказчик нажал бы «Оплатить» снова и создал вторую.
       await tester.tap(find.textContaining('Оплатить ').last);
       await tester.pumpAndSettle();
       Navigator.of(tester.element(find.text('Подставить тестовую карту')))
           .pop();
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Мои смены'));
-      await tester.pumpAndSettle();
+      expect(find.textContaining('Смена сохранена'), findsOneWidget);
+      expect((await shifts.shiftsCreatedBy(1)), hasLength(1));
 
       expect(find.text('Ждёт оплаты'), findsOneWidget);
       expect(find.text('Изменить'), findsNothing);
@@ -1010,6 +1012,8 @@ void main() {
         find.byType(TextField).at(1),
         'Отработал смену, деньги не пришли',
       );
+      // Кнопка оживает, когда заполнены оба поля, — на следующем кадре.
+      await tester.pump();
       await tester.tap(find.text('Отправить'));
       await tester.pumpAndSettle();
 
@@ -1162,6 +1166,10 @@ void main() {
 
       expect(find.text('На месте'), findsOneWidget);
       await tester.tap(find.text('Вышел'));
+      await tester.pumpAndSettle();
+      // «Вышел» отпускает деньги — сначала спрашиваем.
+      expect(find.text('Засчитать выход?'), findsOneWidget);
+      await tester.tap(find.text('Вышел').last);
       await tester.pumpAndSettle();
 
       expect(find.text('Отработал'), findsOneWidget);

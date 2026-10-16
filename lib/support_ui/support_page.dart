@@ -5,6 +5,7 @@ import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/support.dart';
 import '../l10n/strings.dart';
 import '../theme/app_colors.dart';
+import '../widgets/async_state.dart';
 import '../widgets/common.dart';
 import '../widgets/nav.dart';
 import '../widgets/skeleton.dart';
@@ -21,7 +22,7 @@ class SupportPage extends StatefulWidget {
 }
 
 class _SupportPageState extends State<SupportPage> {
-  List<SupportTicket>? tickets;
+  Async<List<SupportTicket>> tickets = const Loading();
 
   @override
   void initState() {
@@ -30,9 +31,11 @@ class _SupportPageState extends State<SupportPage> {
   }
 
   Future<void> _load() async {
-    final loaded = await widget.repository.tickets();
+    final result = await load(widget.repository.tickets);
     if (!mounted) return;
-    setState(() => tickets = loaded);
+    // Список уже был — сбой перечитывания его не прячет.
+    if (result is Failed && tickets is Ready) return;
+    setState(() => tickets = result);
   }
 
   Future<void> _openTicket(SupportTicket ticket) async {
@@ -45,62 +48,25 @@ class _SupportPageState extends State<SupportPage> {
   }
 
   Future<void> _createTicket() async {
-    final subjectController = TextEditingController();
-    final messageController = TextEditingController();
-
-    final created = await showDialog<bool>(
+    // Раньше пустая тема или пустое сообщение молча закрывали окно, и
+    // обращение пропадало вместе с набранным текстом. Теперь окно само
+    // не даёт отправить пустое, а сбой сети показывается сообщением.
+    final draft = await showDialog<(String, String)>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(tr.profile.supportNewTicket),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: subjectController,
-              autofocus: true,
-              decoration: InputDecoration(
-                labelText: tr.profile.supportSubject,
-                hintText: tr.profile.supportSubjectHint,
-                border: const OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: messageController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                labelText: tr.profile.supportWhatHappened,
-                border: const OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(tr.profile.cancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(tr.profile.send),
-          ),
-        ],
-      ),
+      builder: (context) => const _NewTicketDialog(),
     );
+    if (draft == null || !mounted) return;
 
-    if (created != true) return;
-    final subject = subjectController.text.trim();
-    final message = messageController.text.trim();
-    if (subject.isEmpty || message.isEmpty) return;
-
-    await widget.repository.createTicket(subject, message);
-    await _load();
+    final (subject, message) = draft;
+    final done = await guardedDone(
+      context,
+      () => widget.repository.createTicket(subject, message),
+    );
+    if (done) await _load();
   }
 
   @override
   Widget build(BuildContext context) {
-    final list = tickets;
-
     return Scaffold(
       appBar: AppBar(title: Text(tr.profile.supportTitle)),
       floatingActionButton: FloatingActionButton.extended(
@@ -110,25 +76,114 @@ class _SupportPageState extends State<SupportPage> {
         icon: const Icon(Icons.add_rounded),
         label: Text(tr.profile.supportWrite),
       ),
-      body: switch (list) {
-        null => const TileListSkeleton(count: 3),
-        [] => EmptyState(
-            icon: Icons.support_agent_rounded,
-            title: tr.profile.supportEmptyTitle,
-            subtitle: tr.profile.supportEmptySubtitle,
-          ),
-        final items => ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
-            itemCount: items.length,
-            itemBuilder: (context, index) => AnimatedEntrance(
-              index: index,
-              child: _TicketTile(
-                ticket: items[index],
-                onTap: () => _openTicket(items[index]),
+      // Потянуть вниз — проверить, не ответила ли поддержка.
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: switch (tickets) {
+          Loading() => const TileListSkeleton(count: 3),
+          Failed(:final error) => ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                ErrorView(message: describeError(error), onRetry: _load),
+              ],
+            ),
+          Ready(value: []) => ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                EmptyState(
+                  icon: Icons.support_agent_rounded,
+                  title: tr.profile.supportEmptyTitle,
+                  subtitle: tr.profile.supportEmptySubtitle,
+                ),
+              ],
+            ),
+          Ready(value: final items) => ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
+              itemCount: items.length,
+              itemBuilder: (context, index) => AnimatedEntrance(
+                index: index,
+                child: _TicketTile(
+                  ticket: items[index],
+                  onTap: () => _openTicket(items[index]),
+                ),
               ),
             ),
+        },
+      ),
+    );
+  }
+}
+
+/// Окно нового обращения. Отдельный виджет со своим состоянием: ему нужны
+/// поля ввода, которые надо освободить, когда окно закроется, и кнопка,
+/// которая оживает, только когда заполнено и то и другое.
+class _NewTicketDialog extends StatefulWidget {
+  const _NewTicketDialog();
+
+  @override
+  State<_NewTicketDialog> createState() => _NewTicketDialogState();
+}
+
+class _NewTicketDialogState extends State<_NewTicketDialog> {
+  final subjectController = TextEditingController();
+  final messageController = TextEditingController();
+
+  @override
+  void dispose() {
+    subjectController.dispose();
+    messageController.dispose();
+    super.dispose();
+  }
+
+  bool get _ready =>
+      subjectController.text.trim().isNotEmpty &&
+      messageController.text.trim().isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(tr.profile.supportNewTicket),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: subjectController,
+            autofocus: true,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: tr.profile.supportSubject,
+              hintText: tr.profile.supportSubjectHint,
+              border: const OutlineInputBorder(),
+            ),
           ),
-      },
+          const SizedBox(height: 12),
+          TextField(
+            controller: messageController,
+            maxLines: 3,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: tr.profile.supportWhatHappened,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(tr.profile.cancel),
+        ),
+        TextButton(
+          onPressed: _ready
+              ? () => Navigator.of(context).pop((
+                    subjectController.text.trim(),
+                    messageController.text.trim(),
+                  ))
+              : null,
+          child: Text(tr.profile.send),
+        ),
+      ],
     );
   }
 }

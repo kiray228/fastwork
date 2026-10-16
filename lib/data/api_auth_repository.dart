@@ -110,9 +110,18 @@ class ApiAuthRepository implements AuthRepository {
 
   @override
   Future<void> signOut() async {
-    await client.post('/api/auth/logout');
-    client.token = null;
-    await writeToken(null);
+    // Выйти можно всегда — и без связи, и с просроченным токеном, на
+    // который сервер ответит 401. Раньше сбой запроса обрывал выход:
+    // токен оставался на телефоне, и человек застревал в сломанной
+    // сессии. Сервер — лишь вежливость: забыть токен там. Здесь — главное.
+    try {
+      await client.post('/api/auth/logout');
+    } catch (_) {
+      // Не дошло — токен сам истечёт на сервере через 90 дней.
+    } finally {
+      client.token = null;
+      await writeToken(null);
+    }
   }
 
   @override

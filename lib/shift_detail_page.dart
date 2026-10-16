@@ -42,18 +42,35 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
   /// могла быть уже удалена или ещё не оплачена.
   bool loaded = false;
 
+  /// Почему не загрузилось. Раньше сбой сети по дороге оставлял экран с
+  /// вечным кружком: исключение улетало мимо, `loaded` не ставился.
+  Object? loadError;
+
   @override
   void initState() {
     super.initState();
     _load();
   }
 
+  /// Перечитать смену. Не бросает: сбой показывается на экране, а
+  /// кнопка действия после него не застревает в «крутится».
   Future<void> _load() async {
-    final found = await widget.repository.shiftById(widget.shiftId);
+    final result = await load(
+      () => widget.repository.shiftById(widget.shiftId),
+    );
     if (!mounted) return;
     setState(() {
-      shift = found;
-      loaded = true;
+      switch (result) {
+        case Ready(:final value):
+          shift = value;
+          loaded = true;
+          loadError = null;
+        case Failed(:final error):
+          // Смену уже показывали — оставляем её, а сбой перечитывания
+          // не прячет экран. Не показывали — экран ошибки с «Повторить».
+          if (shift == null) loadError = error;
+        case Loading():
+      }
     });
   }
 
@@ -90,6 +107,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
         BookingResult.alreadyFinished => tr.shift.bookAlreadyFinished,
         BookingResult.earningsLimit => tr.shift.bookEarningsLimit,
         BookingResult.ownShift => tr.shift.bookOwnShift,
+        BookingResult.alreadyCancelled => tr.shift.statusCancelled,
         _ => tr.shift.bookFailed,
       },
     );
@@ -304,9 +322,18 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     final current = shift;
 
     if (current == null) {
+      final error = loadError;
       return Scaffold(
         appBar: AppBar(title: Text(tr.shift.title)),
-        body: loaded
+        body: error != null
+            ? ErrorView(
+                message: describeError(error),
+                onRetry: () {
+                  setState(() => loadError = null);
+                  _load();
+                },
+              )
+            : loaded
             ? EmptyState(
                 icon: Icons.event_busy_rounded,
                 title: tr.shift.notFoundTitle,
@@ -1127,10 +1154,21 @@ class _BottomBar extends StatelessWidget {
 
     final now = DateTime.now();
 
-    if (shift.isCompleted) {
+    // Сначала — состояния, в которых делать уже нечего. Раньше их не
+    // разбирали: по уведомлению «смену отменили» человек открывал смену и
+    // видел «Записаться», а после невыхода из архива — то же самое.
+    if (shift.isCancelled) {
+      label = tr.shift.statusCancelled;
+      action = null;
+      outlined = true;
+    } else if (shift.isCompleted) {
       label = tr.shift.statusCompleted;
       action = null;
       outlined = false;
+    } else if (shift.isNoShow) {
+      label = tr.shift.statusNoShow;
+      action = null;
+      outlined = true;
     } else if (shift.isCheckedIn) {
       label = tr.shift.statusCheckedIn;
       action = null;

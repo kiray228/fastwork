@@ -124,6 +124,9 @@ class _ReviewSheetState extends State<_ReviewSheet> {
                       for (var i = 1; i <= 5; i++)
                         IconButton(
                           onPressed: () => setState(() => rating = i),
+                          // Без подписи экранный чтец пять раз подряд
+                          // говорил «кнопка». Теперь — «Хорошо» и т. д.
+                          tooltip: tr.shift.ratingLabels[i],
                           icon: Icon(
                             i <= rating
                                 ? Icons.star_rounded

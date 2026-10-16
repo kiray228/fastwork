@@ -60,9 +60,16 @@ class _CategoryAlertsPageState extends State<CategoryAlertsPage> {
     setState(() {
       busy.remove(category.id);
       if (done) {
+        // От нынешнего набора, а не от того, что был при нажатии: два
+        // переключателя подряд иначе затирали друг друга, и первый
+        // выглядел выключенным, хотя подписка на сервере осталась.
+        final current = switch (state) {
+          Ready(:final value) => value,
+          _ => followed,
+        };
         state = Ready(follow
-            ? {...followed, category.id}
-            : ({...followed}..remove(category.id)));
+            ? {...current, category.id}
+            : ({...current}..remove(category.id)));
       }
     });
     if (!done) return;

@@ -26,7 +26,14 @@ class ShiftCard extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final filled = shift.workersHired / shift.workersNeeded;
-    final allowed = shift.ratingAllows(userRating);
+    // Порог рейтинга закрывает только чужие смены. Свою — на которую
+    // человек уже записан или которую отработал — открыть можно всегда:
+    // иначе после чужой низкой оценки он не смог бы ни отметиться, ни
+    // отменить запись, ни посмотреть адрес.
+    final allowed = shift.isMine ||
+        shift.isNoShow ||
+        shift.isCancelled ||
+        shift.ratingAllows(userRating);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),

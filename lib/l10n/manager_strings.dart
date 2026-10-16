@@ -181,6 +181,8 @@ abstract class ManagerStrings {
   /// «★ 4.8 · 3 смены у вас · Алматы».
   String favoriteStats(String rating, String shifts, String city);
   String get noShowCheckedIn;
+  String get confirmTitle;
+  String confirmBody(String name, String amount);
 }
 
 class _Ru extends ManagerStrings {
@@ -501,6 +503,12 @@ class _Ru extends ManagerStrings {
   String get noShowCheckedIn =>
       'Человек отметился кодом на месте — невыход не поставить. '
       'Если он ушёл раньше, напишите в поддержку';
+  @override
+  String get confirmTitle => 'Засчитать выход?';
+  @override
+  String confirmBody(String name, String amount) =>
+      '$name получит $amount за смену. Подтверждение не отменить — '
+      'нажимайте, когда человек действительно отработал.';
 }
 
 class _Kk extends ManagerStrings {
@@ -826,6 +834,12 @@ class _Kk extends ManagerStrings {
   String get noShowCheckedIn =>
       'Адам орнында кодпен белгіленді — келмеді деп белгілеуге болмайды. '
       'Ерте кетіп қалса, қолдау қызметіне жазыңыз';
+  @override
+  String get confirmTitle => 'Келгенін растайсыз ба?';
+  @override
+  String confirmBody(String name, String amount) =>
+      '$name ауысым үшін $amount алады. Растауды кері қайтару мүмкін емес — '
+      'адам шынымен жұмыс істегенде ғана басыңыз.';
 }
 
 class _En extends ManagerStrings {
@@ -1148,4 +1162,10 @@ class _En extends ManagerStrings {
   String get noShowCheckedIn =>
       'This person checked in on site with the code — you can\'t mark a '
       'no-show. If they left early, contact support';
+  @override
+  String get confirmTitle => 'Confirm attendance?';
+  @override
+  String confirmBody(String name, String amount) =>
+      '$name will receive $amount for the shift. This can\'t be undone — '
+      'confirm only when the person has actually worked.';
 }

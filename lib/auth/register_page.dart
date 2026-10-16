@@ -92,6 +92,9 @@ class _RegisterPageState extends State<RegisterPage> {
   /// Без неё каждый из трёх шагов повторял бы один и тот же try/catch,
   /// и в одном из них его однажды забыли бы.
   Future<void> _run(Future<void> Function() body) async {
+    // Enter в поле зовёт шаг мимо кнопки: двойной Enter слал два запроса
+    // кода, и первое письмо приходило с уже погашенным кодом.
+    if (busy) return;
     setState(() {
       busy = true;
       error = null;
