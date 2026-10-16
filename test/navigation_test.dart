@@ -2129,6 +2129,20 @@ void main() {
       expect(find.text('Ернар Калдыбек'), findsOneWidget);
     });
 
+    testWidgets('«выйти на всех устройствах» — после предупреждения',
+        (tester) async {
+      await openApp(tester);
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Выйти на всех устройствах'));
+      await tester.tap(find.text('Выйти на всех устройствах'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Выйти'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Начать работать'), findsOneWidget);
+    });
+
     testWidgets('аккаунт можно удалить — после предупреждения', (tester) async {
       await openApp(tester);
 

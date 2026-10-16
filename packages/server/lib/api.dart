@@ -25,6 +25,7 @@ import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
 import 'auth_service.dart';
 import 'code_sender.dart';
+import 'rate_limit.dart';
 import 'server_strings.dart';
 import 'payments/ioka.dart';
 import 'payments/kaspi.dart';
@@ -56,14 +57,22 @@ class Api {
   /// проверяем, но и не доверяем: вебхук только повод спросить провайдера.
   final Map<String, String> webhookSecrets;
 
+  /// Предел на вход с одного адреса — см. `RateLimiter`. Тридцать
+  /// запросов к `/api/auth/*` за десять минут: человеку с опечатками в
+  /// почте и коде этого хватает с запасом, перебору — нет.
+  final RateLimiter loginLimit;
+
   Api(
     this.db,
     CodeSender sender, {
     this.adminKey = '',
     PaymentGateway? payments,
     this.webhookSecrets = const {},
+    RateLimiter? loginLimit,
   })  : auth = AuthService(db, sender),
-        payments = payments ?? SandboxPaymentGateway();
+        payments = payments ?? SandboxPaymentGateway(),
+        loginLimit = loginLimit ??
+            RateLimiter(limit: 30, window: const Duration(minutes: 10));
 
   /// Сколько байт можно прислать в одном запросе.
   ///
@@ -77,6 +86,10 @@ class Api {
   /// Стоят снаружи маршрутов, поэтому действуют на все адреса сразу — и
   /// на те, куда пускают без входа.
   Future<Response> _guarded(Request request, Handler routes) async {
+    if (request.url.path.startsWith('api/auth/') &&
+        !loginLimit.allow(clientAddress(request))) {
+      return _error(serverTr.tooManyRequests, status: 429);
+    }
     final limited = await _limitBody(request);
     if (limited == null) {
       return _error(serverTr.requestTooLarge, status: 413);
@@ -402,6 +415,17 @@ class Api {
         await auth.revoke(header.substring(7));
       }
       return _json({'ok': true});
+    });
+
+    // Выйти на всех устройствах: потерял телефон, входил с чужого
+    // компьютера. Гасятся все входы человека, этот тоже.
+    router.post('/api/me/logout-all', (Request request) async {
+      return _authorized(request, (user) async {
+        await (db.delete(db.authTokenRows)
+              ..where((t) => t.userId.equals(user.id)))
+            .go();
+        return _json({'ok': true});
+      });
     });
 
     router.get('/api/me', (Request request) async {

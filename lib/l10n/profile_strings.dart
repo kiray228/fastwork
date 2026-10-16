@@ -165,6 +165,8 @@ abstract class ProfileStrings {
   String get deleteAccountBody;
   String get deleteAccountConfirm;
   String upcomingTotal(String shifts, String amount);
+  String get signOutEverywhere;
+  String get signOutEverywhereBody;
 }
 
 class _Ru extends ProfileStrings {
@@ -431,6 +433,13 @@ class _Ru extends ProfileStrings {
   @override
   String upcomingTotal(String shifts, String amount) =>
       'Впереди $shifts · $amount';
+  @override
+  String get signOutEverywhere => 'Выйти на всех устройствах';
+  @override
+  String get signOutEverywhereBody =>
+      'Аккаунт закроется на всех телефонах и компьютерах, где вы входили, — '
+      'и здесь тоже. Пригодится, если потеряли телефон или входили с чужого '
+      'устройства.';
 }
 
 class _Kk extends ProfileStrings {
@@ -690,6 +699,13 @@ class _Kk extends ProfileStrings {
   @override
   String upcomingTotal(String shifts, String amount) =>
       'Алда $shifts · $amount';
+  @override
+  String get signOutEverywhere => 'Барлық құрылғылардан шығу';
+  @override
+  String get signOutEverywhereBody =>
+      'Аккаунт сіз кірген барлық телефондар мен компьютерлерде жабылады — '
+      'осында да. Телефонды жоғалтсаңыз немесе бөтен құрылғыдан кірсеңіз '
+      'пайдалы.';
 }
 
 class _En extends ProfileStrings {
@@ -947,4 +963,11 @@ class _En extends ProfileStrings {
   @override
   String upcomingTotal(String shifts, String amount) =>
       'Ahead: $shifts · $amount';
+  @override
+  String get signOutEverywhere => 'Sign out everywhere';
+  @override
+  String get signOutEverywhereBody =>
+      'You will be signed out on every phone and computer where you signed '
+      'in, including this one. Useful if you lost your phone or used someone '
+      "else's device.";
 }

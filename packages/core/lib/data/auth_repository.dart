@@ -62,6 +62,10 @@ abstract class AuthRepository {
   /// Выйти.
   Future<void> signOut();
 
+  /// Выйти на всех устройствах: погасить все входы этого человека.
+  /// На своём устройстве других входов нет — это обычный выход.
+  Future<void> signOutEverywhere();
+
   /// Перечитать пользователя из базы — например, после новой смены.
   Future<AppUser?> refresh(int userId);
 
@@ -273,6 +277,9 @@ class DbAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<void> signOutEverywhere() => signOut();
+
+  @override
   Future<void> signOut() async {
     await (db.delete(db.appSettings)
           ..where((s) => s.key.equals(_sessionKey)))
@@ -418,6 +425,9 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   Future<void> signOut() async => _current = null;
+
+  @override
+  Future<void> signOutEverywhere() => signOut();
 
   @override
   Future<AppUser?> changeName(int userId, String fullName) async {

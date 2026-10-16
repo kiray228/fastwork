@@ -66,6 +66,7 @@ abstract class ServerStrings {
   String get unknownCity;
   String get needCompany;
   String get codeTooSoon;
+  String get tooManyRequests;
 }
 
 class _Ru extends ServerStrings {
@@ -165,6 +166,9 @@ class _Ru extends ServerStrings {
   @override
   String get codeTooSoon =>
       'Код уже отправлен. Новый можно запросить через минуту.';
+  @override
+  String get tooManyRequests =>
+      'Слишком много попыток входа. Подождите несколько минут.';
 }
 
 class _Kk extends ServerStrings {
@@ -265,6 +269,9 @@ class _Kk extends ServerStrings {
   @override
   String get codeTooSoon =>
       'Код жіберілді. Жаңасын бір минуттан кейін сұрауға болады.';
+  @override
+  String get tooManyRequests =>
+      'Кіру әрекеттері тым көп. Бірнеше минут күтіңіз.';
 }
 
 class _En extends ServerStrings {
@@ -363,6 +370,9 @@ class _En extends ServerStrings {
   @override
   String get codeTooSoon =>
       'A code was just sent. You can request a new one in a minute.';
+  @override
+  String get tooManyRequests =>
+      'Too many sign-in attempts. Please wait a few minutes.';
 }
 
 /// Словарь языка текущего запроса.
