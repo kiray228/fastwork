@@ -90,7 +90,8 @@ class FakeShiftRepository implements ShiftRepository {
             isSameDay(s.workDate, date) &&
             s.city == city &&
             _published(s))
-        .map(_decorate);
+        .map(_decorate)
+        .where((s) => s.isMine || !_hidden.contains(s.company));
     return applyFilter(bookable(list, clock()), filter);
   }
 
@@ -347,6 +348,7 @@ class FakeShiftRepository implements ShiftRepository {
       reviewCount: list.length,
       reviews: list,
       isFollowed: _followed.contains(company),
+      isHidden: _hidden.contains(company),
       upcoming: bookable(
         _shifts
             .where((s) =>
@@ -362,6 +364,22 @@ class FakeShiftRepository implements ShiftRepository {
 
   /// Компании, на которые «я» подписан.
   final Set<String> _followed = {};
+
+  /// Скрытые из ленты компании.
+  final Set<String> _hidden = {};
+
+  @override
+  Future<Set<String>> hiddenCompanies() async => {..._hidden};
+
+  @override
+  Future<void> hideCompany(String company, {required bool hide}) async {
+    if (hide) {
+      _hidden.add(company);
+      _followed.remove(company);
+    } else {
+      _hidden.remove(company);
+    }
+  }
 
   @override
   Future<void> followCompany(String company, {required bool follow}) async =>

@@ -81,6 +81,26 @@ class _CompanyPageState extends State<CompanyPage> {
     );
   }
 
+  /// Скрыть компанию из ленты или вернуть.
+  Future<void> _toggleHidden(CompanyInfo data) async {
+    final hide = !data.isHidden;
+    setState(() => busy = true);
+    final done = await guardedDone(
+      context,
+      () => widget.repository.hideCompany(data.name, hide: hide),
+    );
+    await _load();
+    if (!mounted) return;
+    setState(() => busy = false);
+    if (!done) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(hide
+          ? tr.feed.companyHiddenSnack(data.name)
+          : tr.feed.companyShownSnack(data.name)),
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = info;
@@ -149,6 +169,23 @@ class _CompanyPageState extends State<CompanyPage> {
                                     size: 18),
                                 label: Text(tr.feed.followNewShifts),
                               ),
+                      ),
+                      // Не сложилось с компанией — её смены можно убрать из
+                      // ленты, не уходя из приложения.
+                      TextButton.icon(
+                        onPressed: busy ? null : () => _toggleHidden(data),
+                        icon: Icon(
+                          data.isHidden
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                          size: 18,
+                        ),
+                        label: Text(data.isHidden
+                            ? tr.feed.unhideCompany
+                            : tr.feed.hideCompany),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.muted,
+                        ),
                       ),
                     ],
                   ),

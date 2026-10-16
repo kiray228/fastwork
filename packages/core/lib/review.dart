@@ -33,6 +33,9 @@ class CompanyInfo {
   /// Я подписан на новые смены этой компании.
   final bool isFollowed;
 
+  /// Я скрыл эту компанию из ленты.
+  final bool isHidden;
+
   /// Ближайшие смены компании в моём городе, на которые ещё можно
   /// записаться, — чтобы со страницы компании сразу было куда идти.
   final List<Shift> upcoming;
@@ -43,6 +46,7 @@ class CompanyInfo {
     required this.reviewCount,
     required this.reviews,
     this.isFollowed = false,
+    this.isHidden = false,
     this.upcoming = const [],
   });
 }
@@ -123,6 +127,7 @@ extension CompanyInfoJson on CompanyInfo {
         'reviewCount': reviewCount,
         'reviews': reviews.map((r) => r.toJson()).toList(),
         'isFollowed': isFollowed,
+        'isHidden': isHidden,
         'upcoming': upcoming.map((s) => s.toJson()).toList(),
       };
 }
@@ -136,6 +141,7 @@ CompanyInfo companyInfoFromJson(Map<String, dynamic> json) => CompanyInfo(
           .toList(),
       // Старый сервер этих полей не знает.
       isFollowed: json['isFollowed'] as bool? ?? false,
+      isHidden: json['isHidden'] as bool? ?? false,
       upcoming: (json['upcoming'] as List<dynamic>? ?? const [])
           .map((s) => shiftFromJson(s as Map<String, dynamic>))
           .toList(),

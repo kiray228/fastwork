@@ -167,6 +167,9 @@ abstract class ProfileStrings {
   String upcomingTotal(String shifts, String amount);
   String get signOutEverywhere;
   String get signOutEverywhereBody;
+  String get hiddenCompaniesTitle;
+  String get hiddenCompaniesEmpty;
+  String get showAgain;
 }
 
 class _Ru extends ProfileStrings {
@@ -440,6 +443,13 @@ class _Ru extends ProfileStrings {
       'Аккаунт закроется на всех телефонах и компьютерах, где вы входили, — '
       'и здесь тоже. Пригодится, если потеряли телефон или входили с чужого '
       'устройства.';
+  @override
+  String get hiddenCompaniesTitle => 'Скрытые компании';
+  @override
+  String get hiddenCompaniesEmpty =>
+      'Скрыть компанию можно на её странице — её смены пропадут из ленты';
+  @override
+  String get showAgain => 'Показывать';
 }
 
 class _Kk extends ProfileStrings {
@@ -706,6 +716,13 @@ class _Kk extends ProfileStrings {
       'Аккаунт сіз кірген барлық телефондар мен компьютерлерде жабылады — '
       'осында да. Телефонды жоғалтсаңыз немесе бөтен құрылғыдан кірсеңіз '
       'пайдалы.';
+  @override
+  String get hiddenCompaniesTitle => 'Жасырылған компаниялар';
+  @override
+  String get hiddenCompaniesEmpty =>
+      'Компанияны оның бетінде жасыруға болады — ауысымдары лентадан жоғалады';
+  @override
+  String get showAgain => 'Көрсету';
 }
 
 class _En extends ProfileStrings {
@@ -970,4 +987,11 @@ class _En extends ProfileStrings {
       'You will be signed out on every phone and computer where you signed '
       'in, including this one. Useful if you lost your phone or used someone '
       "else's device.";
+  @override
+  String get hiddenCompaniesTitle => 'Hidden companies';
+  @override
+  String get hiddenCompaniesEmpty =>
+      'You can hide a company on its page — its shifts will leave your feed';
+  @override
+  String get showAgain => 'Show';
 }

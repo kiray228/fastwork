@@ -6,6 +6,7 @@ import 'data/app_preferences.dart';
 import 'data/repositories.dart';
 import 'data/session.dart';
 import 'documents_page.dart';
+import 'hidden_companies_page.dart';
 import 'manager/favorites_page.dart';
 import 'my_reviews_page.dart';
 import 'stories/story_actions.dart';
@@ -344,6 +345,14 @@ class ProfilePage extends StatelessWidget {
                           repository: repos.shifts,
                         ),
                       ),
+                    ),
+                  ),
+                if (!user.isManager)
+                  _MenuRow(
+                    icon: Icons.visibility_off_outlined,
+                    title: tr.profile.hiddenCompaniesTitle,
+                    onTap: () => Navigator.of(context).push(
+                      appRoute(HiddenCompaniesPage(repository: repos.shifts)),
                     ),
                   ),
                 _MenuRow(

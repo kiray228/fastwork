@@ -576,6 +576,25 @@ class Api {
       });
     });
 
+    // Скрытые из ленты компании.
+    router.get('/api/me/hidden-companies', (Request request) async {
+      return _authorized(request, (user) async {
+        return _json((await _shiftsFor(user).hiddenCompanies()).toList());
+      });
+    });
+
+    router.post('/api/companies/<name>/hide',
+        (Request request, String name) async {
+      return _authorized(request, (user) async {
+        final body = await _body(request);
+        await _shiftsFor(user).hideCompany(
+          Uri.decodeComponent(name),
+          hide: body['hide'] as bool? ?? true,
+        );
+        return _json({'ok': true});
+      });
+    });
+
     // Подписки на виды работ: какие есть и включить/выключить одну.
     router.get('/api/me/categories', (Request request) async {
       return _authorized(request, (user) async {
