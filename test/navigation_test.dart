@@ -364,6 +364,41 @@ void main() {
       expect(find.text('На этот день смен нет'), findsOneWidget);
     });
 
+    testWidgets('лента помнит поиск между вкладками, но смены перечитывает',
+        (tester) async {
+      final list = buildDemoShifts();
+      await openApp(
+          tester, shifts: FakeShiftRepository(clock: morning(), shifts: list));
+
+      await tester.enterText(find.byType(TextField).first, 'Zara');
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(find.text('Золотое яблоко'), findsNothing);
+
+      await tester.tap(find.text('Мои'));
+      await tester.pumpAndSettle();
+      // Пока человек смотрел свои смены, Zara выставила ещё одну.
+      final zara = list.firstWhere((s) => s.company == 'Zara');
+      list.add(Shift(
+        id: 900,
+        workDate: zara.workDate,
+        title: 'Услуги кассира',
+        company: 'Zara',
+        address: zara.address,
+        startMinutes: 900,
+        endMinutes: 1200,
+        hourlyRate: 70000,
+        workersNeeded: 2,
+        workersHired: 0,
+      ));
+
+      await tester.tap(find.text('Смены'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(TextField, 'Zara'), findsOneWidget);
+      expect(find.text('Золотое яблоко'), findsNothing);
+      expect(find.text('Услуги кассира'), findsOneWidget);
+    });
+
     testWidgets('фильтр по компании сокращает список', (tester) async {
       await openApp(tester);
 
@@ -792,6 +827,21 @@ void main() {
       expect(find.text('Создать'), findsOneWidget);
       // Вкладок исполнителя нет.
       expect(find.text('Смены'), findsNothing);
+    });
+
+    testWidgets('недописанная смена ждёт, пока заказчик ходил в профиль',
+        (tester) async {
+      await openApp(tester, role: UserRole.manager);
+      await tester.tap(find.text('Создать'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'Услуги грузчика');
+
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Создать'));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(TextField, 'Услуги грузчика'), findsOneWidget);
     });
 
     /// Заполнить форму смены и дойти до окна оплаты.
