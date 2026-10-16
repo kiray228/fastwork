@@ -7,6 +7,7 @@ import 'package:fastwork/main.dart';
 import 'package:fastwork_core/data/auth_repository.dart';
 import 'package:fastwork_core/data/database.dart';
 import 'package:fastwork_core/data/fake_shift_repository.dart';
+import 'package:fastwork/data/app_preferences.dart';
 import 'package:fastwork/data/repositories.dart';
 import 'package:fastwork/data/session.dart';
 import 'package:fastwork_core/data/shift_filter.dart';
@@ -89,12 +90,14 @@ void main() {
     FakeShiftRepository? shifts,
     String role = UserRole.worker,
     AppRepositories? repos,
+    AppPreferences? preferences,
   }) async {
     useTallPhone(tester);
     final user = testUser(rating: rating, role: role);
     final session = AppSession()..setUser(user);
     await tester.pumpWidget(FastworkApp(
       session: session,
+      preferences: preferences,
       repos: repos ??
           buildRepos(
             shifts: shifts ?? FakeShiftRepository(clock: morning(), userRating: rating),
@@ -345,6 +348,31 @@ void main() {
       await openApp(tester, repos: buildRepos(shifts: repo));
 
       expect(find.text('Вам подходит'), findsWidgets);
+    });
+
+    testWidgets('новичка спрашивают об интересах, выбор убирает вопрос',
+        (tester) async {
+      final repo = FakeShiftRepository(clock: morning());
+      await openApp(tester, repos: buildRepos(shifts: repo));
+      expect(find.text('Какая работа вам интересна?'), findsOneWidget);
+
+      await tester.tap(find.text('Выбрать'));
+      await tester.pumpAndSettle();
+      await repo.followCategory('loader', follow: true);
+      await tester.tap(find.byTooltip('Назад'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Какая работа вам интересна?'), findsNothing);
+    });
+
+    testWidgets('вопрос об интересах можно скрыть насовсем', (tester) async {
+      final preferences = AppPreferences();
+      await openApp(tester, preferences: preferences);
+      await tester.tap(find.byTooltip('Скрыть'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Какая работа вам интересна?'), findsNothing);
+      expect(preferences.interestsHidden, isTrue);
     });
 
     testWidgets('заполненная смена открывается — там лист ожидания',

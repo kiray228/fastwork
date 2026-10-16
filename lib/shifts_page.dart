@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'category_alerts_page.dart';
 import 'data/app_preferences.dart';
 import 'data/repositories.dart';
 import 'data/session.dart';
@@ -92,6 +93,24 @@ class _ShiftsPageState extends State<ShiftsPage> {
 
   /// Номер последнего запроса ленты — см. `_load`.
   int _loadSeq = 0;
+
+  /// Показать карточку «Какая работа вам интересна?»: человек ещё не
+  /// выбрал ни одного вида работ. Узнаём вместе с тем, что ему подходит.
+  bool askInterests = false;
+
+  Future<void> _chooseInterests() async {
+    await Navigator.of(context).push(
+      appRoute(
+        CategoryAlertsPage(
+          repository: repository,
+          city: widget.session.city,
+        ),
+      ),
+    );
+    // Выбрал — карточка уходит, а ярлыки «Вам подходит» появляются сразу.
+    await _loadTaste();
+    if (filter.sort != ShiftSort.forYou) await _load();
+  }
 
   /// Истории собираются один раз на экран: в них картинки и тексты,
   /// пересобирать их на каждое движение ленты незачем.
@@ -243,7 +262,10 @@ class _ShiftsPageState extends State<ShiftsPage> {
   Future<void> _loadTaste() async {
     try {
       final taste = await repository.workerTaste();
-      if (!mounted || taste.isEmpty) return;
+      if (!mounted) return;
+      // Видов работ не выбрано — спросим карточкой вверху ленты.
+      setState(() => askInterests = taste.followedCategories.isEmpty);
+      if (taste.isEmpty) return;
       setState(() => filter = filter.copyWith(taste: taste));
       // Сортировку «Сначала подходящие» пересчитываем с новым знанием.
       if (filter.sort == ShiftSort.forYou) await _load();
@@ -398,6 +420,20 @@ class _ShiftsPageState extends State<ShiftsPage> {
                 onOpen: _openStory,
               ),
             ),
+            // Новичку «Вам подходит» не из чего собрать — спросим прямо.
+            if (askInterests && !widget.preferences.interestsHidden)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  child: _InterestsCard(
+                    onChoose: _chooseInterests,
+                    onHide: () async {
+                      await widget.preferences.hideInterests();
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                ),
+              ),
             if (next != null)
               SliverToBoxAdapter(
                 child: Padding(
@@ -877,6 +913,62 @@ class _SearchField extends StatelessWidget {
             contentPadding: const EdgeInsets.symmetric(vertical: 12),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Карточка «Какая работа вам интересна?» — для того, кто ещё ничего не
+/// выбрал. Ведёт в подписки на виды работ: выбор сразу включает и
+/// подсказки «Вам подходит», и уведомления о новых сменах.
+class _InterestsCard extends StatelessWidget {
+  final VoidCallback onChoose;
+  final VoidCallback onHide;
+
+  const _InterestsCard({required this.onChoose, required this.onHide});
+
+  @override
+  Widget build(BuildContext context) {
+    return SurfaceCard(
+      padding: const EdgeInsets.fromLTRB(16, 12, 4, 12),
+      child: Row(
+        children: [
+          const Icon(Icons.auto_awesome_rounded, color: AppColors.brand),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  tr.feed.interestsTitle,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontSize: 14.5),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  tr.feed.interestsBody,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.muted,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: onChoose,
+                  child: Text(tr.feed.interestsAction),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: onHide,
+            tooltip: tr.feed.interestsHide,
+            icon: const Icon(Icons.close_rounded, color: AppColors.muted),
+          ),
+        ],
       ),
     );
   }
