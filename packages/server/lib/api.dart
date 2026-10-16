@@ -731,6 +731,12 @@ class Api {
         }
         final problem = _shiftInputError(body);
         if (problem != null) return _error(problem);
+        // Порог рейтинга — от единицы до пяти. Шесть закрыли бы смену для
+        // всех, а отрицательный ничего бы не значил.
+        final minRating = (body['minRating'] as num?)?.toDouble();
+        if (minRating != null && (minRating < 1 || minRating > 5)) {
+          return _error(serverTr.badRequestShape);
+        }
         final PaymentCheckout checkout;
         try {
           checkout = await _shiftsFor(user).createShift(
@@ -752,7 +758,7 @@ class Api {
             category: category,
             duties: (body['duties'] as List<dynamic>? ?? []).cast<String>(),
             dressCode: body['dressCode'] as String?,
-            minRating: (body['minRating'] as num?)?.toDouble(),
+            minRating: minRating,
           );
         } on PaymentDeclined catch (e) {
           return _declined(e);

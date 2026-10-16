@@ -61,6 +61,10 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
   late final TextEditingController rateController;
   late final TextEditingController workersController;
   late final TextEditingController dutiesController;
+  late final TextEditingController dressCodeController;
+
+  /// Порог рейтинга исполнителя. null — пускать всех.
+  double? minRating;
 
   late DateTime date;
   late TimeOfDay start;
@@ -94,6 +98,9 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
     dutiesController = TextEditingController(
       text: shift?.duties.join('\n') ?? '',
     );
+    // Повтор раньше терял форму одежды: образец её хранил, а форма — нет.
+    dressCodeController = TextEditingController(text: shift?.dressCode ?? '');
+    minRating = shift?.minRating;
 
     // Повтор ставим на завтра: день у образца почти наверняка прошёл.
     date = widget.editing?.workDate ??
@@ -113,6 +120,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
     rateController.dispose();
     workersController.dispose();
     dutiesController.dispose();
+    dressCodeController.dispose();
     super.dispose();
   }
 
@@ -200,6 +208,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
         .map((line) => line.trim())
         .where((line) => line.isNotEmpty)
         .toList();
+    final dressCode = dressCodeController.text.trim();
 
     final existing = widget.editing;
     if (existing != null) {
@@ -215,7 +224,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
             hourlyRate: rate * 100,
             workersNeeded: workers,
             duties: duties,
-            dressCode: existing.dressCode,
+            dressCode: dressCode.isEmpty ? null : dressCode,
             method: method,
             phone: phone,
           );
@@ -316,6 +325,8 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
               city: widget.session.city,
               category: chosen,
               duties: duties,
+              dressCode: dressCode.isEmpty ? null : dressCode,
+              minRating: minRating,
             )
           : widget.repository.retryPayment(
               previous!.shiftId!,
@@ -520,6 +531,60 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
                   hint: tr.manager.dutiesHint,
                   maxLines: 4,
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          // Форма одежды и порог рейтинга: хранилище их понимало давно, и
+          // исполнитель видит их на экране смены, а задать их было негде.
+          SurfaceCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SectionHeader(
+                  icon: Icons.verified_user_outlined,
+                  title: tr.manager.requirementsSection,
+                ),
+                const SizedBox(height: 10),
+                _Input(
+                  controller: dressCodeController,
+                  hint: tr.manager.dressCodeHint,
+                ),
+                // Порог задаётся при создании: у записавшихся он уже
+                // проверен, и менять его задним числом было бы нечестно.
+                if (!isEditing) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    tr.manager.minRatingTitle,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    tr.manager.minRatingHelp,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final bar in const [null, 4.0, 4.5])
+                        ChoiceChip(
+                          label: Text(bar == null
+                              ? tr.manager.minRatingAny
+                              : tr.manager
+                                  .minRatingFrom(bar.toStringAsFixed(1))),
+                          selected: minRating == bar,
+                          onSelected: (_) => setState(() => minRating = bar),
+                        ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

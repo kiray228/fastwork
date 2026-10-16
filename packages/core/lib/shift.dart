@@ -379,6 +379,26 @@ String? shiftFormError({
   return null;
 }
 
+/// Смены заказчика по разделам: что впереди и что уже было.
+///
+/// Впереди — ещё не кончилась и не отменена; ближайшая первой: смена,
+/// которая идёт сегодня, с кодом отметки и кнопками «Вышел», не должна
+/// теряться под сменами следующей недели. Прошедшие и отменённые — свежие
+/// первыми.
+({List<Shift> ahead, List<Shift> past}) splitByTime(
+  Iterable<Shift> shifts,
+  DateTime now,
+) {
+  final ahead = <Shift>[];
+  final past = <Shift>[];
+  for (final s in shifts) {
+    (!s.isCancelled && s.isAheadAt(now) ? ahead : past).add(s);
+  }
+  ahead.sort((a, b) => a.startsAt.compareTo(b.startsAt));
+  past.sort((a, b) => b.startsAt.compareTo(a.startsAt));
+  return (ahead: ahead, past: past);
+}
+
 /// Один ли это день? Время суток нас не интересует, только дата.
 bool isSameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
