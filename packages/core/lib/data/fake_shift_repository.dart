@@ -945,6 +945,9 @@ class FakeShiftRepository implements ShiftRepository {
   }
 
   @override
+  Future<int> unreadChat(int shiftId) async => 0;
+
+  @override
   Future<void> sendChatMessage(
     int shiftId,
     String text, {

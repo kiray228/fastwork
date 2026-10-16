@@ -47,6 +47,19 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
   /// вечным кружком: исключение улетало мимо, `loaded` не ставился.
   Object? loadError;
 
+  /// Непрочитанные сообщения от заказчика — значок на кнопке переписки.
+  int unreadChat = 0;
+
+  /// Узнать отдельно и молча: не узнали — просто без значка.
+  Future<void> _loadUnreadChat() async {
+    try {
+      final count = await widget.repository.unreadChat(widget.shiftId);
+      if (mounted) setState(() => unreadChat = count);
+    } catch (_) {
+      // Без числа на значке переписка всё равно открывается.
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -66,6 +79,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
           shift = value;
           loaded = true;
           loadError = null;
+          if (value?.myStatus != null) _loadUnreadChat();
         case Failed(:final error):
           // Смену уже показывали — оставляем её, а сбой перечитывания
           // не прячет экран. Не показывали — экран ошибки с «Повторить».
@@ -395,16 +409,23 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
           if (current.myStatus != null)
             IconButton(
               tooltip: tr.shift.chatWithEmployer,
-              icon: const Icon(Icons.chat_bubble_outline_rounded),
-              onPressed: () => Navigator.of(context).push(
-                appRoute(
-                  ChatPage(
-                    repository: widget.repository,
-                    shiftId: current.id,
-                    subtitle: '${current.company} · ${current.title}',
-                  ),
-                ),
+              icon: Badge(
+                isLabelVisible: unreadChat > 0,
+                label: Text('$unreadChat'),
+                child: const Icon(Icons.chat_bubble_outline_rounded),
               ),
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  appRoute(
+                    ChatPage(
+                      repository: widget.repository,
+                      shiftId: current.id,
+                      subtitle: '${current.company} · ${current.title}',
+                    ),
+                  ),
+                );
+                await _loadUnreadChat();
+              },
             ),
           IconButton(
             onPressed: () => _copy(

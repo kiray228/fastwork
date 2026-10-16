@@ -664,6 +664,14 @@ class Api {
       });
     });
 
+    router.get('/api/shifts/<id|[0-9]+>/chat/unread',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        return _json(
+            {'count': await _shiftsFor(user).unreadChat(int.parse(id))});
+      });
+    });
+
     router.post('/api/shifts/<id|[0-9]+>/chat',
         (Request request, String id) async {
       return _authorized(request, (user) async {

@@ -1988,4 +1988,22 @@ void main() {
     expect(await shifts.inviteToShift(shiftId: shiftId, workerId: workerId),
         BookingResult.notMine);
   });
+  test('непрочитанные сообщения считаются и гаснут после прочтения', () async {
+    final (shiftId, worker, manager) = await upcomingShift();
+    session.setUser(worker);
+    await shifts.sendChatMessage(shiftId, 'Опаздываю на 15 минут');
+    await shifts.sendChatMessage(shiftId, 'Уже подъезжаю');
+
+    session.setUser(manager);
+    expect((await shifts.applicantsFor(shiftId)).single.unreadMessages, 2);
+    await shifts.chatMessages(shiftId, workerId: worker.id);
+    expect((await shifts.applicantsFor(shiftId)).single.unreadMessages, 0);
+    await shifts.sendChatMessage(shiftId, 'Ждём', workerId: worker.id);
+
+    session.setUser(worker);
+    expect(await shifts.unreadChat(shiftId), 1,
+        reason: 'свои сообщения непрочитанными не считаются');
+    await shifts.chatMessages(shiftId);
+    expect(await shifts.unreadChat(shiftId), 0);
+  });
 }
