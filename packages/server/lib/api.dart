@@ -705,6 +705,16 @@ class Api {
       });
     });
 
+    // Отзывы о человеке — для заказчика, у которого он записан. Кому
+    // можно, решает хранилище.
+    router.get('/api/workers/<id|[0-9]+>/reviews',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        final reviews = await _shiftsFor(user).reviewsAbout(int.parse(id));
+        return _json(reviews.map((r) => r.toJson()).toList());
+      });
+    });
+
     // --- уведомления ------------------------------------------------------
 
     router.get('/api/notifications', (Request request) async {

@@ -12,14 +12,21 @@ import 'widgets/common.dart';
 import 'widgets/skeleton.dart';
 
 /// Отзывы, которые исполнитель получил от заказчиков.
+///
+/// Свои — из профиля. Чужие — заказчику из списка записавшихся: прежде
+/// чем доверить смену, полезно знать, что о человеке писали другие.
 class MyReviewsPage extends StatefulWidget {
   final AppSession session;
   final ShiftRepository repository;
+
+  /// Чьи отзывы. null — свои.
+  final AppUser? worker;
 
   const MyReviewsPage({
     super.key,
     required this.session,
     required this.repository,
+    this.worker,
   });
 
   @override
@@ -37,7 +44,8 @@ class _MyReviewsPageState extends State<MyReviewsPage> {
 
   Future<void> _load() async {
     final result = await load(
-      () => widget.repository.reviewsAbout(widget.session.workerId),
+      () => widget.repository
+          .reviewsAbout(widget.worker?.id ?? widget.session.workerId),
     );
     if (!mounted) return;
     setState(() => state = result);
@@ -45,10 +53,12 @@ class _MyReviewsPageState extends State<MyReviewsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final user = widget.session.user;
+    final user = widget.worker ?? widget.session.user;
 
     return Scaffold(
-      appBar: AppBar(title: Text(tr.profile.reviewsTitle)),
+      appBar: AppBar(
+        title: Text(widget.worker?.fullName ?? tr.profile.reviewsTitle),
+      ),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 260),
         child: switch (state) {

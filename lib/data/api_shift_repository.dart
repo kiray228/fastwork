@@ -341,7 +341,8 @@ class ApiShiftRepository implements ShiftRepository {
 
   @override
   Future<List<WorkerReview>> reviewsAbout(int workerId) async {
-    final data = await client.get('/api/me/reviews') as List<dynamic>;
+    final data =
+        await client.get('/api/workers/$workerId/reviews') as List<dynamic>;
     return data
         .map((e) => workerReviewFromJson(e as Map<String, dynamic>))
         .toList();

@@ -526,4 +526,7 @@ class CoreRu extends CoreStrings {
         title: 'Сообщение: $name',
         body: '«$title»: $text',
       );
+  @override
+  String get reviewsNotAllowed =>
+      'Отзывы об исполнителе видит заказчик, на чью смену он записан';
 }
