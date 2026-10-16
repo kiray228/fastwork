@@ -30,11 +30,17 @@ class ShiftsPage extends StatefulWidget {
   final AppSession session;
   final AppPreferences preferences;
 
+  /// Срабатывает, когда на ленту вернулись с другой вкладки. Экран при
+  /// этом не пересоздаётся — фильтр, поиск и день остаются, — а смены
+  /// перечитываются: пока человек был в профиле, их могли разобрать.
+  final Listenable? shownAgain;
+
   const ShiftsPage({
     super.key,
     required this.repos,
     required this.session,
     required this.preferences,
+    this.shownAgain,
   });
 
   @override
@@ -43,8 +49,10 @@ class ShiftsPage extends StatefulWidget {
 
 class _ShiftsPageState extends State<ShiftsPage> {
   /// Сегодняшняя дата без времени. Считаем один раз, чтобы она не «поехала»,
-  /// если пользователь задержится в приложении до полуночи.
-  late final DateTime today;
+  /// если пользователь задержится в приложении до полуночи. Пересчитываем,
+  /// только когда на ленту вернулись (`_onShownAgain`): экран теперь живёт
+  /// между вкладками и может дожить до завтра.
+  late DateTime today;
 
   int selectedDay = 0;
 
@@ -97,10 +105,40 @@ class _ShiftsPageState extends State<ShiftsPage> {
     _load();
     _loadUnread();
     _loadUpcoming();
+    widget.shownAgain?.addListener(_onShownAgain);
+  }
+
+  @override
+  void didUpdateWidget(ShiftsPage old) {
+    super.didUpdateWidget(old);
+    if (old.shownAgain != widget.shownAgain) {
+      old.shownAgain?.removeListener(_onShownAgain);
+      widget.shownAgain?.addListener(_onShownAgain);
+    }
+  }
+
+  /// Вернулись на ленту — перечитываем то, что могло устареть.
+  void _onShownAgain() {
+    final now = DateTime.now();
+    final day = DateTime(now.year, now.month, now.day);
+    // Наступило завтра: полоса дат начинается с нового «сегодня». Выбранный
+    // день — номер в полосе — сдвигаем, чтобы осталась та же дата; если она
+    // уже прошла — первый день.
+    if (day != today) {
+      final passed = day.difference(today).inDays;
+      setState(() {
+        today = day;
+        if (selectedDay != DateStrip.allDays) {
+          selectedDay = selectedDay - passed < 0 ? 0 : selectedDay - passed;
+        }
+      });
+    }
+    _refresh();
   }
 
   @override
   void dispose() {
+    widget.shownAgain?.removeListener(_onShownAgain);
     searchDebounce?.cancel();
     searchController.dispose();
     super.dispose();

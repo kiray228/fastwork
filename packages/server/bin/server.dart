@@ -7,6 +7,7 @@ import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/data/wallet_repository.dart';
 import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_server/api.dart';
+import 'package:fastwork_server/auth_service.dart';
 import 'package:fastwork_server/code_sender.dart';
 import 'package:fastwork_server/cors.dart';
 import 'package:fastwork_server/open_database.dart';
@@ -45,6 +46,11 @@ Future<void> main(List<String> args) async {
 
   // Первый запуск: кладём демонстрационные смены, иначе лента пустая.
   await DbShiftRepository(db, const StaticUser(null)).seedIfEmpty();
+
+  // Токены в базе — только отпечатками. Записанные прежней версией как
+  // есть переводим здесь, не выкидывая людей из аккаунтов.
+  final hashed = await AuthService(db, sender).hashLegacyTokens();
+  if (hashed > 0) stdout.writeln('токены переведены на отпечатки: $hashed');
 
   // И держим их на неделю вперёд во всех городах — иначе через неделю
   // после первого запуска лента опустела бы навсегда. DEMO_SHIFTS=off

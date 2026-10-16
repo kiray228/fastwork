@@ -343,6 +343,27 @@ class CoreEn extends CoreStrings {
         body: '“$title”, ${dayMonth(day)}: ${changes.join(', ')}.',
       );
   @override
+  Note releasedByEdit(String title, DateTime day, List<String> changes,
+          {required bool overLimit}) =>
+      (
+        title: 'Your booking was released',
+        body: '“$title”, ${dayMonth(day)}: ${changes.join(', ')}. '
+            '${overLimit ? 'With the new pay your income this month would '
+                'exceed the 300 MCI cap' : 'The new time clashes with '
+                'another shift of yours'}, so the booking was released. It '
+            'does not count as your cancellation.',
+      );
+  @override
+  Note workerReleased(String name, String title, DateTime day,
+          {required bool overLimit}) =>
+      (
+        title: 'A booking was released after your edit',
+        body: '$name cannot come to “$title” on ${dayMonth(day)}: '
+            '${overLimit ? 'with the new pay their income this month would '
+                'exceed the 300 MCI cap' : 'they have another shift at the '
+                'new time'}. The place is free again.',
+      );
+  @override
   String changedDay(DateTime day) => 'new day — ${dayMonth(day)}';
   @override
   String changedTime(String time) => 'new time — $time';

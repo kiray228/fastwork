@@ -379,6 +379,8 @@ class AuthCodeRows extends Table {
 /// аккаунта ещё нет» — второй выдаётся между вводом кода и заполнением
 /// анкеты.
 class AuthTokenRows extends Table {
+  /// Отпечаток токена (sha256), а не сам токен: утечка базы не должна
+  /// открывать аккаунты. См. `AuthService.hashToken` на сервере.
   TextColumn get token => text()();
 
   /// Чей токен. null — почта подтверждена, аккаунт ещё не создан.
@@ -659,6 +661,14 @@ class NotificationRows extends Table {
 
   /// Когда прочитано. null — ещё не прочитано.
   DateTimeColumn get readAt => dateTime().nullable()();
+
+  /// Только у напоминаний: на какое начало смены оно было.
+  ///
+  /// Повтор напоминаний раньше отсекали по паре «человек и смена». Смену
+  /// перенесли на другой день после напоминания — и о новом дне никто
+  /// уже не напоминал. Теперь «уже напомнили» значит «напомнили об этом
+  /// самом начале». null — напоминание из версий до схемы 23.
+  DateTimeColumn get remindedStart => dateTime().nullable()();
 }
 
 // ---------------------------------------------------------------------------
@@ -826,7 +836,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 23;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -937,6 +947,10 @@ class AppDatabase extends _$AppDatabase {
           if (from < 22) {
             await addColumnIfMissing(
                 m, applicationRows, applicationRows.checkInAttempts);
+          }
+          if (from < 23) {
+            await addColumnIfMissing(
+                m, notificationRows, notificationRows.remindedStart);
           }
         },
         beforeOpen: (details) async {

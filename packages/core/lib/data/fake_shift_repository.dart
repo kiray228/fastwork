@@ -534,8 +534,10 @@ class FakeShiftRepository implements ShiftRepository {
               shiftId: shiftId);
         } else {
           final index = _shifts.indexWhere((s) => s.id == shiftId);
-          _paid[shiftId] = _paidFor(_shifts[index]) + charge.amount;
+          final before = _shifts[index];
+          _paid[shiftId] = _paidFor(before) + charge.amount;
           _shifts[index] = edit;
+          await _releaseIfCannotKeep(before, edit);
           _record(WalletEntryKind.charge, -charge.amount,
               coreTr.chargeTopup(
                   edit.title, result.paidWith ?? charge.method.title),
@@ -791,7 +793,56 @@ class FakeShiftRepository implements ShiftRepository {
     }
     _paid[shiftId] = paid + diff;
     _shifts[index] = updated;
+    await _releaseIfCannotKeep(old, updated);
     return const ShiftEditResult(BookingResult.ok);
+  }
+
+  /// Правка сняла мою запись, если новое время налезло на другую мою
+  /// смену или доход за месяц перевалил бы за предел, — то же правило,
+  /// что у базы (`_cannotKeep`).
+  Future<void> _releaseIfCannotKeep(Shift before, Shift after) async {
+    if (_myStatuses[after.id] != ApplicationStatus.active) return;
+    final edited = _decorate(after);
+    final moved = before.startsAt != after.startsAt ||
+        before.endsAt != after.endsAt;
+    final booked = _shifts
+        .where((s) => _myStatuses[s.id] == ApplicationStatus.active)
+        .map(_decorate);
+    final grew = monthOf(before.workDate) != monthOf(after.workDate) ||
+        after.totalPay > before.totalPay;
+    bool overLimit;
+    if (moved && hasTimeConflict(edited, booked)) {
+      overLimit = false;
+    } else if (grew && !(await earningsLimit(after.workDate)).allows(0)) {
+      overLimit = true;
+    } else {
+      return;
+    }
+
+    _myStatuses[after.id] = ApplicationStatus.cancelled;
+    final note = coreTr.releasedByEdit(
+      before.title,
+      before.workDate,
+      describeChanges(
+        coreTr,
+        before,
+        workDate: after.workDate,
+        address: after.address,
+        startMinutes: after.startMinutes,
+        endMinutes: after.endMinutes,
+        hourlyRate: after.hourlyRate,
+      ),
+      overLimit: overLimit,
+    );
+    _notifications.add(AppNotification(
+      id: _notifications.length + 1,
+      kind: NotificationKind.shiftChanged,
+      title: note.title,
+      body: note.body,
+      shiftId: after.id,
+      createdAt: clock(),
+      readAt: null,
+    ));
   }
 
   /// Номера отменённых смен. В памяти проще держать отдельным множеством,

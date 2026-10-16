@@ -280,6 +280,49 @@ void main() {
     expect(await repo.apply(70), BookingResult.ok);
   });
 
+  test('перенос смены на время другой записи снимает запись', () async {
+    final tomorrow =
+        DateTime(clock.now.year, clock.now.month, clock.now.day + 1);
+    final repo = FakeShiftRepository(
+      userRating: 5.0,
+      clock: clock.call,
+      shifts: [
+        ...buildDemoShifts(),
+        Shift(
+          id: 70,
+          workDate: tomorrow,
+          title: 'Услуги официанта',
+          company: 'Del Papa',
+          address: 'г. Алматы, ул. Кабанбай батыра, 83',
+          startMinutes: 720,
+          endMinutes: 1080,
+          hourlyRate: 100000,
+          workersNeeded: 2,
+          workersHired: 0,
+        ),
+      ],
+    );
+    expect(await repo.apply(1), BookingResult.ok);
+    expect(await repo.apply(70), BookingResult.ok);
+
+    // Смену №1 (10:00–22:00) переносят на завтра — поверх официанта.
+    final first = (await repo.shiftById(1))!;
+    final edit = await repo.updateShift(
+      shiftId: 1,
+      workDate: tomorrow,
+      title: first.title,
+      address: first.address,
+      startMinutes: first.startMinutes,
+      endMinutes: first.endMinutes,
+      hourlyRate: first.hourlyRate,
+      workersNeeded: first.workersNeeded,
+    );
+    expect(edit.result, BookingResult.ok);
+    expect((await repo.shiftById(1))!.isApplied, isFalse);
+    expect((await repo.shiftById(70))!.isApplied, isTrue);
+    expect((await repo.notifications()).single.title, 'Запись снята');
+  });
+
   test('подтверждённую смену не «перезаписать» ради второй выплаты',
       () async {
     await bookPastShift();

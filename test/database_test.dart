@@ -2,11 +2,13 @@ import 'package:drift/drift.dart' show Migrator, Value;
 import 'package:drift/native.dart';
 import 'package:fastwork_core/data/auth_repository.dart';
 import 'package:fastwork_core/data/database.dart';
+import 'package:fastwork_core/data/mrp_store.dart';
 import 'package:fastwork/data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/data/user_language.dart';
 import 'package:fastwork_core/errors.dart';
 import 'package:fastwork_core/lang.dart';
+import 'package:fastwork_core/mrp.dart';
 import 'package:fastwork_core/notification.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/terms.dart';
@@ -1115,6 +1117,95 @@ void main() {
     expect(await freedFor(late), 1);
   });
 
+  test('правка, налезшая на другую смену человека, снимает его запись',
+      () async {
+    final (shiftId, worker, manager) = await upcomingShift(); // сегодня 10–20
+    final tomorrow =
+        DateTime(clock.now.year, clock.now.month, clock.now.day + 1);
+    session.setUser(manager);
+    final other = await shifts.publishShift(
+      workDate: tomorrow,
+      title: 'Услуги официанта',
+      company: 'Magnum',
+      address: 'г. Алматы, ул. Абая, 1',
+      startMinutes: 480,
+      endMinutes: 720,
+      hourlyRate: 100000,
+      workersNeeded: 1,
+      createdBy: manager.id,
+      city: 'Алматы',
+      card: testCard,
+    );
+    session.setUser(worker);
+    expect(await shifts.apply(other), BookingResult.ok);
+
+    // Заказчик переносит первую смену на завтра — на то же утро, где
+    // человек уже стоит официантом.
+    session.setUser(manager);
+    final before = (await shifts.shiftById(shiftId))!;
+    final edit = await shifts.updateShift(
+      shiftId: shiftId,
+      workDate: tomorrow,
+      title: before.title,
+      address: before.address,
+      startMinutes: before.startMinutes,
+      endMinutes: before.endMinutes,
+      hourlyRate: before.hourlyRate,
+      workersNeeded: before.workersNeeded,
+    );
+    expect(edit.result, BookingResult.ok);
+    expect((await shifts.shiftById(shiftId))!.workersHired, 0);
+
+    final told = (await shifts.notifications())
+        .where((n) => n.kind == NotificationKind.withdrew)
+        .single;
+    expect(told.body, contains('Азамат Серик'));
+    expect(told.body, contains('другая смена'));
+
+    session.setUser(worker);
+    expect((await shifts.shiftById(shiftId))!.isApplied, isFalse);
+    expect((await shifts.shiftById(other))!.isApplied, isTrue,
+        reason: 'вторую запись правка чужой смены не трогает');
+    final note = (await shifts.notifications())
+        .where((n) => n.kind == NotificationKind.shiftChanged)
+        .single;
+    expect(note.title, 'Запись снята');
+    expect(note.body, contains('совпадает с другой вашей сменой'));
+  });
+
+  test('правка, переваливающая доход за 300 МРП, снимает запись после доплаты',
+      () async {
+    final (shiftId, worker, manager) = await upcomingShift();
+    // МРП в 50 ₸ на все годы — лимит 15 000 ₸, смена в него влезает.
+    for (final r in kMrpHistory) {
+      await MrpStore(db).setRate(r.validFrom, 5000);
+    }
+    session.setUser(manager);
+    final before = (await shifts.shiftById(shiftId))!;
+
+    // Ставка вдвое — уже за 15 000 ₸. Правка ждёт доплаты, и запись
+    // снимается, когда доплата пришла и новые условия вступили в силу.
+    expect(await editTo(shiftId, before, hourlyRate: 200000), BookingResult.ok);
+    expect((await shifts.shiftById(shiftId))!.hourlyRate, 200000);
+    expect((await shifts.shiftById(shiftId))!.workersHired, 0);
+
+    session.setUser(worker);
+    final note = (await shifts.notifications())
+        .where((n) => n.kind == NotificationKind.shiftChanged)
+        .single;
+    expect(note.body, contains('300 МРП'));
+  });
+
+  test('правка, которая человеку по силам, запись не трогает', () async {
+    final (shiftId, worker, manager) = await upcomingShift();
+    session.setUser(manager);
+    final before = (await shifts.shiftById(shiftId))!;
+    expect(await editTo(shiftId, before, startMinutes: 480), BookingResult.ok);
+
+    session.setUser(worker);
+    expect((await shifts.shiftById(shiftId))!.isApplied, isTrue);
+  });
+
   // ---------------------------------------------------------------------
   // НАПОМИНАНИЯ
   // ---------------------------------------------------------------------
@@ -1136,6 +1227,59 @@ void main() {
         .toList();
     expect(notes.single.shiftId, shiftId);
     expect(notes.single.title, 'Смена завтра в 10:00');
+  });
+
+  test('смена, перенесённая после напоминания, напоминает о новом дне',
+      () async {
+    final (shiftId, worker, manager) = await upcomingShift(); // сегодня 10:00
+    final today = DateTime(clock.now.year, clock.now.month, clock.now.day);
+
+    clock.now = today.subtract(const Duration(hours: 13)); // вчера, 11:00
+    expect(await shifts.sendReminders(), 1);
+
+    // Заказчик переносит смену на завтра. О сегодняшнем дне уже
+    // напомнили, но напоминание было о другом дне.
+    session.setUser(manager);
+    final before = (await shifts.shiftById(shiftId))!;
+    final edit = await shifts.updateShift(
+      shiftId: shiftId,
+      workDate: today.add(const Duration(days: 1)),
+      title: before.title,
+      address: before.address,
+      startMinutes: before.startMinutes,
+      endMinutes: before.endMinutes,
+      hourlyRate: before.hourlyRate,
+      workersNeeded: before.workersNeeded,
+    );
+    expect(edit.result, BookingResult.ok);
+
+    expect(await shifts.sendReminders(), 0, reason: 'до нового дня больше суток');
+    clock.now = today.add(const Duration(hours: 11)); // сегодня, 11:00
+    expect(await shifts.sendReminders(), 1);
+    expect(await shifts.sendReminders(), 0, reason: 'о новом дне — один раз');
+
+    session.setUser(worker);
+    final reminders = (await shifts.notifications())
+        .where((n) => n.kind == NotificationKind.reminder);
+    expect(reminders, hasLength(2));
+  });
+
+  test('напоминание из прошлой версии тоже не повторяется', () async {
+    final (shiftId, worker, _) = await upcomingShift(); // сегодня 10:00
+    final today = DateTime(clock.now.year, clock.now.month, clock.now.day);
+
+    // Такую строку записала версия до схемы 23 — без начала смены.
+    await db.into(db.notificationRows).insert(NotificationRowsCompanion.insert(
+          userId: worker.id,
+          kind: NotificationKind.reminder.name,
+          title: 'Смена завтра в 10:00',
+          body: '',
+          shiftId: Value(shiftId),
+          createdAt: today.subtract(const Duration(hours: 14)),
+        ));
+
+    clock.now = today.subtract(const Duration(hours: 13));
+    expect(await shifts.sendReminders(), 0);
   });
 
   // ---------------------------------------------------------------------

@@ -204,6 +204,15 @@ abstract class CoreStrings {
   Note rated(int rating, String title, DateTime day);
   Note shiftCancelled(String title, DateTime day);
   Note shiftChanged(String title, DateTime day, List<String> changes);
+
+  /// Правка смены сняла запись: новое время налезло на другую смену
+  /// человека или доход за месяц перевалил бы за 300 МРП. Исполнителю.
+  Note releasedByEdit(String title, DateTime day, List<String> changes,
+      {required bool overLimit});
+
+  /// То же — заказчику: кого сняли и почему.
+  Note workerReleased(String name, String title, DateTime day,
+      {required bool overLimit});
   String changedDay(DateTime day);
   String changedTime(String time);
   String changedRate(String rate);
