@@ -379,6 +379,24 @@ String? shiftFormError({
   return null;
 }
 
+/// Почему человек снимает запись. Необязательно, но заказчику важно:
+/// «заболел» и «нашёл другую работу» — разные истории, и на вторую он,
+/// может быть, захочет ответить ставкой повыше.
+enum CancelReason {
+  sick,
+  plans,
+  otherJob,
+  transport,
+  other;
+
+  static CancelReason? fromName(String? name) {
+    for (final r in values) {
+      if (r.name == name) return r;
+    }
+    return null;
+  }
+}
+
 /// Смены заказчика по разделам: что впереди и что уже было.
 ///
 /// Впереди — ещё не кончилась и не отменена; ближайшая первой: смена,

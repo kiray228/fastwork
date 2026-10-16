@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:drift/native.dart';
 import 'package:fastwork_core/data/database.dart';
+import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_server/api.dart';
 import 'package:fastwork_server/auth_service.dart';
@@ -173,6 +174,12 @@ void main() {
           token: token, body: {'text': 'привет'});
       expect(send, 400);
     });
+  });
+
+  test('незнакомая причина отмены не роняет запрос', () {
+    expect(CancelReason.fromName('sick'), CancelReason.sick);
+    expect(CancelReason.fromName('teleported'), isNull);
+    expect(CancelReason.fromName(null), isNull);
   });
 
   group('CORS', () {

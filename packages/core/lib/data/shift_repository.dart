@@ -110,8 +110,9 @@ abstract class ShiftRepository {
   /// Записаться на смену.
   Future<BookingResult> apply(int shiftId);
 
-  /// Отменить свою запись.
-  Future<BookingResult> cancelApplication(int shiftId);
+  /// Отменить свою запись. [reason] — по желанию: заказчик увидит её в
+  /// уведомлении.
+  Future<BookingResult> cancelApplication(int shiftId, {CancelReason? reason});
 
   /// Мои смены. `archived: false` — вкладка «В работе», `true` — «Архив».
   Future<List<Shift>> myShifts({required bool archived});
@@ -838,7 +839,10 @@ class DbShiftRepository implements ShiftRepository {
   }
 
   @override
-  Future<BookingResult> cancelApplication(int shiftId) async {
+  Future<BookingResult> cancelApplication(
+    int shiftId, {
+    CancelReason? reason,
+  }) async {
     final shift = await shiftById(shiftId);
     if (shift == null) return BookingResult.notFound;
     // Снять можно только живую запись. Без этой проверки «отмена» стирала
@@ -863,7 +867,9 @@ class DbShiftRepository implements ShiftRepository {
     await _notify(
       userId: shift.createdBy,
       kind: NotificationKind.withdrew,
-      note: (t) => t.withdrew(_nameIn(t), shift.title, shift.workDate),
+      // Причина — на языке заказчика, как и всё уведомление.
+      note: (t) => t.withdrew(_nameIn(t), shift.title, shift.workDate,
+          reason: reason == null ? null : t.cancelReason(reason)),
       shiftId: shift.id,
     );
     await _notifyWaitlist(shift);

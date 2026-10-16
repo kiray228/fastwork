@@ -309,9 +309,12 @@ class CoreEn extends CoreStrings {
         body: '$name booked “$title” on ${dayMonth(day)}.',
       );
   @override
-  Note withdrew(String name, String title, DateTime day) => (
+  Note withdrew(String name, String title, DateTime day,
+          {String? reason}) =>
+      (
         title: 'A booking was cancelled',
         body: '$name will not come to “$title” on ${dayMonth(day)}. '
+            '${reason == null ? '' : 'Reason: $reason. '}'
             'The place is free again.',
       );
   @override
@@ -529,4 +532,12 @@ class CoreEn extends CoreStrings {
   @override
   String get reviewsNotAllowed =>
       'Reviews of a worker are visible to employers whose shift they booked';
+  @override
+  String cancelReason(CancelReason reason) => switch (reason) {
+        CancelReason.sick => 'sick',
+        CancelReason.plans => 'plans changed',
+        CancelReason.otherJob => 'found other work',
+        CancelReason.transport => "can't get there in time",
+        CancelReason.other => 'other',
+      };
 }

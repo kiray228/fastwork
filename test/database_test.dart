@@ -1908,4 +1908,18 @@ void main() {
     await expectLater(
         shifts.reviewsAbout(workerId), throwsA(isA<UserError>()));
   });
+
+  test('причина отмены доходит до заказчика на его языке', () async {
+    final (shiftId, worker, manager) = await upcomingShift(); // сегодня 10:00
+    await rememberLanguage(db, manager.id, Lang.en);
+    session.setUser(worker);
+    clock.now = DateTime(clock.now.year, clock.now.month, clock.now.day - 1, 20);
+    expect(await shifts.cancelApplication(shiftId, reason: CancelReason.sick),
+        BookingResult.ok);
+
+    session.setUser(manager);
+    final note = (await shifts.notifications())
+        .firstWhere((n) => n.kind == NotificationKind.withdrew);
+    expect(note.body, contains('Reason: sick'));
+  });
 }
