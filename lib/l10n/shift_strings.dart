@@ -175,6 +175,8 @@ abstract class ShiftStrings {
   String get mapGoogle;
   String get bookOwnShift;
   String get checkInLocked;
+  String get statusCancelled;
+  String get statusNoShow;
 }
 
 class _Ru extends ShiftStrings {
@@ -485,6 +487,10 @@ class _Ru extends ShiftStrings {
   @override
   String get checkInLocked =>
       'Код введён неверно слишком много раз — отметьтесь у старшего смены';
+  @override
+  String get statusCancelled => 'Смена отменена заказчиком';
+  @override
+  String get statusNoShow => 'Заказчик отметил невыход';
 }
 
 class _Kk extends ShiftStrings {
@@ -782,6 +788,10 @@ class _Kk extends ShiftStrings {
   @override
   String get checkInLocked =>
       'Код тым көп рет қате енгізілді — ауысым жетекшісіне белгіленіңіз';
+  @override
+  String get statusCancelled => 'Ауысымды тапсырыс беруші болдырмады';
+  @override
+  String get statusNoShow => 'Тапсырыс беруші келмеді деп белгіледі';
 }
 
 class _En extends ShiftStrings {
@@ -1077,4 +1087,8 @@ class _En extends ShiftStrings {
   @override
   String get checkInLocked =>
       'Too many wrong codes — ask the shift lead to mark you';
+  @override
+  String get statusCancelled => 'The employer cancelled this shift';
+  @override
+  String get statusNoShow => 'The employer marked a no-show';
 }

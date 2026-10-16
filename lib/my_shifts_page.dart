@@ -49,22 +49,34 @@ class _MyShiftsPageState extends State<MyShiftsPage> {
     _load();
   }
 
+  /// Номер последнего запроса: быстро переключили вкладку туда и обратно —
+  /// ответ для старой вкладки не должен лечь в новую.
+  int _loadSeq = 0;
+
   Future<void> _load() async {
+    final seq = ++_loadSeq;
+    final tab = archived;
     final result = await load(() async {
-      final loaded = await widget.repository.myShifts(archived: archived);
+      final loaded = await widget.repository.myShifts(archived: tab);
 
       // Для архива узнаём, по каким сменам отзыв уже есть — чтобы не
-      // предлагать оценить одно и то же дважды.
+      // предлагать оценить одно и то же дважды. Оценить можно только
+      // отработанную смену, поэтому про отменённые не спрашиваем, а про
+      // остальные — разом, а не по одной: тридцать смен по очереди — это
+      // тридцать запросов подряд и полминуты скелетона.
       final done = <int>{};
-      if (archived) {
-        for (final shift in loaded) {
-          if (await widget.repository.hasReviewed(shift.id)) done.add(shift.id);
+      if (tab) {
+        final completed = loaded.where((s) => s.isCompleted).toList();
+        final answers = await Future.wait(
+            completed.map((s) => widget.repository.hasReviewed(s.id)));
+        for (var i = 0; i < completed.length; i++) {
+          if (answers[i]) done.add(completed[i].id);
         }
       }
       return (loaded, done);
     });
 
-    if (!mounted) return;
+    if (!mounted || seq != _loadSeq) return;
     setState(() {
       switch (result) {
         case Ready(value: (final loaded, final done)):
@@ -140,48 +152,61 @@ class _MyShiftsPageState extends State<MyShiftsPage> {
                     _load();
                   },
                 ),
-                Ready(value: []) => EmptyState(
-                  icon: archived
-                      ? Icons.inventory_2_outlined
-                      : Icons.assignment_outlined,
-                  title: tr.profile.myShiftsEmptyTitle,
-                  subtitle: archived
-                      ? tr.profile.myShiftsEmptyArchive
-                      : tr.profile.myShiftsEmptyActive,
-                  actionLabel: archived ? null : tr.profile.myShiftsFind,
-                  onAction: archived ? null : widget.onFindShifts,
-                ),
-                Ready(:final value) => ListView.builder(
-                  key: ValueKey(archived),
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                  itemCount: value.length,
-                  itemBuilder: (context, index) {
-                    final shift = value[index];
-                    final now = DateTime.now();
-
-                    return AnimatedEntrance(
-                      index: index,
-                      child: Column(
-                        children: [
-                          ShiftCard(
-                            shift: shift,
-                            userRating: widget.session.rating,
-                            onTap: () => _openShift(shift),
-                          ),
-                          if (archived)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 14),
-                              child: _ArchiveFooter(
-                                shift: shift,
-                                now: now,
-                                reviewed: reviewed.contains(shift.id),
-                                onReview: () => _review(shift),
-                              ),
-                            ),
-                        ],
+                Ready(value: []) => RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      EmptyState(
+                        icon: archived
+                            ? Icons.inventory_2_outlined
+                            : Icons.assignment_outlined,
+                        title: tr.profile.myShiftsEmptyTitle,
+                        subtitle: archived
+                            ? tr.profile.myShiftsEmptyArchive
+                            : tr.profile.myShiftsEmptyActive,
+                        actionLabel: archived ? null : tr.profile.myShiftsFind,
+                        onAction: archived ? null : widget.onFindShifts,
                       ),
-                    );
-                  },
+                    ],
+                  ),
+                ),
+                // Потянуть вниз — узнать, подтвердил ли заказчик выход.
+                Ready(:final value) => RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView.builder(
+                    key: ValueKey(archived),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    itemCount: value.length,
+                    itemBuilder: (context, index) {
+                      final shift = value[index];
+                      final now = DateTime.now();
+
+                      return AnimatedEntrance(
+                        index: index,
+                        child: Column(
+                          children: [
+                            ShiftCard(
+                              shift: shift,
+                              userRating: widget.session.rating,
+                              onTap: () => _openShift(shift),
+                            ),
+                            if (archived)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 14),
+                                child: _ArchiveFooter(
+                                  shift: shift,
+                                  now: now,
+                                  reviewed: reviewed.contains(shift.id),
+                                  onReview: () => _review(shift),
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                 ),
               },
             ),
@@ -243,22 +268,27 @@ class _TabButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: selected ? AppColors.brand : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: selected ? Colors.white : AppColors.muted,
+      // Экранному чтецу — что это кнопка и какая вкладка выбрана.
+      child: Semantics(
+        button: true,
+        selected: selected,
+        child: GestureDetector(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.brand : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: selected ? Colors.white : AppColors.muted,
+              ),
             ),
           ),
         ),

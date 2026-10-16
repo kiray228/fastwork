@@ -32,6 +32,9 @@ class CompanyPage extends StatefulWidget {
 class _CompanyPageState extends State<CompanyPage> {
   CompanyInfo? info;
 
+  /// Почему не загрузилось — иначе сбой сети оставлял вечный скелетон.
+  Object? loadError;
+
   @override
   void initState() {
     super.initState();
@@ -41,9 +44,19 @@ class _CompanyPageState extends State<CompanyPage> {
   bool busy = false;
 
   Future<void> _load() async {
-    final loaded = await widget.repository.companyInfo(widget.company);
+    final result =
+        await load(() => widget.repository.companyInfo(widget.company));
     if (!mounted) return;
-    setState(() => info = loaded);
+    setState(() {
+      switch (result) {
+        case Ready(:final value):
+          info = value;
+          loadError = null;
+        case Failed(:final error):
+          if (info == null) loadError = error;
+        case Loading():
+      }
+    });
   }
 
   /// Подписаться на новые смены компании или отписаться.
@@ -71,10 +84,19 @@ class _CompanyPageState extends State<CompanyPage> {
   @override
   Widget build(BuildContext context) {
     final data = info;
+    final error = loadError;
 
     return Scaffold(
       appBar: AppBar(title: Text(tr.feed.aboutCompany)),
-      body: data == null
+      body: data == null && error != null
+          ? ErrorView(
+              message: describeError(error),
+              onRetry: () {
+                setState(() => loadError = null);
+                _load();
+              },
+            )
+          : data == null
           ? const TileListSkeleton(count: 3)
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),

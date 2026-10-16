@@ -82,6 +82,9 @@ class _ShiftsPageState extends State<ShiftsPage> {
 
   ShiftRepository get repository => widget.repos.shifts;
 
+  /// Номер последнего запроса ленты — см. `_load`.
+  int _loadSeq = 0;
+
   /// Истории собираются один раз на экран: в них картинки и тексты,
   /// пересобирать их на каждое движение ленты незачем.
   late final stories = storiesFor(widget.session);
@@ -123,7 +126,15 @@ class _ShiftsPageState extends State<ShiftsPage> {
   /// `async`/`await` — это про ожидание: запрос к базе занимает время,
   /// и `await` говорит «подожди ответа, но не морозь при этом экран».
   Future<void> _load() async {
+    // Номер запроса. Человек быстро тапнул «3 окт», потом «4 окт»: если
+    // ответ про третье придёт позже, он не должен лечь под заголовок
+    // четвёртого. Показываем только ответ на последний запрос.
+    final seq = ++_loadSeq;
     final result = await load(() async {
+      // Компании и виды работ для фильтра не зависят от дня — спрашиваем
+      // их сразу, параллельно со сменами, а не по очереди после них.
+      final names = repository.companies();
+      final kinds = repository.categories();
       final days = await repository.daysWithShifts();
       final List<Shift> loaded;
       if (selectedDay == DateStrip.allDays) {
@@ -138,14 +149,12 @@ class _ShiftsPageState extends State<ShiftsPage> {
       } else {
         loaded = await repository.shiftsOn(dayAt(selectedDay), filter: filter);
       }
-      final names = await repository.companies();
-      final kinds = await repository.categories();
-      return (loaded, days, names, kinds);
+      return (loaded, days, await names, await kinds);
     });
 
     // Пока мы ждали ответа, пользователь мог уйти с экрана.
     // Тогда обновлять уже нечего — и Flutter ругнётся, если попробовать.
-    if (!mounted) return;
+    if (!mounted || seq != _loadSeq) return;
 
     setState(() {
       switch (result) {

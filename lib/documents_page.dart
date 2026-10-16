@@ -7,6 +7,7 @@ import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/support.dart';
 import 'stories/story_actions.dart';
 import 'theme/app_colors.dart';
+import 'widgets/async_state.dart';
 import 'widgets/common.dart';
 import 'widgets/skeleton.dart';
 
@@ -28,6 +29,9 @@ class DocumentsPage extends StatefulWidget {
 class _DocumentsPageState extends State<DocumentsPage> {
   List<UserDocument>? docs;
 
+  /// Почему список не загрузился — иначе сбой оставлял вечный скелетон.
+  Object? loadError;
+
   @override
   void initState() {
     super.initState();
@@ -35,9 +39,18 @@ class _DocumentsPageState extends State<DocumentsPage> {
   }
 
   Future<void> _load() async {
-    final loaded = await widget.repository.documents();
+    final result = await load(widget.repository.documents);
     if (!mounted) return;
-    setState(() => docs = loaded);
+    setState(() {
+      switch (result) {
+        case Ready(:final value):
+          docs = value;
+          loadError = null;
+        case Failed(:final error):
+          if (docs == null) loadError = error;
+        case Loading():
+      }
+    });
   }
 
   UserDocument? _byType(String type) {
@@ -54,13 +67,16 @@ class _DocumentsPageState extends State<DocumentsPage> {
     );
     if (input == null || !mounted) return;
 
-    await widget.repository.upload(
-      type: type,
-      number: input.number,
-      expiresAt: input.expiresAt,
+    final sent = await guardedDone(
+      context,
+      () => widget.repository.upload(
+        type: type,
+        number: input.number,
+        expiresAt: input.expiresAt,
+      ),
     );
     await _load();
-    if (!mounted) return;
+    if (!sent || !mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(tr.profile.docSentSnack)),
@@ -73,9 +89,11 @@ class _DocumentsPageState extends State<DocumentsPage> {
     if (doc == null) return;
 
     await Future<void>.delayed(const Duration(seconds: 2));
-    await widget.repository.review(doc.id, approved: true);
+    final reviewed = await load(
+      () => widget.repository.review(doc.id, approved: true),
+    );
     await _load();
-    if (!mounted) return;
+    if (reviewed is Failed || !mounted) return;
 
     // Статус проверки влияет на профиль — обновляем пользователя.
     final user = widget.session.user;
@@ -91,10 +109,19 @@ class _DocumentsPageState extends State<DocumentsPage> {
   @override
   Widget build(BuildContext context) {
     final list = docs;
+    final error = loadError;
 
     return Scaffold(
       appBar: AppBar(title: Text(tr.profile.documentsTitle)),
-      body: list == null
+      body: list == null && error != null
+          ? ErrorView(
+              message: describeError(error),
+              onRetry: () {
+                setState(() => loadError = null);
+                _load();
+              },
+            )
+          : list == null
           ? const TileListSkeleton(count: 2)
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),

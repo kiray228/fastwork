@@ -45,6 +45,11 @@ typedef StartCheckout = Future<PaymentCheckout> Function(
 ///
 /// Возвращает последнюю оплату: прошла, ждёт или не прошла. null — до
 /// оплаты дело не дошло.
+///
+/// Последнюю оплату возвращаем и тогда, когда окно закрыли, не дождавшись
+/// конца. Раньше закрытое окно отвечало «ничего не было», хотя смена уже
+/// создана и ждёт оплаты, — заказчик жал «Оплатить» ещё раз и получал
+/// вторую такую же смену.
 Future<PaymentCheckout?> showCheckoutSheet(
   BuildContext context, {
   required String title,
@@ -58,26 +63,40 @@ Future<PaymentCheckout?> showCheckoutSheet(
   String? note,
   String phone = '',
   bool payout = false,
-}) =>
-    showModalBottomSheet<PaymentCheckout>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _CheckoutSheet(
-        title: title,
-        lines: lines,
-        total: total,
-        actionLabel: actionLabel,
-        start: start,
-        status: status,
-        completeSandbox: completeSandbox,
-        note: note,
-        phone: phone,
-        payout: payout,
-      ),
-    );
+}) async {
+  final outcome = _Outcome();
+  final result = await showModalBottomSheet<PaymentCheckout>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    // Смахнуть окно нельзя: смахивание закрывает его в обход проверки
+    // «идёт запрос». Закрыть можно касанием мимо или «Назад» — когда
+    // запроса нет.
+    enableDrag: false,
+    builder: (_) => _CheckoutSheet(
+      outcome: outcome,
+      title: title,
+      lines: lines,
+      total: total,
+      actionLabel: actionLabel,
+      start: start,
+      status: status,
+      completeSandbox: completeSandbox,
+      note: note,
+      phone: phone,
+      payout: payout,
+    ),
+  );
+  return result ?? outcome.last;
+}
+
+/// Последняя оплата, которую видело окно, — даже если его закрыли.
+class _Outcome {
+  PaymentCheckout? last;
+}
 
 class _CheckoutSheet extends StatefulWidget {
+  final _Outcome outcome;
   final String title;
   final List<PaymentLine> lines;
   final int total;
@@ -91,6 +110,7 @@ class _CheckoutSheet extends StatefulWidget {
   final bool payout;
 
   const _CheckoutSheet({
+    required this.outcome,
     required this.title,
     required this.lines,
     required this.total,
@@ -127,6 +147,14 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   /// Опрос сервера, пока человек платит у провайдера.
   Timer? poll;
 
+  /// Запрос опроса ещё в пути. Таймер тикает раз в три секунды, а ответ
+  /// на плохой связи идёт дольше — без флага запросы наслаивались.
+  bool checking = false;
+
+  /// Окно уже закрывается. Два ответа «оплачено» подряд раньше закрывали
+  /// его дважды — и второй раз закрывался экран под ним.
+  bool closed = false;
+
   @override
   void dispose() {
     poll?.cancel();
@@ -152,6 +180,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     });
     try {
       final started = await widget.start(method, phone, previous);
+      widget.outcome.last = started;
       if (!mounted) return;
       setState(() {
         busy = false;
@@ -169,8 +198,11 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
 
   /// Что делать с оплатой после очередного ответа.
   void _after(PaymentCheckout current) {
+    widget.outcome.last = current;
+    if (closed) return;
     if (current.isPaid) {
       poll?.cancel();
+      closed = true;
       Navigator.of(context).pop(current);
       return;
     }
@@ -203,14 +235,17 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
 
   Future<void> _check() async {
     final current = checkout;
-    if (current == null || busy) return;
+    if (current == null || busy || checking || closed) return;
+    checking = true;
     try {
       final fresh = await widget.status(current.id);
-      if (!mounted) return;
+      if (!mounted || closed) return;
       setState(() => checkout = fresh);
       _after(fresh);
     } catch (_) {
       // Сеть моргнула — спросим в следующий раз.
+    } finally {
+      checking = false;
     }
   }
 
@@ -255,6 +290,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     });
     try {
       final result = await widget.completeSandbox(current.id, card);
+      widget.outcome.last = result;
       if (!mounted) return;
       setState(() {
         busy = false;
@@ -275,7 +311,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     final text = Theme.of(context).textTheme;
     final current = checkout;
 
-    return Padding(
+    final sheet = Padding(
       // Клавиатура не должна закрывать поля.
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: GlassSheet(
@@ -321,6 +357,10 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
         ),
       ),
     );
+
+    // Пока идёт запрос, окно не закрывается: ответ с созданной сменой
+    // пришёл бы уже в никуда.
+    return PopScope(canPop: !busy, child: sheet);
   }
 
   /// Шаг первый: чем платить.

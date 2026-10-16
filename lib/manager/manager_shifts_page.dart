@@ -179,9 +179,11 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
     );
     await _load();
     if (!mounted || result == null || !result.isPaid) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(tr.manager.shiftPublished)),
-    );
+    // Прошлое «ждёт оплаты» уже неправда — убираем его, а не ставим
+    // новое сообщение в очередь за ним.
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(tr.manager.shiftPublished)));
   }
 
   Future<void> _openApplicants(Shift shift) async {
@@ -647,6 +649,22 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
     setState(() => state = result);
   }
 
+  /// Люди, по которым запрос ещё в пути: их кнопки погашены, чтобы второе
+  /// нажатие не ушло следом за первым.
+  final Set<int> pending = {};
+
+  Future<BookingResult?> _marking(
+    ShiftApplicant applicant,
+    Future<BookingResult> Function() body,
+  ) async {
+    setState(() => pending.add(applicant.user.id));
+    try {
+      return await guarded(context, body);
+    } finally {
+      if (mounted) setState(() => pending.remove(applicant.user.id));
+    }
+  }
+
   Future<void> _markNoShow(ShiftApplicant applicant) async {
     final agreed = await showDialog<bool>(
       context: context,
@@ -668,8 +686,8 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
     );
     if (agreed != true || !mounted) return;
 
-    final result = await guarded(
-      context,
+    final result = await _marking(
+      applicant,
       () => widget.repository.markNoShow(
         shiftId: widget.shift.id,
         workerId: applicant.user.id,
@@ -697,9 +715,10 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
   /// Любимым приходит приглашение, как только заказчик опубликует новую
   /// смену, — так хорошие люди возвращаются, а смены набираются быстрее.
   Future<void> _toggleFavorite(ShiftApplicant applicant) async {
+    if (pending.contains(applicant.user.id)) return;
     final favorite = !applicant.isFavorite;
-    final result = await guarded(
-      context,
+    final result = await _marking(
+      applicant,
       () => widget.repository.setFavorite(
         workerId: applicant.user.id,
         favorite: favorite,
@@ -723,8 +742,33 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
   }
 
   Future<void> _confirm(ShiftApplicant applicant) async {
-    final result = await guarded(
-      context,
+    // «Вышел» отпускает деньги исполнителю, и обратно их кнопкой не
+    // вернуть. Невыход рядом спрашивает подтверждение — промах по
+    // соседней кнопке стоит не меньше.
+    final agreed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(tr.manager.confirmTitle),
+        content: Text(tr.manager.confirmBody(
+          applicant.user.fullName,
+          formatMoney(widget.shift.totalPay),
+        )),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(tr.manager.dialogCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(tr.manager.showedUp),
+          ),
+        ],
+      ),
+    );
+    if (agreed != true || !mounted) return;
+
+    final result = await _marking(
+      applicant,
       () => widget.repository.confirmAttendance(
         shiftId: widget.shift.id,
         workerId: applicant.user.id,
@@ -767,42 +811,51 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
               title: tr.manager.noApplicantsTitle,
               subtitle: tr.manager.noApplicantsSubtitle,
             ),
-          Ready(:final value) => ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-              itemCount: value.length + 1,
-              itemBuilder: (context, index) {
-                if (index == 0) {
-                  return Column(
-                    children: [
-                      if (code != null) _CheckInCodeCard(code: code!),
-                      _AttendanceHint(shift: widget.shift),
-                    ],
+          // Потянуть вниз — увидеть, кто отметился на месте.
+          Ready(:final value) => RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                itemCount: value.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return Column(
+                      children: [
+                        if (code != null) _CheckInCodeCard(code: code!),
+                        _AttendanceHint(shift: widget.shift),
+                      ],
+                    );
+                  }
+                  final item = value[index - 1];
+                  final canMark = DateTime.now().isAfter(widget.shift.startsAt);
+                  return AnimatedEntrance(
+                    index: index,
+                    child: _ApplicantTile(
+                      applicant: item,
+                      // Отмечать можно только после начала смены: раньше
+                      // просто не о чем говорить — человек ещё не опоздал.
+                      //
+                      // Раньше «Подтвердить» показывалось лишь тем, кто
+                      // отметился. Но отметка — дело добровольное: человек
+                      // мог отработать и не нажать кнопку, и заказчик
+                      // оставался без возможности засчитать ему смену.
+                      onConfirm: canMark &&
+                              item.isUnmarked &&
+                              !pending.contains(item.user.id)
+                          ? () => _confirm(item)
+                          : null,
+                      onNoShow: canMark &&
+                              item.isUnmarked &&
+                              !pending.contains(item.user.id)
+                          ? () => _markNoShow(item)
+                          : null,
+                      onFavorite:
+                          item.isConfirmed ? () => _toggleFavorite(item) : null,
+                    ),
                   );
-                }
-                final item = value[index - 1];
-                final canMark = DateTime.now().isAfter(widget.shift.startsAt);
-                return AnimatedEntrance(
-                  index: index,
-                  child: _ApplicantTile(
-                    applicant: item,
-                    // Отмечать можно только после начала смены: раньше
-                    // просто не о чем говорить — человек ещё не опоздал.
-                    //
-                    // Раньше «Подтвердить» показывалось лишь тем, кто
-                    // отметился. Но отметка — дело добровольное: человек
-                    // мог отработать и не нажать кнопку, и заказчик
-                    // оставался без возможности засчитать ему смену.
-                    onConfirm: canMark && item.isUnmarked
-                        ? () => _confirm(item)
-                        : null,
-                    onNoShow: canMark && item.isUnmarked
-                        ? () => _markNoShow(item)
-                        : null,
-                    onFavorite:
-                        item.isConfirmed ? () => _toggleFavorite(item) : null,
-                  ),
-                );
-              },
+                },
+              ),
             ),
         },
       ),

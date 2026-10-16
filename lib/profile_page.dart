@@ -14,6 +14,7 @@ import 'theme/app_colors.dart';
 import 'theme/glass.dart';
 import 'package:fastwork_core/user.dart';
 import 'wallet_page.dart';
+import 'widgets/async_state.dart';
 import 'widgets/common.dart';
 import 'widgets/nav.dart';
 import 'l10n/strings.dart';
@@ -135,9 +136,14 @@ class ProfilePage extends StatelessWidget {
       ),
     );
 
-    if (picked == null || picked == current.city) return;
+    if (picked == null || picked == current.city || !context.mounted) return;
 
-    final updated = await repos.auth.changeCity(current.id, picked);
+    // Сбой сети раньше улетал молча: город в профиле не менялся, и
+    // человек не понимал почему.
+    final updated = await guarded(
+      context,
+      () => repos.auth.changeCity(current.id, picked),
+    );
     if (updated != null) session.setUser(updated);
   }
 

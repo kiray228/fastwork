@@ -5,6 +5,8 @@ import 'package:fastwork_core/support.dart';
 import '../l10n/strings.dart';
 import '../theme/app_colors.dart';
 import '../theme/glass.dart';
+import '../widgets/async_state.dart';
+import '../widgets/common.dart';
 import '../widgets/skeleton.dart';
 
 /// Переписка внутри одного обращения.
@@ -26,7 +28,10 @@ class TicketPage extends StatefulWidget {
 
 class _TicketPageState extends State<TicketPage> {
   final controller = TextEditingController();
-  List<SupportMessage>? messages;
+  Async<List<SupportMessage>> messages = const Loading();
+
+  /// Сообщение уходит — второе нажатие «Отправить» не шлёт его дважды.
+  bool sending = false;
 
   @override
   void initState() {
@@ -41,24 +46,32 @@ class _TicketPageState extends State<TicketPage> {
   }
 
   Future<void> _load() async {
-    final loaded = await widget.repository.messages(widget.ticket.id);
+    final result =
+        await load(() => widget.repository.messages(widget.ticket.id));
     if (!mounted) return;
-    setState(() => messages = loaded);
+    if (result is Failed && messages is Ready) return;
+    setState(() => messages = result);
   }
 
   Future<void> _send() async {
     final text = controller.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || sending) return;
 
-    controller.clear();
-    await widget.repository.sendMessage(widget.ticket.id, text);
-    await _load();
+    // Поле очищаем только после того, как сообщение ушло. Раньше его
+    // чистили сразу, и при сбое сети набранный текст пропадал молча.
+    setState(() => sending = true);
+    final sent = await guardedDone(
+      context,
+      () => widget.repository.sendMessage(widget.ticket.id, text),
+    );
+    if (!mounted) return;
+    if (sent) controller.clear();
+    setState(() => sending = false);
+    if (sent) await _load();
   }
 
   @override
   Widget build(BuildContext context) {
-    final list = messages;
-
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -70,16 +83,26 @@ class _TicketPageState extends State<TicketPage> {
       body: Column(
         children: [
           Expanded(
-            child: list == null
-                ? const TileListSkeleton(count: 3)
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: switch (messages) {
+              Loading() => const TileListSkeleton(count: 3),
+              Failed(:final error) =>
+                ErrorView(message: describeError(error), onRetry: _load),
+              // Список перевёрнут: внизу — свежее, и открывается он сразу
+              // на последнем сообщении, а не на первом месячной давности.
+              Ready(value: final list) => RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView.builder(
+                    reverse: true,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                     itemCount: list.length,
                     itemBuilder: (context, index) =>
-                        _Bubble(message: list[index]),
+                        _Bubble(message: list[list.length - 1 - index]),
                   ),
+                ),
+            },
           ),
-          _Composer(controller: controller, onSend: _send),
+          _Composer(controller: controller, onSend: _send, sending: sending),
         ],
       ),
     );
@@ -153,8 +176,13 @@ class _Bubble extends StatelessWidget {
 class _Composer extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
+  final bool sending;
 
-  const _Composer({required this.controller, required this.onSend});
+  const _Composer({
+    required this.controller,
+    required this.onSend,
+    required this.sending,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -197,7 +225,8 @@ class _Composer extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             IconButton.filled(
-              onPressed: onSend,
+              onPressed: sending ? null : onSend,
+              tooltip: tr.profile.send,
               style: IconButton.styleFrom(
                 backgroundColor: AppColors.brand,
                 foregroundColor: Colors.white,

@@ -63,15 +63,27 @@ class ApiClient {
     throw ApiException(message, response.statusCode);
   }
 
+  /// Сколько ждать ответа.
+  ///
+  /// Без предела запрос на плохой связи висел бы вечно: кнопка крутится,
+  /// скелетон мерцает, а сообщение «сервер не ответил» не появляется
+  /// никогда. Минута, а не десять секунд: сервер на бесплатном тарифе
+  /// засыпает, и первый запрос будит его секунд тридцать-сорок.
+  static const timeout = Duration(seconds: 60);
+
   Future<dynamic> get(String path, [Map<String, String>? query]) async =>
-      _decode(await http.get(_uri(path, query), headers: _headers));
+      _decode(await http
+          .get(_uri(path, query), headers: _headers)
+          .timeout(timeout));
 
   Future<dynamic> post(String path, [Object? body]) async => _decode(
-        await http.post(
-          _uri(path),
-          headers: _headers,
-          body: body == null ? null : jsonEncode(body),
-        ),
+        await http
+            .post(
+              _uri(path),
+              headers: _headers,
+              body: body == null ? null : jsonEncode(body),
+            )
+            .timeout(timeout),
       );
 }
 
