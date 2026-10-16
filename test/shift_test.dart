@@ -154,4 +154,32 @@ void main() {
     expect(daily.canCheckInAt(day.add(const Duration(hours: 23))), isTrue);
     expect(daily.canCheckInAt(day.add(const Duration(hours: 25))), isFalse);
   });
+
+  test('у заказчика впереди — ближайшая первой, прошедшие — свежие первыми',
+      () {
+    Shift on(int id, int day, {bool cancelled = false}) => Shift(
+          id: id,
+          workDate: DateTime(2026, 9, day),
+          title: 'тест',
+          company: 'тест',
+          address: 'тест',
+          startMinutes: 600,
+          endMinutes: 1260,
+          hourlyRate: 110000,
+          workersNeeded: 1,
+          workersHired: 0,
+          cancelledAt: cancelled ? DateTime(2026, 9, 1) : null,
+        );
+    final now = DateTime(2026, 9, 17, 12); // 17-я идёт прямо сейчас
+    final split = splitByTime([
+      on(1, 20),
+      on(2, 17),
+      on(3, 10),
+      on(4, 18, cancelled: true),
+      on(5, 15),
+    ], now);
+    expect(split.ahead.map((s) => s.id), [2, 1],
+        reason: 'сегодняшняя — первой, отменённая — не впереди');
+    expect(split.past.map((s) => s.id), [4, 5, 3]);
+  });
 }

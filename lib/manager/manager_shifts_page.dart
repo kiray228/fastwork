@@ -195,6 +195,17 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
     await _load();
   }
 
+  /// Разделы списка: что впереди и что уже было. Раньше список шёл одной
+  /// лентой «новые даты сверху», и сегодняшняя смена — та, где нужен код
+  /// отметки и кнопки «Вышел», — оказывалась под всеми будущими.
+  static List<(String, IconData, List<Shift>)> _sections(List<Shift> all) {
+    final split = splitByTime(all, DateTime.now());
+    return [
+      (tr.manager.sectionAhead, Icons.event_available_rounded, split.ahead),
+      (tr.manager.sectionPast, Icons.history_rounded, split.past),
+    ];
+  }
+
   Future<void> _openStory(int index) => openStories(
         context,
         session: widget.session,
@@ -261,23 +272,33 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
                       ),
                     ),
                   ),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                    sliver: SliverList.builder(
-                      itemCount: value.length,
-                      itemBuilder: (context, index) => AnimatedEntrance(
-                        index: index,
-                        child: _ManagerShiftCard(
-                          shift: value[index],
-                          onTap: () => _openApplicants(value[index]),
-                          onCancel: () => _cancelShift(value[index]),
-                          onEdit: () => _editShift(value[index]),
-                          onRepeat: () => _repeatShift(value[index]),
-                          onPay: () => _payShift(value[index]),
+                  for (final (title, icon, shifts) in _sections(value))
+                    if (shifts.isNotEmpty) ...[
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                        sliver: SliverToBoxAdapter(
+                          child: SectionHeader(icon: icon, title: title),
                         ),
                       ),
-                    ),
-                  ),
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                        sliver: SliverList.builder(
+                          itemCount: shifts.length,
+                          itemBuilder: (context, index) => AnimatedEntrance(
+                            index: index,
+                            child: _ManagerShiftCard(
+                              shift: shifts[index],
+                              onTap: () => _openApplicants(shifts[index]),
+                              onCancel: () => _cancelShift(shifts[index]),
+                              onEdit: () => _editShift(shifts[index]),
+                              onRepeat: () => _repeatShift(shifts[index]),
+                              onPay: () => _payShift(shifts[index]),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  const SliverToBoxAdapter(child: SizedBox(height: 16)),
                 ],
             },
           ],

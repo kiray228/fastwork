@@ -183,6 +183,14 @@ abstract class ManagerStrings {
   String get noShowCheckedIn;
   String get confirmTitle;
   String confirmBody(String name, String amount);
+  String get sectionAhead;
+  String get sectionPast;
+  String get requirementsSection;
+  String get dressCodeHint;
+  String get minRatingTitle;
+  String get minRatingHelp;
+  String get minRatingAny;
+  String minRatingFrom(String rating);
 }
 
 class _Ru extends ManagerStrings {
@@ -509,6 +517,23 @@ class _Ru extends ManagerStrings {
   String confirmBody(String name, String amount) =>
       '$name получит $amount за смену. Подтверждение не отменить — '
       'нажимайте, когда человек действительно отработал.';
+  @override
+  String get sectionAhead => 'Впереди';
+  @override
+  String get sectionPast => 'Прошедшие и отменённые';
+  @override
+  String get requirementsSection => 'Требования';
+  @override
+  String get dressCodeHint => 'Форма одежды: чёрный низ, закрытая обувь';
+  @override
+  String get minRatingTitle => 'Кого пускать на смену';
+  @override
+  String get minRatingHelp =>
+      'Чем выше порог, тем надёжнее люди — но смена набирается дольше';
+  @override
+  String get minRatingAny => 'Все';
+  @override
+  String minRatingFrom(String rating) => 'от ★ $rating';
 }
 
 class _Kk extends ManagerStrings {
@@ -840,6 +865,24 @@ class _Kk extends ManagerStrings {
   String confirmBody(String name, String amount) =>
       '$name ауысым үшін $amount алады. Растауды кері қайтару мүмкін емес — '
       'адам шынымен жұмыс істегенде ғана басыңыз.';
+  @override
+  String get sectionAhead => 'Алда';
+  @override
+  String get sectionPast => 'Өткен және болдырылмаған';
+  @override
+  String get requirementsSection => 'Талаптар';
+  @override
+  String get dressCodeHint => 'Киім үлгісі: қара шалбар, жабық аяқ киім';
+  @override
+  String get minRatingTitle => 'Ауысымға кімді жіберу';
+  @override
+  String get minRatingHelp =>
+      'Шек неғұрлым жоғары болса, адамдар соғұрлым сенімді — бірақ ауысым '
+      'баяуырақ толады';
+  @override
+  String get minRatingAny => 'Барлығы';
+  @override
+  String minRatingFrom(String rating) => '★ $rating бастап';
 }
 
 class _En extends ManagerStrings {
@@ -1168,4 +1211,21 @@ class _En extends ManagerStrings {
   String confirmBody(String name, String amount) =>
       '$name will receive $amount for the shift. This can\'t be undone — '
       'confirm only when the person has actually worked.';
+  @override
+  String get sectionAhead => 'Upcoming';
+  @override
+  String get sectionPast => 'Past and cancelled';
+  @override
+  String get requirementsSection => 'Requirements';
+  @override
+  String get dressCodeHint => 'Dress code: dark trousers, closed shoes';
+  @override
+  String get minRatingTitle => 'Who can book';
+  @override
+  String get minRatingHelp =>
+      'A higher bar means more reliable people, but the shift fills slower';
+  @override
+  String get minRatingAny => 'Anyone';
+  @override
+  String minRatingFrom(String rating) => '★ $rating+';
 }

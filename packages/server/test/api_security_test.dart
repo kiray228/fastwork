@@ -135,6 +135,15 @@ void main() {
       expect(workers, 400);
     });
 
+    test('порог рейтинга — от одного до пяти', () async {
+      final (tooHigh, _) = await call('POST', '/api/shifts',
+          token: managerToken, body: {...shiftBody(), 'minRating': 6});
+      expect(tooHigh, 400);
+      final (ok, _) = await call('POST', '/api/shifts',
+          token: managerToken, body: {...shiftBody(), 'minRating': 4.5});
+      expect(ok, 200);
+    });
+
     test('смену в прошлом не создать', () async {
       final (code, json) = await call('POST', '/api/shifts',
           token: managerToken,

@@ -818,6 +818,46 @@ void main() {
       return shifts;
     }
 
+    testWidgets('форма одежды и порог рейтинга доходят до смены',
+        (tester) async {
+      final shifts = FakeShiftRepository(clock: morning());
+      await openApp(
+        tester,
+        role: UserRole.manager,
+        repos: buildRepos(
+          shifts: shifts,
+          signedIn: testUser(role: UserRole.manager),
+        ),
+      );
+      await tester.tap(find.text('Создать'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'Услуги грузчика');
+      await tester.enterText(find.byType(TextField).at(1), 'ул. Абая, 10');
+      await tester.tap(find.text('Выберите категорию'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Грузчик'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).last, 'Чёрный низ');
+      await tester.ensureVisible(find.text('от ★ 4.5'));
+      await tester.tap(find.text('от ★ 4.5'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Оплатить и опубликовать'));
+      await tester.tap(find.text('Оплатить и опубликовать'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Оплатить ').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подставить тестовую карту'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Оплатить ').last);
+      await tester.pumpAndSettle();
+
+      final created = (await shifts.shiftsCreatedBy(1)).single;
+      expect(created.dressCode, 'Чёрный низ');
+      expect(created.minRating, 4.5);
+    });
+
     testWidgets('смену можно оплатить через Kaspi.kz', (tester) async {
       final shifts = await fillShiftForm(tester);
 
