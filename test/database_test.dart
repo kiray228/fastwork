@@ -1,10 +1,11 @@
-import 'package:drift/drift.dart' show Migrator;
+import 'package:drift/drift.dart' show Migrator, Value;
 import 'package:drift/native.dart';
 import 'package:fastwork_core/data/auth_repository.dart';
 import 'package:fastwork_core/data/database.dart';
 import 'package:fastwork/data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/data/user_language.dart';
+import 'package:fastwork_core/errors.dart';
 import 'package:fastwork_core/lang.dart';
 import 'package:fastwork_core/notification.dart';
 import 'package:fastwork_core/shift.dart';
@@ -1507,5 +1508,94 @@ void main() {
     final (shiftId, _, manager) = await upcomingShift();
     session.setUser(manager);
     expect(await shifts.apply(shiftId), BookingResult.ownShift);
+  });
+
+  // ---------------------------------------------------------------------
+  // УДАЛЕНИЕ АККАУНТА И ФИЛЬТР ЛЕНТЫ
+  // ---------------------------------------------------------------------
+
+  test('аккаунт не удалить, пока у человека живая запись', () async {
+    final (shiftId, worker, manager) = await upcomingShift(); // сегодня 10:00
+    await expectLater(
+      deleteAccountIn(db, worker.id, now: clock.now),
+      throwsA(isA<UserError>()),
+    );
+    // И заказчику со своей предстоящей сменой — тоже.
+    await expectLater(
+      deleteAccountIn(db, manager.id, now: clock.now),
+      throwsA(isA<UserError>()),
+    );
+
+    // Смена прошла — запись больше не держит. Но заказчик подтвердил
+    // выход, и на балансе появились деньги: их сначала нужно вывести.
+    clock.setHour(23);
+    session.setUser(manager);
+    await shifts.confirmAttendance(shiftId: shiftId, workerId: worker.id);
+    await expectLater(
+      deleteAccountIn(db, worker.id, now: clock.now),
+      throwsA(isA<UserError>()),
+    );
+  });
+
+  test('удалённый аккаунт обезличен, а история смен осталась', () async {
+    final (shiftId, workerId, managerId) = await workedShift();
+    // Заработанное выведено — баланс пустой.
+    final balance = await db.customSelect(
+      "SELECT COALESCE(SUM(amount), 0) AS b FROM wallet_entry_rows "
+      "WHERE user_id = $workerId AND kind IN ('earning', 'withdrawal')",
+    ).getSingle();
+    await db.into(db.walletEntryRows).insert(WalletEntryRowsCompanion.insert(
+          userId: workerId,
+          kind: WalletEntryKind.withdrawal,
+          amount: -balance.read<int>('b'),
+          title: 'вывод',
+          createdAt: DateTime.now(),
+        ));
+    await db.into(db.documentRows).insert(DocumentRowsCompanion.insert(
+          userId: workerId,
+          type: 'id_card',
+          number: '012345678',
+          status: 'approved',
+          createdAt: DateTime.now(),
+        ));
+    await db.into(db.authTokenRows).insert(AuthTokenRowsCompanion.insert(
+          token: 't',
+          userId: Value(workerId),
+          email: 'worker@example.kz',
+          createdAt: DateTime.now(),
+        ));
+
+    await deleteAccountIn(db, workerId);
+
+    final row = await (db.select(db.userRows)
+          ..where((u) => u.id.equals(workerId)))
+        .getSingle();
+    expect(row.phone, 'deleted-$workerId');
+    expect(row.email, isNull);
+    expect(row.fullName, isNot('Ернар Калдыбеков'));
+    expect(await db.select(db.documentRows).get(), isEmpty);
+    expect(await db.select(db.authTokenRows).get(), isEmpty);
+    // Отработанная смена и отзывы о ней никуда не делись.
+    session.setUser((await auth.refresh(managerId))!);
+    expect((await shifts.applicantsFor(shiftId)).single.isConfirmed, isTrue);
+    // А телефон освободился — по нему можно зарегистрироваться заново.
+    expect(await auth.findByPhone('77000000022'), isNull);
+  });
+
+  test('фильтр ленты не предлагает компании и виды работ из прошлого',
+      () async {
+    await workedShift(); // смена Magnum два дня назад
+    final (_, worker, _) = await upcomingShift(); // и Magnum сегодня
+    session.setUser(worker);
+    expect(await shifts.companies(), ['Magnum']);
+
+    // Сегодняшнюю отменили — в будущем у Magnum ничего нет.
+    final today = (await shifts.myShifts(archived: false)).single;
+    session.setUser((await auth.refresh(today.createdBy!))!);
+    await shifts.cancelShift(today.id);
+    session.setUser(worker);
+    expect(await shifts.companies(), isEmpty,
+        reason: 'прошлые смены в фильтр не попадают');
+    expect(await shifts.categories(), isEmpty);
   });
 }

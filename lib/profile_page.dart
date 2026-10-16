@@ -172,6 +172,40 @@ class ProfilePage extends StatelessWidget {
     session.setUser(null);
   }
 
+  /// Удалить аккаунт — с прямым предупреждением, что это навсегда.
+  ///
+  /// Если что-то держит аккаунт (записи, свои смены, деньги на балансе),
+  /// хранилище откажет с причиной, и человек увидит, что сделать сначала.
+  Future<void> _deleteAccount(BuildContext context) async {
+    final user = session.user;
+    if (user == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(tr.profile.deleteAccountTitle),
+        content: Text(tr.profile.deleteAccountBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(tr.profile.signOutStay),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: Text(tr.profile.deleteAccountConfirm),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final done = await guardedDone(
+      context,
+      () => repos.auth.deleteAccount(user.id),
+    );
+    if (done) session.setUser(null);
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = session.user;
@@ -337,6 +371,14 @@ class ProfilePage extends StatelessWidget {
               foregroundColor: AppColors.muted,
               minimumSize: const Size.fromHeight(48),
             ),
+          ),
+          TextButton(
+            onPressed: () => _deleteAccount(context),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.danger,
+              minimumSize: const Size.fromHeight(44),
+            ),
+            child: Text(tr.profile.deleteAccountButton),
           ),
         ],
       ),

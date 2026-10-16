@@ -471,4 +471,15 @@ class CoreEn extends CoreStrings {
               'app. The service’s operations team will review the request.',
         ),
       ];
+  @override
+  String get accountHasBookings =>
+      'First cancel your bookings or wait until those shifts are over';
+  @override
+  String get accountHasShifts =>
+      'First cancel your upcoming shifts or wait until they are over';
+  @override
+  String accountHasBalance(String amount) =>
+      'You have $amount on your balance — withdraw it to a card first';
+  @override
+  String get deletedUserName => 'Deleted account';
 }

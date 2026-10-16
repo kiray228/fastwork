@@ -8,6 +8,7 @@ import 'package:fastwork_core/data/wallet_repository.dart';
 import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_server/api.dart';
 import 'package:fastwork_server/code_sender.dart';
+import 'package:fastwork_server/cors.dart';
 import 'package:fastwork_server/open_database.dart';
 import 'package:fastwork_server/payment_gateway.dart';
 import 'package:shelf/shelf.dart';
@@ -53,7 +54,9 @@ Future<void> main(List<String> args) async {
 
   final handler = const Pipeline()
       .addMiddleware(logRequests())
-      .addMiddleware(_cors)
+      // Каким сайтам можно звать сервер из браузера — см. lib/cors.dart.
+      .addMiddleware(
+          corsFor(parseOrigins(Platform.environment['ALLOWED_ORIGINS'])))
       .addHandler(Api(
         db,
         sender,
@@ -86,34 +89,6 @@ Future<void> main(List<String> args) async {
     _ => 'письма отправляются через SMTP',
   });
 }
-
-/// Браузер не даёт странице обращаться к другому адресу, пока сервер
-/// явно не разрешит. Это защита: иначе любой сайт мог бы дёргать чужие
-/// сервера от твоего имени.
-///
-/// Наше приложение открыто на одном адресе (localhost:8000), а сервер —
-/// на другом (localhost:8080). Для браузера это «чужой» адрес, поэтому
-/// разрешение нужно.
-///
-/// `*` значит «пускаю всех». Для боевого сервера так нельзя — там
-/// указывают конкретный адрес приложения.
-Middleware get _cors => (innerHandler) {
-      return (request) async {
-        // Перед «настоящим» запросом браузер шлёт пробный OPTIONS:
-        // спрашивает разрешение. Отвечаем на него сразу.
-        if (request.method == 'OPTIONS') {
-          return Response.ok('', headers: _corsHeaders);
-        }
-        final response = await innerHandler(request);
-        return response.change(headers: _corsHeaders);
-      };
-    };
-
-const _corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Key, Accept-Language',
-};
 
 /// Раз в минуту спрашиваем провайдеров о незавершённых оплатах и выводах.
 ///
