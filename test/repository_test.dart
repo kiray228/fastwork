@@ -453,4 +453,24 @@ void main() {
       expect(back.workedCategories, isEmpty);
     });
   });
+  test('вид работ ищется на любом из трёх языков', () {
+    final shift = Shift(
+      id: 1,
+      workDate: DateTime(2026, 9, 17),
+      title: 'Разгрузка фуры',
+      company: 'Magnum',
+      address: 'ул. Абая, 1',
+      category: 'loader',
+      startMinutes: 600,
+      endMinutes: 900,
+      hourlyRate: 110000,
+      workersNeeded: 1,
+      workersHired: 0,
+    );
+    for (final query in ['грузчик', 'loader', 'жүк']) {
+      expect(applyFilter([shift], ShiftFilter(query: query)), hasLength(1),
+          reason: query);
+    }
+    expect(applyFilter([shift], const ShiftFilter(query: 'бариста')), isEmpty);
+  });
 }
