@@ -526,4 +526,7 @@ class CoreEn extends CoreStrings {
         title: 'Message from $name',
         body: '"$title": $text',
       );
+  @override
+  String get reviewsNotAllowed =>
+      'Reviews of a worker are visible to employers whose shift they booked';
 }

@@ -529,4 +529,7 @@ class CoreKk extends CoreStrings {
         title: 'Хабарлама: $name',
         body: '«$title»: $text',
       );
+  @override
+  String get reviewsNotAllowed =>
+      'Орындаушы туралы пікірлерді ол жазылған ауысымның тапсырыс берушісі көреді';
 }

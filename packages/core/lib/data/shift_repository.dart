@@ -2052,6 +2052,19 @@ class DbShiftRepository implements ShiftRepository {
 
   @override
   Future<List<WorkerReview>> reviewsAbout(int workerId) async {
+    // Свои отзывы видит сам человек, чужие — заказчик, на чью смену этот
+    // человек записан или был записан: ему решать, доверять ли. Остальным
+    // незачем: отзывы — не витрина для всех.
+    if (workerId != _workerId) {
+      final known = await db.query(
+        'SELECT 1 FROM application_rows a '
+        'JOIN shift_rows s ON s.id = a.shift_id '
+        'WHERE a.worker_id = ? AND s.created_by = ? LIMIT 1',
+        variables: [Variable.withInt(workerId), Variable.withInt(_workerId)],
+        readsFrom: {db.applicationRows, db.shiftRows},
+      ).get();
+      if (known.isEmpty) throw UserError(_t.reviewsNotAllowed);
+    }
     final rows = await db.query(
       '''
       SELECT w.*, s.title AS shift_title, s.company

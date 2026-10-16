@@ -1882,4 +1882,30 @@ void main() {
     expect(taste.followedCategories, {'loader'});
     expect(taste.workedCategories, isNotEmpty);
   });
+
+  test('отзывы об исполнителе видит его заказчик, но не посторонний',
+      () async {
+    final (shiftId, workerId, managerId) = await workedShift();
+    session.setUser((await auth.refresh(managerId))!);
+    await shifts.rateWorker(
+        shiftId: shiftId, workerId: workerId, rating: 5, comment: 'Молодец');
+
+    // Заказчик, у которого человек отработал, — видит.
+    expect((await shifts.reviewsAbout(workerId)).single.comment, 'Молодец');
+    // Сам человек — тоже.
+    session.setUser((await auth.refresh(workerId))!);
+    expect(await shifts.reviewsAbout(workerId), hasLength(1));
+    // Посторонний заказчик — нет.
+    final other = await auth.register(
+      phone: '77080000001',
+      fullName: 'Другой заказчик',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      role: UserRole.manager,
+      company: 'Zara',
+    );
+    session.setUser(other);
+    await expectLater(
+        shifts.reviewsAbout(workerId), throwsA(isA<UserError>()));
+  });
 }

@@ -4,6 +4,7 @@ import '../data/app_preferences.dart';
 import '../data/repositories.dart';
 import '../data/session.dart';
 import '../chat_page.dart';
+import '../my_reviews_page.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_core/shift.dart';
@@ -190,7 +191,11 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
   Future<void> _openApplicants(Shift shift) async {
     await Navigator.of(context).push(
       appRoute(
-        _ApplicantsPage(shift: shift, repository: repository),
+        _ApplicantsPage(
+          shift: shift,
+          repository: repository,
+          session: widget.session,
+        ),
       ),
     );
     await _load();
@@ -631,8 +636,13 @@ class _ManagerShiftCard extends StatelessWidget {
 class _ApplicantsPage extends StatefulWidget {
   final Shift shift;
   final ShiftRepository repository;
+  final AppSession session;
 
-  const _ApplicantsPage({required this.shift, required this.repository});
+  const _ApplicantsPage({
+    required this.shift,
+    required this.repository,
+    required this.session,
+  });
 
   @override
   State<_ApplicantsPage> createState() => _ApplicantsPageState();
@@ -961,6 +971,15 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
                           : null,
                       onFavorite:
                           item.isConfirmed ? () => _toggleFavorite(item) : null,
+                      onProfile: () => Navigator.of(context).push(
+                        appRoute(
+                          MyReviewsPage(
+                            session: widget.session,
+                            repository: widget.repository,
+                            worker: item.user,
+                          ),
+                        ),
+                      ),
                       onChat: () => Navigator.of(context).push(
                         appRoute(
                           ChatPage(
@@ -1083,12 +1102,16 @@ class _ApplicantTile extends StatelessWidget {
   /// Написать этому человеку.
   final VoidCallback? onChat;
 
+  /// Открыть отзывы о человеке — нажатием на его имя.
+  final VoidCallback? onProfile;
+
   const _ApplicantTile({
     required this.applicant,
     this.onConfirm,
     this.onNoShow,
     this.onFavorite,
     this.onChat,
+    this.onProfile,
   });
 
   @override
@@ -1126,12 +1149,27 @@ class _ApplicantTile extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        user.fullName,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(fontSize: 14),
+                      // Имя — ссылка на отзывы о человеке: прежде чем
+                      // засчитать или пригласить снова, полезно знать,
+                      // что писали другие заказчики.
+                      InkWell(
+                        onTap: onProfile,
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                user.fullName,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(fontSize: 14),
+                              ),
+                            ),
+                            if (onProfile != null)
+                              const Icon(Icons.chevron_right_rounded,
+                                  size: 18, color: AppColors.muted),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Row(

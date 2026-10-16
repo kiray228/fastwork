@@ -263,6 +263,9 @@ abstract class CoreStrings {
   String get chatEmpty;
   String chatTooLong(int max);
   Note chatMessage(String name, String title, String text);
+
+  /// Отзывы о человеке смотрит он сам и заказчик, у которого он записан.
+  String get reviewsNotAllowed;
 }
 
 /// Словарь того языка, на котором сейчас говорит приложение.
