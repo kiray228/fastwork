@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:fastwork_core/category.dart';
 import 'package:fastwork_core/data/shift_filter.dart';
+import 'package:fastwork_core/shift.dart' show formatMoney;
 import '../theme/app_colors.dart';
 import '../theme/glass.dart';
 import 'category_icon.dart';
@@ -58,6 +59,12 @@ class _FilterSheetState extends State<_FilterSheet> {
     final next = {...draft.categories};
     next.contains(id) ? next.remove(id) : next.add(id);
     setState(() => draft = draft.copyWith(categories: next));
+  }
+
+  void _toggleDayPart(DayPart part) {
+    final next = {...draft.dayParts};
+    next.contains(part) ? next.remove(part) : next.add(part);
+    setState(() => draft = draft.copyWith(dayParts: next));
   }
 
   @override
@@ -142,6 +149,39 @@ class _FilterSheetState extends State<_FilterSheet> {
                     ),
                     const SizedBox(height: 22),
                   ],
+                  Text(tr.feed.filterStartTime, style: text.titleMedium),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final part in DayPart.values)
+                        _Choice(
+                          label: part.label,
+                          selected: draft.dayParts.contains(part),
+                          onTap: () => _toggleDayPart(part),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  Text(tr.feed.filterPay, style: text.titleMedium),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final step in [0, ...kMinPaySteps])
+                        _Choice(
+                          label: step == 0
+                              ? tr.feed.filterPayAny
+                              : tr.feed.filterPayFrom(formatMoney(step)),
+                          selected: draft.minPay == step,
+                          onTap: () => setState(
+                              () => draft = draft.copyWith(minPay: step)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
                   Text(tr.feed.sorting, style: text.titleMedium),
                   const SizedBox(height: 10),
                   // RadioGroup хранит выбранное значение за все кнопки сразу —
@@ -215,43 +255,47 @@ class _Choice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.brand
-              : glassFieldFill(context),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
             color: selected
                 ? AppColors.brand
-                : glassFieldEdge(context),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (selected) ...[
-              const Icon(Icons.check_rounded, size: 15, color: Colors.white),
-              const SizedBox(width: 6),
-            ] else if (icon != null) ...[
-              Icon(icon, size: 15, color: AppColors.brand),
-              const SizedBox(width: 6),
-            ],
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-                color: selected
-                    ? Colors.white
-                    : Theme.of(context).colorScheme.onSurface,
-              ),
+                : glassFieldFill(context),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: selected
+                  ? AppColors.brand
+                  : glassFieldEdge(context),
             ),
-          ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (selected) ...[
+                const Icon(Icons.check_rounded, size: 15, color: Colors.white),
+                const SizedBox(width: 6),
+              ] else if (icon != null) ...[
+                Icon(icon, size: 15, color: AppColors.brand),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: selected
+                      ? Colors.white
+                      : Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

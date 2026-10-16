@@ -88,6 +88,9 @@ Future<void> main(List<String> args) async {
   stdout.writeln('fastwork сервер слушает http://localhost:${server.port}');
   stdout.writeln('база: ${describeDatabase()}');
   stdout.writeln('оплата: ${describePayments(payments)}');
+  for (final warning in paymentWarnings(setup)) {
+    stderr.writeln('ВНИМАНИЕ: $warning');
+  }
   stdout.writeln(switch (sender) {
     ConsoleCodeSender() =>
       'письма НЕ отправляются — код входа будет напечатан здесь',

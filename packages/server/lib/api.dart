@@ -408,6 +408,17 @@ class Api {
       return _authorized(request, (user) async => _json(user.toJson()));
     });
 
+    router.post('/api/me/name', (Request request) async {
+      return _authorized(request, (user) async {
+        final body = await _body(request);
+        final updated = await DbAuthRepository(db).changeName(
+          user.id,
+          body['fullName'] as String? ?? '',
+        );
+        return _json(updated!.toJson());
+      });
+    });
+
     router.post('/api/me/accept-terms', (Request request) async {
       return _authorized(request, (user) async {
         final updated = await DbAuthRepository(db).acceptTerms(user.id);

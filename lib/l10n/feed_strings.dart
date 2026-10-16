@@ -90,6 +90,10 @@ abstract class FeedStrings {
   String get onlyOpen;
   String get showResults;
   String get checkInLocked;
+  String get filterStartTime;
+  String get filterPay;
+  String get filterPayAny;
+  String filterPayFrom(String amount);
 }
 
 class _Ru extends FeedStrings {
@@ -214,6 +218,14 @@ class _Ru extends FeedStrings {
   @override
   String get checkInLocked =>
       'Код введён неверно слишком много раз — отметьтесь у старшего смены';
+  @override
+  String get filterStartTime => 'Когда начинать';
+  @override
+  String get filterPay => 'Оплата за смену';
+  @override
+  String get filterPayAny => 'Любая';
+  @override
+  String filterPayFrom(String amount) => 'от $amount';
 }
 
 class _Kk extends FeedStrings {
@@ -342,6 +354,14 @@ class _Kk extends FeedStrings {
   @override
   String get checkInLocked =>
       'Код тым көп рет қате енгізілді — ауысым жетекшісіне белгіленіңіз';
+  @override
+  String get filterStartTime => 'Қашан бастау';
+  @override
+  String get filterPay => 'Ауысым үшін төлем';
+  @override
+  String get filterPayAny => 'Кез келген';
+  @override
+  String filterPayFrom(String amount) => '$amount бастап';
 }
 
 class _En extends FeedStrings {
@@ -466,4 +486,12 @@ class _En extends FeedStrings {
   @override
   String get checkInLocked =>
       'Too many wrong codes — ask the shift lead to mark you';
+  @override
+  String get filterStartTime => 'Start time';
+  @override
+  String get filterPay => 'Pay per shift';
+  @override
+  String get filterPayAny => 'Any';
+  @override
+  String filterPayFrom(String amount) => '$amount+';
 }

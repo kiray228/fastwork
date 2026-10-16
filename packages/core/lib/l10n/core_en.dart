@@ -503,4 +503,13 @@ class CoreEn extends CoreStrings {
       'You have $amount on your balance — withdraw it to a card first';
   @override
   String get deletedUserName => 'Deleted account';
+  @override
+  String dayPart(DayPart part) => switch (part) {
+        DayPart.morning => 'Morning, 5–12',
+        DayPart.day => 'Day, 12–17',
+        DayPart.evening => 'Evening, 17–22',
+        DayPart.night => 'Night, 22–5',
+      };
+  @override
+  String get badFullName => 'Enter your full name — 2 to 80 characters';
 }

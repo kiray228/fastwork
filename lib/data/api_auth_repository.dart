@@ -125,6 +125,13 @@ class ApiAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<AppUser?> changeName(int userId, String fullName) async =>
+      userFromJson(
+        await client.post('/api/me/name', {'fullName': fullName})
+            as Map<String, dynamic>,
+      );
+
+  @override
   Future<void> deleteAccount(int userId) async {
     // Отказ сервера («сначала выведите деньги») летит дальше, на экран, —
     // и токен тогда остаётся: аккаунт-то не удалён.
