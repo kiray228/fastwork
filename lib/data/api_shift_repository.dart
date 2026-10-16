@@ -89,8 +89,13 @@ class ApiShiftRepository implements ShiftRepository {
       _result(await client.post('/api/shifts/$shiftId/apply'));
 
   @override
-  Future<BookingResult> cancelApplication(int shiftId) async =>
-      _result(await client.post('/api/shifts/$shiftId/cancel'));
+  Future<BookingResult> cancelApplication(
+    int shiftId, {
+    CancelReason? reason,
+  }) async =>
+      _result(await client.post('/api/shifts/$shiftId/cancel', {
+        'reason': ?reason?.name,
+      }));
 
   @override
   Future<BookingResult> confirmComing(int shiftId) async =>

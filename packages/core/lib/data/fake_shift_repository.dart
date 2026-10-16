@@ -274,7 +274,10 @@ class FakeShiftRepository implements ShiftRepository {
   int _paidFor(Shift shift) => _paid[shift.id] ?? ShiftCost.of(shift).total;
 
   @override
-  Future<BookingResult> cancelApplication(int shiftId) async {
+  Future<BookingResult> cancelApplication(
+    int shiftId, {
+    CancelReason? reason,
+  }) async {
     final shift = await shiftById(shiftId);
     if (shift == null) return BookingResult.notFound;
     if (!shift.isApplied) return BookingResult.notMine;

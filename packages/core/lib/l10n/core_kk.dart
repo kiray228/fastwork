@@ -307,9 +307,12 @@ class CoreKk extends CoreStrings {
         body: '$name ${dayMonth(day)} «$title» ауысымына жазылды.',
       );
   @override
-  Note withdrew(String name, String title, DateTime day) => (
+  Note withdrew(String name, String title, DateTime day,
+          {String? reason}) =>
+      (
         title: 'Адам жазылудан бас тартты',
         body: '$name ${dayMonth(day)} «$title» ауысымына шықпайды. '
+            '${reason == null ? '' : 'Себебі: $reason. '}'
             'Орын қайта бос.',
       );
   @override
@@ -532,4 +535,12 @@ class CoreKk extends CoreStrings {
   @override
   String get reviewsNotAllowed =>
       'Орындаушы туралы пікірлерді ол жазылған ауысымның тапсырыс берушісі көреді';
+  @override
+  String cancelReason(CancelReason reason) => switch (reason) {
+        CancelReason.sick => 'ауырып қалды',
+        CancelReason.plans => 'жоспары өзгерді',
+        CancelReason.otherJob => 'басқа жұмыс тапты',
+        CancelReason.transport => 'жетіп үлгермейді',
+        CancelReason.other => 'басқа',
+      };
 }

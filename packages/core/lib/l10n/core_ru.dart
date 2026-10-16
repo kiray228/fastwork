@@ -311,9 +311,12 @@ class CoreRu extends CoreStrings {
         body: '$name записался на «$title» ${dayMonth(day)}.',
       );
   @override
-  Note withdrew(String name, String title, DateTime day) => (
+  Note withdrew(String name, String title, DateTime day,
+          {String? reason}) =>
+      (
         title: 'Человек снял запись',
         body: '$name больше не выйдет на «$title» ${dayMonth(day)}. '
+            '${reason == null ? '' : 'Причина: $reason. '}'
             'Место снова свободно.',
       );
   @override
@@ -529,4 +532,12 @@ class CoreRu extends CoreStrings {
   @override
   String get reviewsNotAllowed =>
       'Отзывы об исполнителе видит заказчик, на чью смену он записан';
+  @override
+  String cancelReason(CancelReason reason) => switch (reason) {
+        CancelReason.sick => 'заболел',
+        CancelReason.plans => 'изменились планы',
+        CancelReason.otherJob => 'нашёл другую работу',
+        CancelReason.transport => 'не успевает добраться',
+        CancelReason.other => 'другое',
+      };
 }

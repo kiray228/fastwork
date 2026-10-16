@@ -95,7 +95,7 @@ fastwork/                 приложение на Flutter — всё, что �
 
 ```bash
 flutter pub get
-flutter test          # 315 тестов
+flutter test          # 316 тестов
 flutter run           # без сервера — на локальной базе
 ```
 
@@ -105,7 +105,7 @@ flutter run           # без сервера — на локальной баз
 cd packages/server
 dart pub get
 dart run bin/server.dart      # http://localhost:8080
-dart test                     # 66 тестов: оплата, права доступа, вход
+dart test                     # 67 тестов: оплата, права доступа, вход
 ```
 
 Подробности — в [`docs/`](docs/):
@@ -130,5 +130,5 @@ dart test                     # 66 тестов: оплата, права дос
 18. [Третий заход: «Точно выйду», подписки на виды работ, справка о заработке](docs/18-tretiy-zahod.md)
 19. [Четвёртый заход: вторая проверка на прочность](docs/19-chetvyortyy-zahod.md)
 20. [Пятый заход: время и оплата в фильтре, имя в профиле](docs/20-vremya-oplata-imya.md)
-21. [Переписка по смене](docs/21-perepiska.md)
+21. [Переписка по смене и причина отмены](docs/21-perepiska.md)
 22. [«Вам подходит», «Сначала подходящие» и отзывы о записавшихся](docs/22-podhodyashchie.md)

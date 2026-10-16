@@ -198,7 +198,7 @@ abstract class CoreStrings {
   String get shiftFallback;
 
   Note applied(String name, String title, DateTime day);
-  Note withdrew(String name, String title, DateTime day);
+  Note withdrew(String name, String title, DateTime day, {String? reason});
   Note confirmed(String title, DateTime day, String amount);
   Note noShow(String title, DateTime day);
   Note rated(int rating, String title, DateTime day);
@@ -266,6 +266,9 @@ abstract class CoreStrings {
 
   /// Отзывы о человеке смотрит он сам и заказчик, у которого он записан.
   String get reviewsNotAllowed;
+
+  /// Причина отмены записи — коротко, в строку уведомления.
+  String cancelReason(CancelReason reason);
 }
 
 /// Словарь того языка, на котором сейчас говорит приложение.

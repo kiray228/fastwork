@@ -596,8 +596,12 @@ class Api {
     router.post('/api/shifts/<id|[0-9]+>/cancel',
         (Request request, String id) async {
       return _authorized(request, (user) async {
-        final result =
-            await _shiftsFor(user).cancelApplication(int.parse(id));
+        final body = await _body(request);
+        final result = await _shiftsFor(user).cancelApplication(
+          int.parse(id),
+          // Незнакомая причина (новое приложение, старый сервер) — без неё.
+          reason: CancelReason.fromName(body['reason'] as String?),
+        );
         return _json({'result': result.name});
       });
     });

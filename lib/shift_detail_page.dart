@@ -174,25 +174,63 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     final current = shift;
     if (current == null) return;
 
+    // Причина — по желанию: отменить можно и не выбирая. Но «заболел»
+    // заказчику говорит больше, чем «снял запись».
+    CancelReason? reason;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(tr.shift.cancelDialogTitle),
-        content: Text(
-          tr.shift.cancelDialogBody,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialog) => AlertDialog(
+          title: Text(tr.shift.cancelDialogTitle),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  tr.shift.cancelDialogBody,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(height: 1.4),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  tr.shift.cancelReasonTitle,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final r in CancelReason.values)
+                      ChoiceChip(
+                        label: Text(_capitalized(tr.core.cancelReason(r))),
+                        selected: reason == r,
+                        onSelected: (on) =>
+                            setDialog(() => reason = on ? r : null),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(tr.shift.cancelKeep),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(foregroundColor: AppColors.accent),
+              child: Text(tr.shift.cancelConfirm),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(tr.shift.cancelKeep),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.accent),
-            child: Text(tr.shift.cancelConfirm),
-          ),
-        ],
       ),
     );
 
@@ -201,7 +239,8 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     setState(() => busy = true);
     final result = await guarded(
       context,
-      () => widget.repository.cancelApplication(widget.shiftId),
+      () => widget.repository
+          .cancelApplication(widget.shiftId, reason: reason),
     );
     await _load();
     if (!mounted) return;
@@ -216,6 +255,9 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
       },
     );
   }
+
+  static String _capitalized(String text) =>
+      text.isEmpty ? text : text[0].toUpperCase() + text.substring(1);
 
   /// Встать в лист ожидания или выйти из него.
   Future<void> _toggleWaitlist() async {
