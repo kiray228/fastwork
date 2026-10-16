@@ -2129,6 +2129,23 @@ void main() {
       expect(find.text('Ернар Калдыбек'), findsOneWidget);
     });
 
+    testWidgets('скрытую компанию можно вернуть из профиля', (tester) async {
+      final repo = FakeShiftRepository(clock: morning());
+      await repo.hideCompany('Magnum', hide: true);
+      await openApp(tester, repos: buildRepos(shifts: repo));
+
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Скрытые компании'));
+      await tester.tap(find.text('Скрытые компании'));
+      await tester.pumpAndSettle();
+      expect(find.text('Magnum'), findsOneWidget);
+
+      await tester.tap(find.text('Показывать'));
+      await tester.pumpAndSettle();
+      expect(await repo.hiddenCompanies(), isEmpty);
+    });
+
     testWidgets('аккаунт можно удалить — после предупреждения', (tester) async {
       await openApp(tester);
 

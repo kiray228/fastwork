@@ -10736,6 +10736,309 @@ class ShiftMessageRowsCompanion extends UpdateCompanion<ShiftMessageRow> {
   }
 }
 
+class $HiddenCompanyRowsTable extends HiddenCompanyRows
+    with TableInfo<$HiddenCompanyRowsTable, HiddenCompanyRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HiddenCompanyRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<int> userId = GeneratedColumn<int>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _companyMeta = const VerificationMeta(
+    'company',
+  );
+  @override
+  late final GeneratedColumn<String> company = GeneratedColumn<String>(
+    'company',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, userId, company, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'hidden_company_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<HiddenCompanyRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('company')) {
+      context.handle(
+        _companyMeta,
+        company.isAcceptableOrUnknown(data['company']!, _companyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_companyMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {userId, company},
+  ];
+  @override
+  HiddenCompanyRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HiddenCompanyRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}user_id'],
+      )!,
+      company: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}company'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $HiddenCompanyRowsTable createAlias(String alias) {
+    return $HiddenCompanyRowsTable(attachedDatabase, alias);
+  }
+}
+
+class HiddenCompanyRow extends DataClass
+    implements Insertable<HiddenCompanyRow> {
+  final int id;
+  final int userId;
+  final String company;
+  final DateTime createdAt;
+  const HiddenCompanyRow({
+    required this.id,
+    required this.userId,
+    required this.company,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['user_id'] = Variable<int>(userId);
+    map['company'] = Variable<String>(company);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  HiddenCompanyRowsCompanion toCompanion(bool nullToAbsent) {
+    return HiddenCompanyRowsCompanion(
+      id: Value(id),
+      userId: Value(userId),
+      company: Value(company),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory HiddenCompanyRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HiddenCompanyRow(
+      id: serializer.fromJson<int>(json['id']),
+      userId: serializer.fromJson<int>(json['userId']),
+      company: serializer.fromJson<String>(json['company']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'userId': serializer.toJson<int>(userId),
+      'company': serializer.toJson<String>(company),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  HiddenCompanyRow copyWith({
+    int? id,
+    int? userId,
+    String? company,
+    DateTime? createdAt,
+  }) => HiddenCompanyRow(
+    id: id ?? this.id,
+    userId: userId ?? this.userId,
+    company: company ?? this.company,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  HiddenCompanyRow copyWithCompanion(HiddenCompanyRowsCompanion data) {
+    return HiddenCompanyRow(
+      id: data.id.present ? data.id.value : this.id,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      company: data.company.present ? data.company.value : this.company,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HiddenCompanyRow(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('company: $company, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, userId, company, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HiddenCompanyRow &&
+          other.id == this.id &&
+          other.userId == this.userId &&
+          other.company == this.company &&
+          other.createdAt == this.createdAt);
+}
+
+class HiddenCompanyRowsCompanion extends UpdateCompanion<HiddenCompanyRow> {
+  final Value<int> id;
+  final Value<int> userId;
+  final Value<String> company;
+  final Value<DateTime> createdAt;
+  const HiddenCompanyRowsCompanion({
+    this.id = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.company = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  HiddenCompanyRowsCompanion.insert({
+    this.id = const Value.absent(),
+    required int userId,
+    required String company,
+    required DateTime createdAt,
+  }) : userId = Value(userId),
+       company = Value(company),
+       createdAt = Value(createdAt);
+  static Insertable<HiddenCompanyRow> custom({
+    Expression<int>? id,
+    Expression<int>? userId,
+    Expression<String>? company,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (userId != null) 'user_id': userId,
+      if (company != null) 'company': company,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  HiddenCompanyRowsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? userId,
+    Value<String>? company,
+    Value<DateTime>? createdAt,
+  }) {
+    return HiddenCompanyRowsCompanion(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      company: company ?? this.company,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<int>(userId.value);
+    }
+    if (company.present) {
+      map['company'] = Variable<String>(company.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HiddenCompanyRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('company: $company, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -10775,6 +11078,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ShiftMessageRowsTable shiftMessageRows = $ShiftMessageRowsTable(
     this,
   );
+  late final $HiddenCompanyRowsTable hiddenCompanyRows =
+      $HiddenCompanyRowsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -10802,6 +11107,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     companyFollowRows,
     categoryFollowRows,
     shiftMessageRows,
+    hiddenCompanyRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -18118,6 +18424,203 @@ typedef $$ShiftMessageRowsTableProcessedTableManager =
       ShiftMessageRow,
       PrefetchHooks Function({bool shiftId})
     >;
+typedef $$HiddenCompanyRowsTableCreateCompanionBuilder =
+    HiddenCompanyRowsCompanion Function({
+      Value<int> id,
+      required int userId,
+      required String company,
+      required DateTime createdAt,
+    });
+typedef $$HiddenCompanyRowsTableUpdateCompanionBuilder =
+    HiddenCompanyRowsCompanion Function({
+      Value<int> id,
+      Value<int> userId,
+      Value<String> company,
+      Value<DateTime> createdAt,
+    });
+
+class $$HiddenCompanyRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $HiddenCompanyRowsTable> {
+  $$HiddenCompanyRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get company => $composableBuilder(
+    column: $table.company,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$HiddenCompanyRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $HiddenCompanyRowsTable> {
+  $$HiddenCompanyRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get company => $composableBuilder(
+    column: $table.company,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$HiddenCompanyRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $HiddenCompanyRowsTable> {
+  $$HiddenCompanyRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<String> get company =>
+      $composableBuilder(column: $table.company, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$HiddenCompanyRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $HiddenCompanyRowsTable,
+          HiddenCompanyRow,
+          $$HiddenCompanyRowsTableFilterComposer,
+          $$HiddenCompanyRowsTableOrderingComposer,
+          $$HiddenCompanyRowsTableAnnotationComposer,
+          $$HiddenCompanyRowsTableCreateCompanionBuilder,
+          $$HiddenCompanyRowsTableUpdateCompanionBuilder,
+          (
+            HiddenCompanyRow,
+            BaseReferences<
+              _$AppDatabase,
+              $HiddenCompanyRowsTable,
+              HiddenCompanyRow
+            >,
+          ),
+          HiddenCompanyRow,
+          PrefetchHooks Function()
+        > {
+  $$HiddenCompanyRowsTableTableManager(
+    _$AppDatabase db,
+    $HiddenCompanyRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HiddenCompanyRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$HiddenCompanyRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$HiddenCompanyRowsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> userId = const Value.absent(),
+                Value<String> company = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => HiddenCompanyRowsCompanion(
+                id: id,
+                userId: userId,
+                company: company,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int userId,
+                required String company,
+                required DateTime createdAt,
+              }) => HiddenCompanyRowsCompanion.insert(
+                id: id,
+                userId: userId,
+                company: company,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$HiddenCompanyRowsTable, HiddenCompanyRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $HiddenCompanyRowsTable,
+                    HiddenCompanyRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$HiddenCompanyRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $HiddenCompanyRowsTable,
+      HiddenCompanyRow,
+      $$HiddenCompanyRowsTableFilterComposer,
+      $$HiddenCompanyRowsTableOrderingComposer,
+      $$HiddenCompanyRowsTableAnnotationComposer,
+      $$HiddenCompanyRowsTableCreateCompanionBuilder,
+      $$HiddenCompanyRowsTableUpdateCompanionBuilder,
+      (
+        HiddenCompanyRow,
+        BaseReferences<
+          _$AppDatabase,
+          $HiddenCompanyRowsTable,
+          HiddenCompanyRow
+        >,
+      ),
+      HiddenCompanyRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -18166,4 +18669,6 @@ class $AppDatabaseManager {
       $$CategoryFollowRowsTableTableManager(_db, _db.categoryFollowRows);
   $$ShiftMessageRowsTableTableManager get shiftMessageRows =>
       $$ShiftMessageRowsTableTableManager(_db, _db.shiftMessageRows);
+  $$HiddenCompanyRowsTableTableManager get hiddenCompanyRows =>
+      $$HiddenCompanyRowsTableTableManager(_db, _db.hiddenCompanyRows);
 }

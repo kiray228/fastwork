@@ -130,6 +130,13 @@ abstract class ShiftRepository {
   /// Подписаться на новые смены компании (`follow: true`) или отписаться.
   Future<void> followCompany(String company, {required bool follow});
 
+  /// Компании, скрытые из ленты.
+  Future<Set<String>> hiddenCompanies();
+
+  /// Скрыть компанию из ленты (`hide: true`) или вернуть. Скрыть — заодно
+  /// отписаться: уведомления о сменах тех, кого видеть не хочешь, ни к чему.
+  Future<void> hideCompany(String company, {required bool hide});
+
   /// Виды работ (ключи категорий), о новых сменах которых сообщать.
   Future<Set<String>> followedCategories();
 
@@ -612,7 +619,13 @@ class DbShiftRepository implements ShiftRepository {
       readsFrom: {db.shiftRows, db.applicationRows},
     ).get();
 
-    return applyFilter(bookable(rows.map(_toShift), clock()), filter);
+    // Скрытые компании в ленту не попадают — кроме смен, на которые
+    // человек уже записан: свою смену он должен видеть всегда.
+    final hidden = await hiddenCompanies();
+    final visible = rows
+        .map(_toShift)
+        .where((s) => s.isMine || !hidden.contains(s.company));
+    return applyFilter(bookable(visible, clock()), filter);
   }
 
   @override
@@ -649,7 +662,13 @@ class DbShiftRepository implements ShiftRepository {
       variables: [Variable.withString(session.city), _today],
       readsFrom: {db.shiftRows},
     ).get();
-    return rows.map((r) => r.read<String>('company')).toList();
+    // Скрытую компанию и в фильтре не предлагаем.
+    final hidden = await hiddenCompanies();
+    return [
+      for (final r in rows)
+        if (!hidden.contains(r.read<String>('company')))
+          r.read<String>('company'),
+    ];
   }
 
   @override
@@ -1254,6 +1273,7 @@ class DbShiftRepository implements ShiftRepository {
               ))
           .toList(),
       isFollowed: await _follows(company),
+      isHidden: (await hiddenCompanies()).contains(company),
       upcoming: await _upcomingOf(company),
     );
   }
@@ -1306,6 +1326,36 @@ class DbShiftRepository implements ShiftRepository {
             target: [db.companyFollowRows.userId, db.companyFollowRows.company],
           ),
         );
+  }
+
+  @override
+  Future<Set<String>> hiddenCompanies() async {
+    final rows = await (db.select(db.hiddenCompanyRows)
+          ..where((h) => h.userId.equals(_workerId)))
+        .get();
+    return {for (final r in rows) r.company};
+  }
+
+  @override
+  Future<void> hideCompany(String company, {required bool hide}) async {
+    if (!hide) {
+      await (db.delete(db.hiddenCompanyRows)
+            ..where((h) =>
+                h.userId.equals(_workerId) & h.company.equals(company)))
+          .go();
+      return;
+    }
+    await db.into(db.hiddenCompanyRows).insert(
+          HiddenCompanyRowsCompanion.insert(
+            userId: _workerId,
+            company: company,
+            createdAt: clock(),
+          ),
+          onConflict: DoNothing(
+            target: [db.hiddenCompanyRows.userId, db.hiddenCompanyRows.company],
+          ),
+        );
+    await followCompany(company, follow: false);
   }
 
   @override

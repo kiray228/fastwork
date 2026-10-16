@@ -165,6 +165,9 @@ abstract class ProfileStrings {
   String get deleteAccountBody;
   String get deleteAccountConfirm;
   String upcomingTotal(String shifts, String amount);
+  String get hiddenCompaniesTitle;
+  String get hiddenCompaniesEmpty;
+  String get showAgain;
 }
 
 class _Ru extends ProfileStrings {
@@ -431,6 +434,13 @@ class _Ru extends ProfileStrings {
   @override
   String upcomingTotal(String shifts, String amount) =>
       'Впереди $shifts · $amount';
+  @override
+  String get hiddenCompaniesTitle => 'Скрытые компании';
+  @override
+  String get hiddenCompaniesEmpty =>
+      'Скрыть компанию можно на её странице — её смены пропадут из ленты';
+  @override
+  String get showAgain => 'Показывать';
 }
 
 class _Kk extends ProfileStrings {
@@ -690,6 +700,13 @@ class _Kk extends ProfileStrings {
   @override
   String upcomingTotal(String shifts, String amount) =>
       'Алда $shifts · $amount';
+  @override
+  String get hiddenCompaniesTitle => 'Жасырылған компаниялар';
+  @override
+  String get hiddenCompaniesEmpty =>
+      'Компанияны оның бетінде жасыруға болады — ауысымдары лентадан жоғалады';
+  @override
+  String get showAgain => 'Көрсету';
 }
 
 class _En extends ProfileStrings {
@@ -947,4 +964,11 @@ class _En extends ProfileStrings {
   @override
   String upcomingTotal(String shifts, String amount) =>
       'Ahead: $shifts · $amount';
+  @override
+  String get hiddenCompaniesTitle => 'Hidden companies';
+  @override
+  String get hiddenCompaniesEmpty =>
+      'You can hide a company on its page — its shifts will leave your feed';
+  @override
+  String get showAgain => 'Show';
 }

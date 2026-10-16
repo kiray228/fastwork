@@ -2006,4 +2006,23 @@ void main() {
     await shifts.chatMessages(shiftId);
     expect(await shifts.unreadChat(shiftId), 0);
   });
+  test('скрытая компания пропадает из ленты, своя смена — нет', () async {
+    final (shiftId, worker, _) = await upcomingShift(); // Magnum, записан
+    final (otherId, _, _) = await upcomingShift(); // ещё Magnum, не записан
+    session.setUser(worker);
+    await shifts.followCompany('Magnum', follow: true);
+
+    await shifts.hideCompany('Magnum', hide: true);
+    final today = (await shifts.shiftsOn(DateTime.now())).map((s) => s.id);
+    expect(today, contains(shiftId), reason: 'на свою смену записан');
+    expect(today, isNot(contains(otherId)));
+    expect(await shifts.companies(), isNot(contains('Magnum')));
+    final info = await shifts.companyInfo('Magnum');
+    expect(info.isHidden, isTrue);
+    expect(info.isFollowed, isFalse, reason: 'скрыл — значит и не следит');
+
+    await shifts.hideCompany('Magnum', hide: false);
+    expect((await shifts.shiftsOn(DateTime.now())).map((s) => s.id),
+        contains(otherId));
+  });
 }

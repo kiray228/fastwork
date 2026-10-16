@@ -188,6 +188,16 @@ class ApiShiftRepository implements ShiftRepository {
   }
 
   @override
+  Future<Set<String>> hiddenCompanies() async =>
+      {...(await client.get('/api/me/hidden-companies') as List<dynamic>)
+          .cast<String>()};
+
+  @override
+  Future<void> hideCompany(String company, {required bool hide}) async =>
+      client.post('/api/companies/${Uri.encodeComponent(company)}/hide',
+          {'hide': hide});
+
+  @override
   Future<void> followCompany(String company, {required bool follow}) async =>
       client.post('/api/companies/${Uri.encodeComponent(company)}/follow',
           {'follow': follow});
