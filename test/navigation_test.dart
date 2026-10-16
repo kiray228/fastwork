@@ -1926,6 +1926,22 @@ void main() {
 
       expect(find.text('Начать работать'), findsOneWidget);
     });
+
+    testWidgets('аккаунт можно удалить — после предупреждения', (tester) async {
+      await openApp(tester);
+
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Удалить аккаунт'));
+      await tester.tap(find.text('Удалить аккаунт'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Удалить аккаунт насовсем?'), findsOneWidget);
+      await tester.tap(find.text('Удалить'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Начать работать'), findsOneWidget);
+    });
   });
 }
 

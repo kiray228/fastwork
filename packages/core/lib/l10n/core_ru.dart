@@ -492,4 +492,15 @@ class CoreRu extends CoreStrings {
               'рассмотрит операционная команда сервиса.',
         ),
       ];
+  @override
+  String get accountHasBookings =>
+      'Сначала отмените записи на смены или дождитесь, пока они пройдут';
+  @override
+  String get accountHasShifts =>
+      'Сначала отмените свои предстоящие смены или дождитесь, пока они пройдут';
+  @override
+  String accountHasBalance(String amount) =>
+      'На балансе $amount — сначала выведите деньги на карту';
+  @override
+  String get deletedUserName => 'Аккаунт удалён';
 }

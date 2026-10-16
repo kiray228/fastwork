@@ -247,6 +247,10 @@ abstract class CoreStrings {
 
   String get termsTitle;
   List<TermsSection> get termsSections;
+  String get accountHasBookings;
+  String get accountHasShifts;
+  String accountHasBalance(String amount);
+  String get deletedUserName;
 }
 
 /// Словарь того языка, на котором сейчас говорит приложение.

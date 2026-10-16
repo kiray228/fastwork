@@ -102,7 +102,7 @@ class FakeShiftRepository implements ShiftRepository {
   @override
   Future<List<String>> companies() async {
     final names = _shifts
-        .where((s) => s.city == city && _published(s))
+        .where((s) => s.city == city && _published(s) && _notPast(s))
         .map((s) => s.company)
         .toSet()
         .toList()
@@ -112,8 +112,14 @@ class FakeShiftRepository implements ShiftRepository {
 
   @override
   Future<List<String>> categories() async => sortCategories(_shifts
-      .where((s) => s.city == city && _published(s))
+      .where((s) => s.city == city && _published(s) && _notPast(s))
       .map((s) => s.category));
+
+  /// Сегодня или позже — как в базе: фильтр не предлагает прошлое.
+  bool _notPast(Shift s) {
+    final now = clock();
+    return !s.workDate.isBefore(DateTime(now.year, now.month, now.day));
+  }
 
   @override
   Future<Shift?> shiftById(int id) async {

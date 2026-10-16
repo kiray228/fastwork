@@ -415,6 +415,15 @@ class Api {
       });
     });
 
+    // Удалить свой аккаунт. Только свой: номер берётся из токена, а не
+    // из запроса. Входы гасятся вместе с ним — этот токен тоже.
+    router.post('/api/me/delete', (Request request) async {
+      return _authorized(request, (user) async {
+        await deleteAccountIn(db, user.id, strings: coreTr);
+        return _json({'ok': true});
+      });
+    });
+
     router.get('/api/me/limit', (Request request) async {
       return _authorized(request, (user) async {
         final raw = request.url.queryParameters['month'];
@@ -447,7 +456,8 @@ class Api {
     //     -H 'X-Admin-Key: …' \
     //     -d '{"validFrom": "2027-01-01", "tenge": 4700}'
     router.post('/api/admin/mrp', (Request request) async {
-      if (adminKey.isEmpty || request.headers['x-admin-key'] != adminKey) {
+      if (adminKey.isEmpty ||
+          !sameSecret(request.headers['x-admin-key'] ?? '', adminKey)) {
         return _error(serverTr.noAccess, status: 403);
       }
       final body = await _body(request);
@@ -1159,3 +1169,18 @@ p{color:#475569;line-height:1.45;margin:0}
 <h1>${failed ? serverTr.paymentFailed : serverTr.paymentAccepted}</h1>
 <p>${failed ? serverTr.paymentFailedHint : serverTr.paymentAcceptedHint}</p>
 </div></body></html>""";
+
+/// Совпадает ли присланный секрет с настоящим — за одинаковое время.
+///
+/// Обычное `!=` останавливается на первом несовпавшем символе, и по
+/// времени ответа можно подбирать ключ символ за символом. Здесь
+/// сравниваются все символы всегда.
+bool sameSecret(String given, String actual) {
+  final a = utf8.encode(given);
+  final b = utf8.encode(actual);
+  var diff = a.length ^ b.length;
+  for (var i = 0; i < b.length; i++) {
+    diff |= (i < a.length ? a[i] : 0) ^ b[i];
+  }
+  return diff == 0;
+}

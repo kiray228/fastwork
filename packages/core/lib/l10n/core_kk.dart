@@ -495,4 +495,15 @@ class CoreKk extends CoreStrings {
               'қарайды.',
         ),
       ];
+  @override
+  String get accountHasBookings =>
+      'Алдымен ауысымдарға жазылуды болдырмаңыз немесе олардың өтуін күтіңіз';
+  @override
+  String get accountHasShifts =>
+      'Алдымен алдағы ауысымдарыңызды болдырмаңыз немесе олардың өтуін күтіңіз';
+  @override
+  String accountHasBalance(String amount) =>
+      'Балансыңызда $amount — алдымен ақшаны картаға шығарыңыз';
+  @override
+  String get deletedUserName => 'Аккаунт жойылды';
 }

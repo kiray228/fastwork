@@ -573,8 +573,9 @@ class DbShiftRepository implements ShiftRepository {
   Future<Set<DateTime>> daysWithShifts() async {
     final rows = await db.query(
       'SELECT DISTINCT s.work_date, s.start_minutes FROM shift_rows s '
-      'WHERE s.city = ? AND s.cancelled_at IS NULL AND $_publishedSql',
-      variables: [Variable.withString(session.city)],
+      'WHERE s.city = ? AND s.cancelled_at IS NULL AND $_publishedSql '
+      'AND s.work_date >= ?',
+      variables: [Variable.withString(session.city), _today],
       readsFrom: {db.shiftRows},
     ).get();
 
@@ -597,8 +598,9 @@ class DbShiftRepository implements ShiftRepository {
     final rows = await db.query(
       'SELECT DISTINCT s.company FROM shift_rows s '
       'WHERE s.city = ? AND s.cancelled_at IS NULL AND $_publishedSql '
+      'AND s.work_date >= ? '
       'ORDER BY s.company',
-      variables: [Variable.withString(session.city)],
+      variables: [Variable.withString(session.city), _today],
       readsFrom: {db.shiftRows},
     ).get();
     return rows.map((r) => r.read<String>('company')).toList();
@@ -608,11 +610,23 @@ class DbShiftRepository implements ShiftRepository {
   Future<List<String>> categories() async {
     final rows = await db.query(
       'SELECT DISTINCT s.category FROM shift_rows s '
-      'WHERE s.city = ? AND s.cancelled_at IS NULL AND $_publishedSql',
-      variables: [Variable.withString(session.city)],
+      'WHERE s.city = ? AND s.cancelled_at IS NULL AND $_publishedSql '
+      'AND s.work_date >= ?',
+      variables: [Variable.withString(session.city), _today],
       readsFrom: {db.shiftRows},
     ).get();
     return sortCategories(rows.map((r) => r.read<String>('category')));
+  }
+
+  /// Начало сегодняшнего дня — граница для ленты и её фильтра.
+  ///
+  /// Фильтр предлагал компании и виды работ по всем сменам за всю
+  /// историю: выбрав «Бариста», у которой смены были месяц назад, человек
+  /// получал пустую ленту и думал, что приложение сломалось. Заодно база
+  /// не перебирает прошлые смены, которых с каждым днём становится больше.
+  Variable<DateTime> get _today {
+    final now = clock();
+    return Variable.withDateTime(DateTime(now.year, now.month, now.day));
   }
 
   @override
