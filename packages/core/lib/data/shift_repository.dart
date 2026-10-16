@@ -315,6 +315,11 @@ abstract class ShiftRepository {
   /// Написать в переписку по смене. Собеседнику придёт уведомление.
   Future<void> sendChatMessage(int shiftId, String text, {int? workerId});
 
+  /// Сколько непрочитанных сообщений от заказчика в переписке исполнителя
+  /// по этой смене — для значка на кнопке переписки. Заказчику то же
+  /// число по каждому записавшемуся приходит в списке записавшихся.
+  Future<int> unreadChat(int shiftId);
+
   /// Учебные данные: пара уже отработанных смен для нового пользователя,
   /// чтобы архив, кошелёк и отзывы не пустовали. Вызывать можно сколько
   /// угодно раз — повторно ничего не добавится.
@@ -1797,7 +1802,11 @@ class DbShiftRepository implements ShiftRepository {
              a.coming_confirmed_at AS coming_confirmed_at,
              CASE WHEN EXISTS (SELECT 1 FROM favorite_rows f
                WHERE f.employer_id = $_workerId AND f.worker_id = u.id)
-             THEN 1 ELSE 0 END AS is_favorite
+             THEN 1 ELSE 0 END AS is_favorite,
+             CAST(COALESCE((SELECT COUNT(*) FROM shift_message_rows m
+               WHERE m.shift_id = a.shift_id AND m.worker_id = u.id
+                 AND m.author_id = u.id AND m.read_at IS NULL
+             ), 0) AS INTEGER) AS unread_messages
       FROM application_rows a
       JOIN user_rows u ON u.id = a.worker_id
       WHERE a.shift_id = ?
@@ -1810,6 +1819,7 @@ class DbShiftRepository implements ShiftRepository {
         db.userRows,
         db.workerReviewRows,
         db.favoriteRows,
+        db.shiftMessageRows,
       },
     ).get();
 
@@ -1832,6 +1842,7 @@ class DbShiftRepository implements ShiftRepository {
               checkInVerified: r.read<bool>('check_in_verified'),
               comingConfirmedAt:
                   r.readNullable<DateTime>('coming_confirmed_at'),
+              unreadMessages: r.read<int>('unread_messages'),
             ))
         .toList();
   }
@@ -3108,6 +3119,22 @@ class DbShiftRepository implements ShiftRepository {
       shiftId: shiftId,
       peerId: _workerId,
     );
+  }
+
+  @override
+  Future<int> unreadChat(int shiftId) async {
+    final row = await db.query(
+      'SELECT COUNT(*) AS c FROM shift_message_rows '
+      'WHERE shift_id = ? AND worker_id = ? AND author_id <> ? '
+      'AND read_at IS NULL',
+      variables: [
+        Variable.withInt(shiftId),
+        Variable.withInt(_workerId),
+        Variable.withInt(_workerId),
+      ],
+      readsFrom: {db.shiftMessageRows},
+    ).getSingle();
+    return row.read<int>('c');
   }
 
   /// Начало сообщения для уведомления.

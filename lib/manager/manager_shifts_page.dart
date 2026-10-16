@@ -1011,16 +1011,20 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
                           ),
                         ),
                       ),
-                      onChat: () => Navigator.of(context).push(
-                        appRoute(
-                          ChatPage(
-                            repository: widget.repository,
-                            shiftId: widget.shift.id,
-                            workerId: item.user.id,
-                            subtitle: item.user.fullName,
+                      onChat: () async {
+                        await Navigator.of(context).push(
+                          appRoute(
+                            ChatPage(
+                              repository: widget.repository,
+                              shiftId: widget.shift.id,
+                              workerId: item.user.id,
+                              subtitle: item.user.fullName,
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                        // Прочитал — значок у человека гаснет.
+                        await _load();
+                      },
                     ),
                   );
                 },
@@ -1252,9 +1256,15 @@ class _ApplicantTile extends StatelessWidget {
                     constraints:
                         const BoxConstraints.tightFor(width: 36, height: 40),
                     padding: EdgeInsets.zero,
-                    icon: const Icon(
-                      Icons.chat_bubble_outline_rounded,
-                      color: AppColors.brand,
+                    // Число непрочитанных от этого человека: «опаздываю»
+                    // не должно ждать, пока заказчик заглянет в колокольчик.
+                    icon: Badge(
+                      isLabelVisible: applicant.unreadMessages > 0,
+                      label: Text('${applicant.unreadMessages}'),
+                      child: const Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        color: AppColors.brand,
+                      ),
                     ),
                   ),
                 if (onFavorite != null)

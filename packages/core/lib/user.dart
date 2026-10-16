@@ -181,6 +181,9 @@ class ShiftApplicant {
   /// Когда человек подтвердил накануне, что выйдет. null — не подтверждал.
   final DateTime? comingConfirmedAt;
 
+  /// Сколько сообщений от этого человека заказчик ещё не прочитал.
+  final int unreadMessages;
+
   const ShiftApplicant({
     required this.user,
     required this.status,
@@ -188,6 +191,7 @@ class ShiftApplicant {
     this.isFavorite = false,
     this.checkInVerified = false,
     this.comingConfirmedAt,
+    this.unreadMessages = 0,
   });
 
   bool get isComingConfirmed => comingConfirmedAt != null;
@@ -242,6 +246,7 @@ extension ShiftApplicantJson on ShiftApplicant {
         'isFavorite': isFavorite,
         'checkInVerified': checkInVerified,
         'comingConfirmedAt': comingConfirmedAt?.toIso8601String(),
+        'unreadMessages': unreadMessages,
       };
 }
 
@@ -257,4 +262,5 @@ ShiftApplicant applicantFromJson(Map<String, dynamic> json) => ShiftApplicant(
       comingConfirmedAt: json['comingConfirmedAt'] == null
           ? null
           : DateTime.parse(json['comingConfirmedAt'] as String),
+      unreadMessages: json['unreadMessages'] as int? ?? 0,
     );

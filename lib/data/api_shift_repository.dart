@@ -376,6 +376,13 @@ class ApiShiftRepository implements ShiftRepository {
   }
 
   @override
+  Future<int> unreadChat(int shiftId) async {
+    final data = await client.get('/api/shifts/$shiftId/chat/unread')
+        as Map<String, dynamic>;
+    return data['count'] as int? ?? 0;
+  }
+
+  @override
   Future<void> sendChatMessage(
     int shiftId,
     String text, {
