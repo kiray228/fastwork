@@ -9,6 +9,7 @@ import 'package:fastwork_server/api.dart';
 import 'package:fastwork_server/auth_service.dart';
 import 'package:fastwork_server/code_sender.dart';
 import 'package:fastwork_server/cors.dart';
+import 'package:fastwork_server/rate_limit.dart';
 import 'package:shelf/shelf.dart';
 import 'package:test/test.dart';
 
@@ -180,6 +181,63 @@ void main() {
     expect(CancelReason.fromName('sick'), CancelReason.sick);
     expect(CancelReason.fromName('teleported'), isNull);
     expect(CancelReason.fromName(null), isNull);
+  });
+
+  group('предел на вход с одного адреса', () {
+    test('считает окно и отпускает по его истечении', () {
+      var now = DateTime(2026, 10, 16, 12);
+      final limiter = RateLimiter(
+          limit: 2, window: const Duration(minutes: 10), clock: () => now);
+      expect(limiter.allow('1.2.3.4'), isTrue);
+      expect(limiter.allow('1.2.3.4'), isTrue);
+      expect(limiter.allow('1.2.3.4'), isFalse);
+      expect(limiter.allow('5.6.7.8'), isTrue, reason: 'другой адрес');
+      now = now.add(const Duration(minutes: 11));
+      expect(limiter.allow('1.2.3.4'), isTrue, reason: 'окно прошло');
+    });
+
+    test('адрес — последний в X-Forwarded-For: первые подделываются', () {
+      final request = Request('GET', Uri.parse('http://localhost/'),
+          headers: {'x-forwarded-for': '6.6.6.6, 10.0.0.1'});
+      expect(clientAddress(request), '10.0.0.1');
+    });
+
+    test('после предела вход отвечает 429, другим адресам — как обычно',
+        () async {
+      final limited = Api(db, sender,
+          loginLimit:
+              RateLimiter(limit: 3, window: const Duration(minutes: 10)));
+      Future<int> ask(String ip) async => (await limited.router.call(Request(
+            'POST',
+            Uri.parse('http://localhost/api/auth/verify'),
+            body: jsonEncode({'email': 'a@b.kz', 'code': '000000'}),
+            headers: {'x-forwarded-for': ip},
+          )))
+              .statusCode;
+      for (var i = 0; i < 3; i++) {
+        expect(await ask('1.1.1.1'), isNot(429));
+      }
+      expect(await ask('1.1.1.1'), 429);
+      expect(await ask('2.2.2.2'), isNot(429));
+    });
+  });
+
+  test('«выйти везде» гасит все входы человека', () async {
+    final service = AuthService(db, sender);
+    final first = await service.issue(email: 'w@example.kz');
+    await call('POST', '/api/auth/register', token: first, body: {
+      'phone': '+7 700 999 88 77',
+      'fullName': 'Ернар Калдыбеков',
+      'acceptedTermsVersion': kTermsVersion,
+    });
+    final userId = (await db.select(db.userRows).getSingle()).id;
+    final second = await service.issue(email: 'w@example.kz', userId: userId);
+
+    final (ok, _) = await call('POST', '/api/me/logout-all', token: first);
+    expect(ok, 200);
+    expect((await call('GET', '/api/me', token: first)).$1, 401);
+    expect((await call('GET', '/api/me', token: second)).$1, 401,
+        reason: 'и на другом устройстве');
   });
 
   group('CORS', () {

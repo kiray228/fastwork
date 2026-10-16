@@ -97,7 +97,7 @@ fastwork/                 приложение на Flutter — всё, что �
 
 ```bash
 flutter pub get
-flutter test          # 328 тестов
+flutter test          # 329 тестов
 flutter run           # без сервера — на локальной базе
 ```
 
@@ -107,7 +107,7 @@ flutter run           # без сервера — на локальной баз
 cd packages/server
 dart pub get
 dart run bin/server.dart      # http://localhost:8080
-dart test                     # 67 тестов: оплата, права доступа, вход
+dart test                     # 71 тест оплата, права доступа, вход
 ```
 
 Подробности — в [`docs/`](docs/):

@@ -132,6 +132,19 @@ class ApiAuthRepository implements AuthRepository {
       );
 
   @override
+  Future<void> signOutEverywhere() async {
+    // Сервер гасит все входы; если не дошло — выйти здесь всё равно
+    // нужно, а остальные входы истекут сами. Ошибку показываем: человек
+    // должен знать, что на других устройствах вход ещё жив.
+    try {
+      await client.post('/api/me/logout-all');
+    } finally {
+      client.token = null;
+      await writeToken(null);
+    }
+  }
+
+  @override
   Future<void> deleteAccount(int userId) async {
     // Отказ сервера («сначала выведите деньги») летит дальше, на экран, —
     // и токен тогда остаётся: аккаунт-то не удалён.

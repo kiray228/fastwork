@@ -173,6 +173,33 @@ class ProfilePage extends StatelessWidget {
     session.setUser(null);
   }
 
+  /// Выйти на всех устройствах — после предупреждения.
+  Future<void> _signOutEverywhere(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(tr.profile.signOutEverywhere),
+        content: Text(tr.profile.signOutEverywhereBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(tr.profile.signOutStay),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.accent),
+            child: Text(tr.profile.signOutConfirm),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    // Выход здесь происходит в любом случае; если сервер не ответил,
+    // человек увидит это сообщением.
+    await guardedDone(context, repos.auth.signOutEverywhere);
+    session.setUser(null);
+  }
+
   /// Исправить имя: опечатка при регистрации иначе осталась бы навсегда.
   Future<void> _changeName(BuildContext context) async {
     final current = session.user;
@@ -404,6 +431,14 @@ class ProfilePage extends StatelessWidget {
               foregroundColor: AppColors.muted,
               minimumSize: const Size.fromHeight(48),
             ),
+          ),
+          TextButton(
+            onPressed: () => _signOutEverywhere(context),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.muted,
+              minimumSize: const Size.fromHeight(44),
+            ),
+            child: Text(tr.profile.signOutEverywhere),
           ),
           TextButton(
             onPressed: () => _deleteAccount(context),
