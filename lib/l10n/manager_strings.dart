@@ -216,6 +216,7 @@ abstract class ManagerStrings {
   String get inviteKnownDone;
   String knownWorkerStats(String rating, String shifts);
   String knownWorkerMissed(int count);
+  String get useAddress;
 }
 
 class _Ru extends ManagerStrings {
@@ -619,6 +620,8 @@ class _Ru extends ManagerStrings {
       '★ $rating · $shifts у вас';
   @override
   String knownWorkerMissed(int count) => 'невыходов: $count';
+  @override
+  String get useAddress => 'Подставить этот адрес';
 }
 
 class _Kk extends ManagerStrings {
@@ -1029,6 +1032,8 @@ class _Kk extends ManagerStrings {
       '★ $rating · сізде $shifts';
   @override
   String knownWorkerMissed(int count) => 'келмеді: $count';
+  @override
+  String get useAddress => 'Осы мекенжайды қою';
 }
 
 class _En extends ManagerStrings {
@@ -1433,4 +1438,6 @@ class _En extends ManagerStrings {
       '★ $rating · $shifts with you';
   @override
   String knownWorkerMissed(int count) => 'no-shows: $count';
+  @override
+  String get useAddress => 'Use this address';
 }

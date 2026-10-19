@@ -1797,6 +1797,32 @@ void main() {
       expect((await repo.shiftById(1))!.title, 'Услуги повара');
     });
 
+    testWidgets('адрес прошлой смены подставляется одним касанием',
+        (tester) async {
+      final repo = FakeShiftRepository(
+          clock: morning(), shifts: [tomorrowShift(hired: 0)]);
+      await openApp(
+        tester,
+        role: UserRole.manager,
+        repos: buildRepos(
+          shifts: repo,
+          signedIn: testUser(role: UserRole.manager),
+        ),
+      );
+      await tester.tap(find.text('Создать'));
+      await tester.pumpAndSettle();
+
+      final chip = find.widgetWithText(ActionChip, 'г. Алматы, ул. Абая, 1');
+      expect(chip, findsOneWidget);
+      await tester.tap(chip);
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(TextField, 'г. Алматы, ул. Абая, 1'),
+          findsOneWidget);
+      // Адрес уже в поле — подсказывать его снова незачем.
+      expect(chip, findsNothing);
+    });
+
     testWidgets('нельзя оставить мест меньше, чем набрано', (tester) async {
       // На смену уже набрали двоих.
       final repo = FakeShiftRepository(clock: morning(), shifts: [tomorrowShift(hired: 2)]);
