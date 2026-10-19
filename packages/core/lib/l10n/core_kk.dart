@@ -343,6 +343,15 @@ class CoreKk extends CoreStrings {
             'жұмысыңызды бағалады.',
       );
   @override
+  Note newShiftOnFreeDay(
+          String company, String title, DateTime day, String time,
+          String pay) =>
+      (
+        title: 'Бос күніңізге ауысым',
+        body: '$company: «$title», ${dayMonth(day)}, $time — $pay. '
+            'Сіз бұл күнді бос деп белгіледіңіз.',
+      );
+  @override
   Note shiftCancelled(String title, DateTime day) => (
         title: 'Ауысымның күші жойылды',
         body: 'Тапсырыс беруші ${dayMonth(day)} «$title» ауысымын '

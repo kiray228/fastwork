@@ -2127,6 +2127,65 @@ void main() {
     expect(await shifts.availableWorkers(shiftId), isEmpty);
   });
 
+  test('о новой смене в свободный день сообщают — не больше трёх за день',
+      () async {
+    final manager = await auth.register(
+      phone: '77080000010',
+      fullName: 'Айгуль Досова',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      role: UserRole.manager,
+      company: 'Magnum',
+    );
+    final free = await auth.register(
+      phone: '77080000011',
+      fullName: 'Свободный',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    final astana = await auth.register(
+      phone: '77080000012',
+      fullName: 'Из Астаны',
+      city: 'Астана',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    final day = daysAgo(-2);
+    for (final w in [free, astana]) {
+      session.setUser(w);
+      await shifts.setAvailable(day, available: true);
+    }
+
+    session.setUser(manager);
+    for (var i = 0; i < 4; i++) {
+      await shifts.publishShift(
+        workDate: day,
+        title: 'Смена $i',
+        company: 'Magnum',
+        address: 'г. Алматы, ул. Абая, 1',
+        startMinutes: 360 + i * 60,
+        endMinutes: 420 + i * 60,
+        hourlyRate: 100000,
+        workersNeeded: 2,
+        createdBy: manager.id,
+        city: 'Алматы',
+        card: testCard,
+      );
+    }
+
+    Future<List<String>> titles(AppUser user) async {
+      session.setUser(user);
+      return [
+        for (final n in await shifts.notifications())
+          if (n.kind == NotificationKind.newShift) n.title,
+      ];
+    }
+
+    final mine = await titles(free);
+    expect(mine, hasLength(3));
+    expect(mine.first, 'Смена в ваш свободный день');
+    expect(await titles(astana), isEmpty);
+  });
+
   test('приглашённые считаются, выдуманный пригласивший — не ошибка',
       () async {
     final inviter = await auth.register(

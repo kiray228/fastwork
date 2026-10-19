@@ -344,6 +344,15 @@ class CoreEn extends CoreStrings {
             '${dayMonth(day)}.',
       );
   @override
+  Note newShiftOnFreeDay(
+          String company, String title, DateTime day, String time,
+          String pay) =>
+      (
+        title: 'A shift on your free day',
+        body: '$company: “$title”, ${dayMonth(day)}, $time — $pay. '
+            'You marked this day as free.',
+      );
+  @override
   Note shiftCancelled(String title, DateTime day) => (
         title: 'Shift cancelled',
         body: 'The employer cancelled “$title” on ${dayMonth(day)}. '

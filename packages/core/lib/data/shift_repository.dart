@@ -1499,6 +1499,72 @@ class DbShiftRepository implements ShiftRepository {
           formatMoney(shift.totalPay)),
       shiftId: shift.id,
     );
+
+    await _notifyFreeDay(shift, told);
+  }
+
+  /// Сколько смен в свой свободный день человек узнает уведомлением.
+  /// Больше — уже рассылка: три предложения на день хватает, чтобы
+  /// выбрать, остальное он увидит в ленте.
+  static const _freeDayNoticesPerDay = 3;
+
+  /// Сказать о новой смене тем, кто отметил её день свободным.
+  ///
+  /// Человек сам сказал «в этот день могу» — значит, смена в этот день ему
+  /// интересна, даже если ни на компанию, ни на вид работ он не подписан.
+  /// Только тем, кому смена подойдёт: город, рейтинг, санкнижка, нет
+  /// другой записи в это же время. [told] — кому уже сказали выше.
+  Future<void> _notifyFreeDay(Shift shift, Set<int> told) async {
+    final day = _dayOf(shift.workDate);
+    final rows = await db.query(
+      '''
+      SELECT u.id, u.rating,
+        CAST((SELECT COUNT(*) FROM notification_rows n
+          JOIN shift_rows s ON s.id = n.shift_id
+          WHERE n.user_id = u.id AND n.kind = 'newShift'
+            AND s.work_date = ?) AS INTEGER) AS told_today
+      FROM availability_rows av
+      JOIN user_rows u ON u.id = av.user_id
+      WHERE av.day = ? AND u.city = ? AND u.role = 'worker'
+        AND u.phone NOT LIKE 'deleted-%'
+        AND NOT EXISTS (SELECT 1 FROM favorite_rows fav
+          WHERE fav.employer_id = ? AND fav.worker_id = u.id)
+      ''',
+      variables: [
+        Variable.withDateTime(day),
+        Variable.withDateTime(day),
+        Variable.withString(shift.city),
+        Variable.withInt(shift.createdBy ?? 0),
+      ],
+      readsFrom: {
+        db.availabilityRows,
+        db.userRows,
+        db.favoriteRows,
+        db.notificationRows,
+        db.shiftRows,
+      },
+    ).get();
+
+    final ids = <int>[];
+    for (final r in rows) {
+      final id = r.read<int>('id');
+      if (id == shift.createdBy || told.contains(id)) continue;
+      if (r.read<int>('told_today') >= _freeDayNoticesPerDay) continue;
+      if (!shift.ratingAllows(r.read<double>('rating'))) continue;
+      if (shift.needsMedicalBook && !await _hasMedicalBook(id, shift)) {
+        continue;
+      }
+      if (hasTimeConflict(shift, await _activeShiftsOf(id))) continue;
+      told.add(id);
+      ids.add(id);
+    }
+    await _notifyMany(
+      userIds: ids,
+      kind: NotificationKind.newShift,
+      note: (t) => t.newShiftOnFreeDay(shift.company, shift.title,
+          shift.workDate, _timeOf(shift), formatMoney(shift.totalPay)),
+      shiftId: shift.id,
+    );
   }
 
   @override
