@@ -1266,6 +1266,51 @@ class DbShiftRepository implements ShiftRepository {
     return BookingResult.ok;
   }
 
+  /// Сколько смен компании было за последние [kReliabilityDays] дней,
+  /// сколько отменено с уже записавшимися людьми и сколько из них — позже
+  /// срока отмены.
+  ///
+  /// «С записавшимися» узнаём по уведомлению об отмене: оно уходит только
+  /// тем, кто был записан. Отменить смену, на которую никто не пришёл
+  /// записываться, — никого не подвести, это не считаем.
+  Future<(int, int, int)> _cancelTrack(String company) async {
+    final now = clock();
+    final today = DateTime(now.year, now.month, now.day);
+    final rows = await db.query(
+      '''
+      SELECT s.work_date, s.start_minutes, s.cancel_deadline_hours,
+             s.cancelled_at,
+             CASE WHEN EXISTS (SELECT 1 FROM notification_rows n
+               WHERE n.shift_id = s.id AND n.kind = 'shiftCancelled')
+             THEN 1 ELSE 0 END AS had_people
+      FROM shift_rows s
+      WHERE s.company = ? AND s.work_date >= ? AND s.work_date <= ?
+        AND $_publishedSql
+      ''',
+      variables: [
+        Variable.withString(company),
+        Variable.withDateTime(
+            DateTime(today.year, today.month, today.day - kReliabilityDays)),
+        Variable.withDateTime(today),
+      ],
+      readsFrom: {db.shiftRows, db.notificationRows, db.paymentRows},
+    ).get();
+    var cancelled = 0;
+    var late = 0;
+    for (final r in rows) {
+      final at = r.readNullable<DateTime>('cancelled_at');
+      if (at == null || r.read<int>('had_people') == 0) continue;
+      cancelled++;
+      final day = r.read<DateTime>('work_date');
+      final starts = DateTime(day.year, day.month, day.day)
+          .add(Duration(minutes: r.read<int>('start_minutes')));
+      final deadline =
+          starts.subtract(Duration(hours: r.read<int>('cancel_deadline_hours')));
+      if (!at.isBefore(deadline)) late++;
+    }
+    return (rows.length, cancelled, late);
+  }
+
   @override
   Future<CompanyInfo> companyInfo(String company) async {
     // AVG и COUNT — агрегатные функции: они сворачивают много строк в одно
@@ -1295,7 +1340,11 @@ class DbShiftRepository implements ShiftRepository {
       readsFrom: {db.reviewRows, db.shiftRows, db.userRows},
     ).get();
 
+    final track = await _cancelTrack(company);
     return CompanyInfo(
+      recentShifts: track.$1,
+      cancelledShifts: track.$2,
+      lateCancelledShifts: track.$3,
       name: company,
       rating: agg.readNullable<double>('avg_rating'),
       reviewCount: agg.read<int>('cnt'),

@@ -40,6 +40,14 @@ class CompanyInfo {
   /// записаться, — чтобы со страницы компании сразу было куда идти.
   final List<Shift> upcoming;
 
+  /// Надёжность заказчика за [kReliabilityDays] дней: сколько смен было,
+  /// сколько отменено, когда на них уже записались люди, и сколько из
+  /// них — позже срока отмены. У исполнителя на виду его невыходы; у
+  /// компании должны быть на виду её отмены.
+  final int recentShifts;
+  final int cancelledShifts;
+  final int lateCancelledShifts;
+
   const CompanyInfo({
     required this.name,
     required this.rating,
@@ -48,8 +56,16 @@ class CompanyInfo {
     this.isFollowed = false,
     this.isHidden = false,
     this.upcoming = const [],
+    this.recentShifts = 0,
+    this.cancelledShifts = 0,
+    this.lateCancelledShifts = 0,
   });
 }
+
+/// За сколько дней считать надёжность заказчика: три месяца — достаточно,
+/// чтобы набралась история, и не так много, чтобы старая ошибка висела
+/// на компании вечно.
+const kReliabilityDays = 90;
 
 /// Отзыв заказчика об исполнителе.
 ///
@@ -129,6 +145,9 @@ extension CompanyInfoJson on CompanyInfo {
         'isFollowed': isFollowed,
         'isHidden': isHidden,
         'upcoming': upcoming.map((s) => s.toJson()).toList(),
+        'recentShifts': recentShifts,
+        'cancelledShifts': cancelledShifts,
+        'lateCancelledShifts': lateCancelledShifts,
       };
 }
 
@@ -145,6 +164,9 @@ CompanyInfo companyInfoFromJson(Map<String, dynamic> json) => CompanyInfo(
       upcoming: (json['upcoming'] as List<dynamic>? ?? const [])
           .map((s) => shiftFromJson(s as Map<String, dynamic>))
           .toList(),
+      recentShifts: json['recentShifts'] as int? ?? 0,
+      cancelledShifts: json['cancelledShifts'] as int? ?? 0,
+      lateCancelledShifts: json['lateCancelledShifts'] as int? ?? 0,
     );
 
 extension WorkerReviewJson on WorkerReview {

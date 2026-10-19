@@ -147,6 +147,34 @@ class _CompanyPageState extends State<CompanyPage> {
                           icon: Icons.star_rounded,
                           color: AppColors.accent,
                         ),
+                      // Отмены заказчика — то же, что невыходы у
+                      // исполнителя: по ним решают, стоит ли рассчитывать.
+                      // Пока смен меньше трёх, хвалить не за что.
+                      if (data.cancelledShifts > 0) ...[
+                        const SizedBox(height: 8),
+                        TagChip(
+                          text: tr.feed.companyCancels(
+                              data.cancelledShifts, data.recentShifts),
+                          icon: Icons.event_busy_rounded,
+                          color: AppColors.accent,
+                        ),
+                        if (data.lateCancelledShifts > 0) ...[
+                          const SizedBox(height: 6),
+                          TagChip(
+                            text: tr.feed
+                                .companyLateCancels(data.lateCancelledShifts),
+                            icon: Icons.warning_amber_rounded,
+                            color: AppColors.danger,
+                          ),
+                        ],
+                      ] else if (data.recentShifts >= 3) ...[
+                        const SizedBox(height: 8),
+                        TagChip(
+                          text: tr.feed.companyNoCancels,
+                          icon: Icons.verified_rounded,
+                          color: AppColors.brand,
+                        ),
+                      ],
                       const SizedBox(height: 14),
                       // Подписка — вместо «сохранённого поиска»: чаще
                       // ищут не работу вообще, а работу у знакомого места.

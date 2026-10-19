@@ -13,6 +13,7 @@ import 'package:fastwork_core/l10n/core_strings.dart';
 import 'package:fastwork_core/lang.dart';
 import 'package:fastwork_core/mrp.dart';
 import 'package:fastwork_core/notification.dart';
+import 'package:fastwork_core/review.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_core/user.dart';
@@ -2184,6 +2185,67 @@ void main() {
     expect(mine, hasLength(3));
     expect(mine.first, 'Смена в ваш свободный день');
     expect(await titles(astana), isEmpty);
+  });
+
+  test('у компании видно, сколько смен она отменила с записавшимися',
+      () async {
+    final manager = await auth.register(
+      phone: '77090000020',
+      fullName: 'Айгуль Досова',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      role: UserRole.manager,
+      company: 'Надёжная',
+    );
+    final worker = await auth.register(
+      phone: '77090000021',
+      fullName: 'Азамат Серик',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    session.setUser(manager);
+    Future<int> shiftAt(int start) => shifts.publishShift(
+          workDate: daysAgo(0),
+          title: 'Смена',
+          company: 'Надёжная',
+          address: 'г. Алматы, ул. Абая, 1',
+          startMinutes: start,
+          endMinutes: start + 60,
+          hourlyRate: 100000,
+          workersNeeded: 2,
+          createdBy: manager.id,
+          city: 'Алматы',
+          card: testCard,
+        );
+    final late = await shiftAt(600);
+    final early = await shiftAt(720);
+    final empty = await shiftAt(840);
+    await shiftAt(960);
+
+    // Накануне человек записался на две смены, и одну из них отменили
+    // заранее.
+    final today = clock.now;
+    clock.now = today.subtract(const Duration(days: 1));
+    session.setUser(worker);
+    expect(await shifts.apply(late), BookingResult.ok);
+    expect(await shifts.apply(early), BookingResult.ok);
+    session.setUser(manager);
+    await shifts.cancelShift(early);
+
+    // В день смены — ещё одна отмена, уже в последний момент, и отмена
+    // смены, на которую никто не записался (её не считаем).
+    clock.now = today;
+    await shifts.cancelShift(late);
+    await shifts.cancelShift(empty);
+
+    final info = await shifts.companyInfo('Надёжная');
+    expect(info.recentShifts, 4);
+    expect(info.cancelledShifts, 2);
+    expect(info.lateCancelledShifts, 1);
+
+    final back = companyInfoFromJson(info.toJson());
+    expect((back.recentShifts, back.cancelledShifts, back.lateCancelledShifts),
+        (4, 2, 1));
   });
 
   test('приглашённые считаются, выдуманный пригласивший — не ошибка',

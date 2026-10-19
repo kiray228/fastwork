@@ -6,6 +6,7 @@ import 'category_alerts_page.dart';
 import 'data/app_preferences.dart';
 import 'data/repositories.dart';
 import 'data/session.dart';
+import 'documents_page.dart';
 import 'package:fastwork_core/data/shift_filter.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/shift.dart';
@@ -94,12 +95,54 @@ class _ShiftsPageState extends State<ShiftsPage> {
 
   ShiftRepository get repository => widget.repos.shifts;
 
+  /// Сколько смен в ленте требуют санкнижку — не своих.
+  int get _medicalShifts => switch (state) {
+        Ready(:final value) =>
+          value.where((s) => s.needsMedicalBook && !s.isMine).length,
+        _ => 0,
+      };
+
   /// Номер последнего запроса ленты — см. `_load`.
   int _loadSeq = 0;
 
   /// Показать карточку «Какая работа вам интересна?»: человек ещё не
   /// выбрал ни одного вида работ. Узнаём вместе с тем, что ему подходит.
   bool askInterests = false;
+
+  /// Есть ли у человека санкнижка (проверенная или на проверке, не
+  /// просроченная). null — ещё не узнавали: спрашиваем, только когда в
+  /// ленте появились смены, где она нужна.
+  bool? hasMedicalBook;
+
+  /// Закрыл подсказку про санкнижку — до следующего запуска не показываем.
+  bool medicalNudgeHidden = false;
+
+  Future<void> _checkMedicalBook() async {
+    try {
+      final docs = await widget.repos.documents.documents();
+      final now = DateTime.now();
+      final has = docs.any((d) =>
+          d.type == 'medical_book' &&
+          d.status != 'rejected' &&
+          !d.isExpiredAt(now));
+      if (mounted) setState(() => hasMedicalBook = has);
+    } catch (_) {
+      // Не узнали — подсказку не показываем: лучше промолчать, чем
+      // зря просить книжку у того, у кого она есть.
+    }
+  }
+
+  Future<void> _addMedicalBook() async {
+    await Navigator.of(context).push(
+      appRoute(
+        DocumentsPage(
+          repository: widget.repos.documents,
+          session: widget.session,
+        ),
+      ),
+    );
+    await _checkMedicalBook();
+  }
 
   Future<void> _chooseInterests() async {
     await Navigator.of(context).push(
@@ -242,6 +285,10 @@ class _ShiftsPageState extends State<ShiftsPage> {
           daysWithShifts = days;
           companies = names;
           categories = kinds;
+          if (hasMedicalBook == null &&
+              loaded.any((s) => s.needsMedicalBook)) {
+            _checkMedicalBook();
+          }
         case Failed(:final error):
           state = Failed(error);
         case Loading():
@@ -452,6 +499,21 @@ class _ShiftsPageState extends State<ShiftsPage> {
                       await widget.preferences.hideInterests();
                       if (mounted) setState(() {});
                     },
+                  ),
+                ),
+              ),
+            // Смены с продуктами в ленте есть, а санкнижки нет — сказать,
+            // сколько работы она откроет и где её добавить.
+            if (_medicalShifts > 0 &&
+                hasMedicalBook == false &&
+                !medicalNudgeHidden)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  child: _MedicalBookCard(
+                    shifts: _medicalShifts,
+                    onAdd: _addMedicalBook,
+                    onHide: () => setState(() => medicalNudgeHidden = true),
                   ),
                 ),
               ),
@@ -942,6 +1004,67 @@ class _SearchField extends StatelessWidget {
 /// Карточка «Какая работа вам интересна?» — для того, кто ещё ничего не
 /// выбрал. Ведёт в подписки на виды работ: выбор сразу включает и
 /// подсказки «Вам подходит», и уведомления о новых сменах.
+/// «Санкнижка откроет ещё 5 смен»: в ленте есть смены с продуктами, а
+/// книжки у человека нет.
+class _MedicalBookCard extends StatelessWidget {
+  final int shifts;
+  final VoidCallback onAdd;
+  final VoidCallback onHide;
+
+  const _MedicalBookCard({
+    required this.shifts,
+    required this.onAdd,
+    required this.onHide,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SurfaceCard(
+      padding: const EdgeInsets.fromLTRB(16, 12, 4, 12),
+      child: Row(
+        children: [
+          const Icon(Icons.medical_information_outlined,
+              color: AppColors.brand),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  tr.feed.medicalNudgeTitle(shiftsLabel(shifts)),
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontSize: 14.5),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  tr.feed.medicalNudgeBody,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.muted,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: onAdd,
+                  child: Text(tr.feed.medicalNudgeAction),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: onHide,
+            tooltip: tr.feed.interestsHide,
+            icon: const Icon(Icons.close_rounded, color: AppColors.muted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _InterestsCard extends StatelessWidget {
   final VoidCallback onChoose;
   final VoidCallback onHide;

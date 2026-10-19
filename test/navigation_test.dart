@@ -467,6 +467,33 @@ void main() {
   });
 
   group('запись на смену', () {
+    testWidgets('в ленте подсказка: санкнижка откроет ещё смены',
+        (tester) async {
+      final now = DateTime.now();
+      final repo = FakeShiftRepository(clock: morning(), shifts: [
+        Shift(
+          id: 1,
+          workDate: DateTime(now.year, now.month, now.day + 1),
+          title: 'Услуги повара',
+          company: 'Magnum',
+          address: 'г. Алматы, ул. Абая, 1',
+          startMinutes: 600,
+          endMinutes: 1260,
+          hourlyRate: 100000,
+          workersNeeded: 3,
+          workersHired: 0,
+          category: 'cook',
+          needsMedicalBook: true,
+        ),
+      ]);
+      await openApp(tester, shifts: repo);
+      expect(find.textContaining('Санкнижка откроет ещё'), findsOneWidget);
+
+      await tester.tap(find.text('Добавить санкнижку'));
+      await tester.pumpAndSettle();
+      expect(find.text('Документы'), findsWidgets);
+    });
+
     testWidgets('смена с санкнижкой: видно заранее, без книжки — понятный отказ',
         (tester) async {
       final now = DateTime.now();
