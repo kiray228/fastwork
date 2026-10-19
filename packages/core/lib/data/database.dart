@@ -125,6 +125,9 @@ class UserRows extends Table {
   /// Кто пригласил: по чьей ссылке человек пришёл. null — сам.
   /// Добавлена в 27-й версии схемы.
   IntColumn get referredBy => integer().nullable()();
+
+  /// Дублировать ли важные уведомления письмом. Добавлена в 29-й версии.
+  BoolColumn get emailNotices => boolean().withDefault(const Constant(true))();
 }
 
 /// Значения МРП.
@@ -705,6 +708,11 @@ class NotificationRows extends Table {
   /// Когда прочитано. null — ещё не прочитано.
   DateTimeColumn get readAt => dateTime().nullable()();
 
+  /// Что с письмом об этом уведомлении: null — ещё не решали, `sent` —
+  /// отправлено, `skipped` — решили не слать (предел, отписка, нет
+  /// почты). Добавлена в 29-й версии.
+  TextColumn get emailState => text().nullable()();
+
   /// Только у напоминаний: на какое начало смены оно было.
   ///
   /// Повтор напоминаний раньше отсекали по паре «человек и смена». Смену
@@ -906,7 +914,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 28;
+  int get schemaVersion => 29;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1039,6 +1047,11 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 28) {
             await m.createTable(availabilityRows);
+          }
+          if (from < 29) {
+            await addColumnIfMissing(m, userRows, userRows.emailNotices);
+            await addColumnIfMissing(
+                m, notificationRows, notificationRows.emailState);
           }
         },
         beforeOpen: (details) async {

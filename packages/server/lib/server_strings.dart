@@ -67,6 +67,8 @@ abstract class ServerStrings {
   String get needCompany;
   String get codeTooSoon;
   String get tooManyRequests;
+  String get noticeOpen;
+  String get noticeFooter;
 }
 
 class _Ru extends ServerStrings {
@@ -169,6 +171,11 @@ class _Ru extends ServerStrings {
   @override
   String get tooManyRequests =>
       'Слишком много попыток входа. Подождите несколько минут.';
+  @override
+  String get noticeOpen => 'Открыть в fastwork';
+  @override
+  String get noticeFooter =>
+        'Письма о сменах можно отключить в приложении: Профиль → Письма о сменах.';
 }
 
 class _Kk extends ServerStrings {
@@ -272,6 +279,11 @@ class _Kk extends ServerStrings {
   @override
   String get tooManyRequests =>
       'Кіру әрекеттері тым көп. Бірнеше минут күтіңіз.';
+  @override
+  String get noticeOpen => 'fastwork-та ашу';
+  @override
+  String get noticeFooter =>
+        'Ауысымдар туралы хаттарды қолданбада өшіруге болады: Профиль → Ауысымдар туралы хаттар.';
 }
 
 class _En extends ServerStrings {
@@ -373,6 +385,11 @@ class _En extends ServerStrings {
   @override
   String get tooManyRequests =>
       'Too many sign-in attempts. Please wait a few minutes.';
+  @override
+  String get noticeOpen => 'Open in fastwork';
+  @override
+  String get noticeFooter =>
+        'You can turn these emails off in the app: Profile → Shift emails.';
 }
 
 /// Словарь языка текущего запроса.

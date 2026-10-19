@@ -9,6 +9,7 @@ import 'package:fastwork_core/payment.dart';
 import 'package:fastwork_server/api.dart';
 import 'package:fastwork_server/auth_service.dart';
 import 'package:fastwork_server/code_sender.dart';
+import 'package:fastwork_server/notice_emails.dart';
 import 'package:fastwork_server/cors.dart';
 import 'package:fastwork_server/open_database.dart';
 import 'package:fastwork_server/payment_gateway.dart';
@@ -72,6 +73,7 @@ Future<void> main(List<String> args) async {
       ).router.call);
 
   _settleEveryMinute(db, payments);
+  if (sender is NoticeMailer) _emailEveryMinute(db, sender as NoticeMailer);
   await _remind(db);
   // Раз в час: напоминания о сменах на ближайшие сутки, а в полночь
   // у демо-смен появляется новый седьмой день недели.
@@ -96,6 +98,27 @@ Future<void> main(List<String> args) async {
       'письма НЕ отправляются — код входа будет напечатан здесь',
     BrevoCodeSender() => 'письма отправляются через Brevo (веб-интерфейс)',
     _ => 'письма отправляются через SMTP',
+  });
+}
+
+/// Раз в минуту — письма о свежих важных уведомлениях (`docs/32`).
+///
+/// Отдельно от запросов: письмо уходит секунды, и человек, отменивший
+/// смену, не должен ждать, пока почта доставит письма всем записавшимся.
+void _emailEveryMinute(AppDatabase db, NoticeMailer mailer) {
+  final appUrl = Platform.environment['APP_URL'] ??
+      'https://kiray228.github.io/fastwork/';
+  var busy = false;
+  Timer.periodic(const Duration(minutes: 1), (_) async {
+    if (busy) return;
+    busy = true;
+    try {
+      await sendNoticeEmails(db, mailer, appUrl: appUrl);
+    } catch (error) {
+      stderr.writeln('письма-уведомления: $error');
+    } finally {
+      busy = false;
+    }
   });
 }
 

@@ -134,6 +134,13 @@ class ApiAuthRepository implements AuthRepository {
       );
 
   @override
+  Future<AppUser?> setEmailNotices(int userId, {required bool on}) async =>
+      userFromJson(
+        await client.post('/api/me/email-notices', {'on': on})
+            as Map<String, dynamic>,
+      );
+
+  @override
   Future<void> signOutEverywhere() async {
     // Сервер гасит все входы; если не дошло — выйти здесь всё равно
     // нужно, а остальные входы истекут сами. Ошибку показываем: человек

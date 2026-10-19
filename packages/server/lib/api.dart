@@ -502,6 +502,16 @@ class Api {
       });
     });
 
+    // Письма о сменах: включить или выключить.
+    router.post('/api/me/email-notices', (Request request) async {
+      return _authorized(request, (user) async {
+        final body = await _body(request);
+        final updated = await DbAuthRepository(db)
+            .setEmailNotices(user.id, on: body['on'] as bool? ?? true);
+        return _json(updated!.toJson());
+      });
+    });
+
     // Дни «свободен»: какие отмечены и отметить/снять один.
     router.get('/api/me/availability', (Request request) async {
       return _authorized(request, (user) async {

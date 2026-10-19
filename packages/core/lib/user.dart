@@ -33,6 +33,9 @@ class AppUser {
   /// Какую версию правил сервиса человек принял. 0 — никакую.
   final int termsVersion;
 
+  /// Дублировать ли важные уведомления письмом.
+  final bool emailNotices;
+
   const AppUser({
     required this.id,
     required this.phone,
@@ -47,6 +50,7 @@ class AppUser {
     this.ratingCount = 0,
     this.noShows = 0,
     this.termsVersion = 0,
+    this.emailNotices = true,
   });
 
   /// Принял ли человек **действующие** правила. Согласие со старой версией
@@ -105,6 +109,7 @@ class AppUser {
     bool? isVerified,
     int? ratingCount,
     int? termsVersion,
+    bool? emailNotices,
   }) =>
       AppUser(
         id: id,
@@ -120,6 +125,7 @@ class AppUser {
         ratingCount: ratingCount ?? this.ratingCount,
         noShows: noShows,
         termsVersion: termsVersion ?? this.termsVersion,
+        emailNotices: emailNotices ?? this.emailNotices,
       );
 }
 
@@ -219,6 +225,7 @@ extension AppUserJson on AppUser {
         'ratingCount': ratingCount,
         'noShows': noShows,
         'termsVersion': termsVersion,
+        'emailNotices': emailNotices,
       };
 }
 
@@ -236,6 +243,7 @@ AppUser userFromJson(Map<String, dynamic> json) => AppUser(
       ratingCount: json['ratingCount'] as int? ?? 0,
       noShows: json['noShows'] as int? ?? 0,
       termsVersion: json['termsVersion'] as int? ?? 0,
+      emailNotices: json['emailNotices'] as bool? ?? true,
     );
 
 /// На сколько дней вперёд можно отметить «свободен» — столько же, сколько
