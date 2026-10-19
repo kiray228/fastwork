@@ -434,6 +434,16 @@ class CoreEn extends CoreStrings {
             'You follow this type of work.',
       );
   @override
+  Note underfilled(String title, String when, String time, int missing,
+          int free) =>
+      (
+        title: 'Your shift is short of people',
+        body: '“$title” $when at $time: $missing places free. '
+            '${free > 0 ? 'Marked this day as free: $free — invite them '
+                'from “Booked”.' : 'Invite people you know from “Booked” '
+                'or raise the rate.'}',
+      );
+  @override
   Note reminder(String when, String time, String title, String company,
           String address) =>
       (

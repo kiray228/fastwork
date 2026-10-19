@@ -3833,6 +3833,78 @@ class DbShiftRepository implements ShiftRepository {
     return sent;
   }
 
+  /// Сказать заказчику, что на смену меньше чем через сутки не хватает
+  /// людей, — один раз на смену.
+  ///
+  /// Заказчик узнаёт о недоборе, пока ещё можно что-то сделать: позвать
+  /// знакомых или тех, кто отметил этот день свободным, поднять ставку.
+  /// Раньше он узнавал об этом утром на точке.
+  Future<int> sendUnderfilledAlerts() async {
+    final now = clock();
+    final today = DateTime(now.year, now.month, now.day);
+    final rows = await db.query(
+      '''
+      SELECT s.id, s.title, s.work_date, s.start_minutes, s.city,
+             s.created_by, s.workers_needed, $_hiredSql,
+        CAST((SELECT COUNT(*) FROM availability_rows av
+          JOIN user_rows u ON u.id = av.user_id
+          WHERE av.day = s.work_date AND u.city = s.city
+            AND u.role = 'worker' AND u.phone NOT LIKE 'deleted-%'
+            AND NOT EXISTS (SELECT 1 FROM application_rows ap
+              WHERE ap.shift_id = s.id AND ap.worker_id = u.id
+                AND ap.status = 'active')) AS INTEGER) AS free_people
+      FROM shift_rows s
+      WHERE s.cancelled_at IS NULL AND s.created_by IS NOT NULL
+        AND s.work_date >= ? AND s.work_date < ? AND $_publishedSql
+        AND NOT EXISTS (SELECT 1 FROM notification_rows n
+          WHERE n.shift_id = s.id AND n.kind = 'underfilled')
+      ''',
+      variables: [
+        Variable.withDateTime(today),
+        Variable.withDateTime(today.add(const Duration(days: 2))),
+      ],
+      readsFrom: {
+        db.shiftRows,
+        db.applicationRows,
+        db.availabilityRows,
+        db.userRows,
+        db.notificationRows,
+        db.paymentRows,
+      },
+    ).get();
+
+    var sent = 0;
+    for (final r in rows) {
+      final day = r.read<DateTime>('work_date');
+      final starts = DateTime(day.year, day.month, day.day)
+          .add(Duration(minutes: r.read<int>('start_minutes')));
+      if (!now.isBefore(starts)) continue;
+      if (starts.difference(now) > const Duration(hours: 24)) continue;
+      final missing = r.read<int>('workers_needed') - r.read<int>('hired');
+      if (missing <= 0) continue;
+      final free = r.read<int>('free_people');
+      final title = r.read<String>('title');
+      final start = r.read<int>('start_minutes');
+      await _notify(
+        userId: r.read<int>('created_by'),
+        kind: NotificationKind.underfilled,
+        note: (t) => t.underfilled(
+          title,
+          relativeDay(day, now, strings: t),
+          formatTime(start),
+          missing,
+          free,
+        ),
+        shiftId: r.read<int>('id'),
+        // На телефоне без сервера рассылает само приложение — от имени
+        // того, кто вошёл, а это и есть заказчик.
+        toSelf: true,
+      );
+      sent++;
+    }
+    return sent;
+  }
+
   /// Напоминали ли уже человеку об этом начале смены.
   ///
   /// У напоминаний до схемы 23 начала не записано. Такое считается, если

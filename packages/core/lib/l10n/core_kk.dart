@@ -434,6 +434,17 @@ class CoreKk extends CoreStrings {
             'бұл жұмыс түрінің жаңа ауысымдарын бақылайсыз.',
       );
   @override
+  Note underfilled(String title, String when, String time, int missing,
+          int free) =>
+      (
+        title: 'Ауысымға адам жетпейді',
+        body: '«$title» $when, $time: бос орын — $missing. '
+            '${free > 0 ? 'Бұл күнді бос деп белгілегендер: $free — оларды '
+                '«Жазылғандар» бөлімінен шақырыңыз.' : 'Таныстарды '
+                '«Жазылғандар» бөлімінен шақырыңыз немесе ставканы '
+                'көтеріңіз.'}',
+      );
+  @override
   Note reminder(String when, String time, String title, String company,
           String address) =>
       (

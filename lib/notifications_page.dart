@@ -5,6 +5,7 @@ import 'package:fastwork_core/notification.dart';
 import 'chat_page.dart';
 import 'data/session.dart';
 import 'l10n/strings.dart';
+import 'manager/manager_shifts_page.dart';
 import 'shift_detail_page.dart';
 import 'theme/app_colors.dart';
 import 'widgets/async_state.dart';
@@ -80,10 +81,41 @@ class _NotificationsPageState extends State<NotificationsPage> {
       );
       return;
     }
+    // Заказчику «записался», «снял запись», «не хватает людей» — про
+    // людей на его смене: сразу список записавшихся, где можно отметить,
+    // написать и позвать. Экран смены глазами исполнителя тут ни к чему.
+    if ((widget.session.user?.isManager ?? false) &&
+        _aboutPeople.contains(notification.kind)) {
+      _openApplicants(shiftId);
+      return;
+    }
     Navigator.of(context).push(
       appRoute(
         ShiftDetailPage(
           shiftId: shiftId,
+          repository: widget.repository,
+          session: widget.session,
+        ),
+      ),
+    );
+  }
+
+  static const _aboutPeople = {
+    NotificationKind.applied,
+    NotificationKind.withdrew,
+    NotificationKind.underfilled,
+  };
+
+  Future<void> _openApplicants(int shiftId) async {
+    final shift = await guarded(
+      context,
+      () => widget.repository.shiftById(shiftId),
+    );
+    if (shift == null || !mounted) return;
+    await Navigator.of(context).push(
+      appRoute(
+        ApplicantsPage(
+          shift: shift,
           repository: widget.repository,
           session: widget.session,
         ),
@@ -151,6 +183,8 @@ class _NotificationTile extends StatelessWidget {
         NotificationKind.slotFreed => (Icons.event_seat_rounded, AppColors.brand),
         NotificationKind.reminder => (Icons.alarm_rounded, AppColors.brand),
         NotificationKind.message => (Icons.chat_rounded, AppColors.brand),
+        NotificationKind.underfilled =>
+          (Icons.group_add_rounded, AppColors.warning),
         NotificationKind.newShift =>
           (Icons.notifications_active_rounded, AppColors.brand),
       };
