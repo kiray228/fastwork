@@ -98,12 +98,16 @@ class TagChip extends StatelessWidget {
             Icon(icon, size: 13, color: c),
             const SizedBox(width: 4),
           ],
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: c,
+          // Длинный ярлык переносится, а не вылезает за край узкого
+          // экрана.
+          Flexible(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: c,
+              ),
             ),
           ),
         ],

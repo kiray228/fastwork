@@ -110,6 +110,12 @@ abstract class FeedStrings {
   String get guestEmptyTitle;
   String get guestEmptySubtitle;
   String get medicalBookTag;
+  String get companyNoCancels;
+  String companyCancels(int cancelled, int total);
+  String companyLateCancels(int count);
+  String medicalNudgeTitle(String shifts);
+  String get medicalNudgeBody;
+  String get medicalNudgeAction;
 }
 
 class _Ru extends FeedStrings {
@@ -279,6 +285,21 @@ class _Ru extends FeedStrings {
       'Посмотрите другой город или загляните позже.';
   @override
   String get medicalBookTag => 'Санкнижка';
+  @override
+  String get companyNoCancels => 'За 3 месяца не отменял смен с записавшимися';
+  @override
+  String companyCancels(int cancelled, int total) =>
+      'Отменил смен с записавшимися: $cancelled из $total за 3 месяца';
+  @override
+  String companyLateCancels(int count) => 'Из них в последний момент: $count';
+  @override
+  String medicalNudgeTitle(String shifts) => 'Санкнижка откроет ещё $shifts';
+  @override
+  String get medicalNudgeBody =>
+      'Для работы с продуктами. Добавьте её в «Документы» — после проверки '
+      'сможете записываться на такие смены.';
+  @override
+  String get medicalNudgeAction => 'Добавить санкнижку';
 }
 
 class _Kk extends FeedStrings {
@@ -452,6 +473,21 @@ class _Kk extends FeedStrings {
       'Басқа қаланы қараңыз немесе кейінірек кіріңіз.';
   @override
   String get medicalBookTag => 'Санкітапша';
+  @override
+  String get companyNoCancels => '3 айда жазылғандары бар ауысымды болдырмаған';
+  @override
+  String companyCancels(int cancelled, int total) =>
+      '3 айда жазылғандары бар ауысымдарды болдырмады: $total ішінен $cancelled';
+  @override
+  String companyLateCancels(int count) => 'Оның ішінде соңғы сәтте: $count';
+  @override
+  String medicalNudgeTitle(String shifts) => 'Санкітапша тағы $shifts ашады';
+  @override
+  String get medicalNudgeBody =>
+      'Азық-түлікпен жұмыс үшін. Оны «Құжаттарға» қосыңыз — тексерілгеннен '
+      'кейін мұндай ауысымдарға жазыла аласыз.';
+  @override
+  String get medicalNudgeAction => 'Санкітапшаны қосу';
 }
 
 class _En extends FeedStrings {
@@ -621,4 +657,19 @@ class _En extends FeedStrings {
       'Try another city or check back later.';
   @override
   String get medicalBookTag => 'Medical book';
+  @override
+  String get companyNoCancels => 'No shifts cancelled on booked people in 3 months';
+  @override
+  String companyCancels(int cancelled, int total) =>
+      'Cancelled shifts with booked people: $cancelled of $total in 3 months';
+  @override
+  String companyLateCancels(int count) => 'At the last moment: $count';
+  @override
+  String medicalNudgeTitle(String shifts) => 'A medical book unlocks $shifts more';
+  @override
+  String get medicalNudgeBody =>
+      'Needed to work with food. Add it in Documents — once verified, you '
+      'can book these shifts.';
+  @override
+  String get medicalNudgeAction => 'Add a medical book';
 }
