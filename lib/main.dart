@@ -23,6 +23,8 @@ import 'package:fastwork_core/data/wallet_repository.dart';
 import 'package:fastwork_core/payment.dart';
 import 'home_shell.dart';
 import 'links.dart';
+import 'data/operator_api.dart';
+import 'operator_page.dart';
 import 'theme/app_theme.dart';
 import 'theme/glass.dart';
 
@@ -63,6 +65,11 @@ Future<void> main() async {
     preferences: preferences,
     // Открыли по ссылке на смену — покажем её, как только человек войдёт.
     sharedShiftId: sharedShiftId(Uri.base),
+    // Адрес с `?operator` — экран проверки документов. Только с сервером:
+    // без него проверять некому и нечего.
+    operatorDocuments: apiUrl.isNotEmpty && isOperatorLink(Uri.base)
+        ? ApiOperatorDocuments(ApiClient(baseUrl: apiUrl))
+        : null,
   ));
 }
 
@@ -153,12 +160,16 @@ class FastworkApp extends StatefulWidget {
   /// Смена из ссылки, по которой открыли приложение. null — без ссылки.
   final int? sharedShiftId;
 
+  /// Открыли как экран оператора. null — обычное приложение.
+  final OperatorDocuments? operatorDocuments;
+
   const FastworkApp({
     super.key,
     required this.session,
     required this.repos,
     this.preferences,
     this.sharedShiftId,
+    this.operatorDocuments,
   });
 
   @override
@@ -238,14 +249,16 @@ class _FastworkAppState extends State<FastworkApp> {
         ),
       ),
       home: LiquidBackground(
-        child: _AuthGate(
-          session: widget.session,
-          repos: widget.repos,
-          preferences: preferences,
-          pendingShift: () => pendingShift,
-          onShiftOpened: () => pendingShift = null,
-          onWantShift: (id) => pendingShift = id,
-        ),
+        child: widget.operatorDocuments != null
+            ? OperatorPage(documents: widget.operatorDocuments!)
+            : _AuthGate(
+                session: widget.session,
+                repos: widget.repos,
+                preferences: preferences,
+                pendingShift: () => pendingShift,
+                onShiftOpened: () => pendingShift = null,
+                onWantShift: (id) => pendingShift = id,
+              ),
       ),
     );
   }

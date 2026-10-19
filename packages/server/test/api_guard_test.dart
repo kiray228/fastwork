@@ -258,6 +258,9 @@ void main() {
       final own = await ask(allowed, 'https://kiray228.github.io');
       expect(own.headers['access-control-allow-origin'],
           'https://kiray228.github.io');
+      // Своему сайту можно слать ключ оператора — для его экрана.
+      expect(own.headers['access-control-allow-headers'],
+          contains('X-Admin-Key'));
       final evil = await ask(allowed, 'https://evil.example');
       expect(evil.headers['access-control-allow-origin'], isNull);
       expect(evil.headers['access-control-allow-headers'],

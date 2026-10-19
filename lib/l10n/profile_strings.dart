@@ -176,6 +176,14 @@ abstract class ProfileStrings {
   String get inviteCopy;
   String get inviteCopied;
   String inviteText(String link);
+  String get operatorTitle;
+  String get operatorKey;
+  String get operatorKeyHint;
+  String get operatorOpen;
+  String get operatorEmpty;
+  String get operatorApprove;
+  String get operatorReject;
+  String operatorValidUntil(String date);
 }
 
 class _Ru extends ProfileStrings {
@@ -473,6 +481,24 @@ class _Ru extends ProfileStrings {
   String inviteText(String link) =>
       'Нахожу подработку в fastwork: смены на день, оплата гарантирована — '
       'заказчик платит заранее. Посмотри смены в своём городе: $link';
+  @override
+  String get operatorTitle => 'Проверка документов';
+  @override
+  String get operatorKey => 'Служебный ключ';
+  @override
+  String get operatorKeyHint =>
+      'Ключ сервера (ADMIN_KEY в настройках хостинга). Он хранится только '
+      'на этом экране и пропадёт, когда вы его закроете.';
+  @override
+  String get operatorOpen => 'Открыть очередь';
+  @override
+  String get operatorEmpty => 'Очередь пуста — все документы проверены';
+  @override
+  String get operatorApprove => 'Одобрить';
+  @override
+  String get operatorReject => 'Отклонить';
+  @override
+  String operatorValidUntil(String date) => 'действует до $date';
 }
 
 class _Kk extends ProfileStrings {
@@ -764,6 +790,24 @@ class _Kk extends ProfileStrings {
       'fastwork арқылы қосымша жұмыс табамын: бір күндік ауысымдар, төлем '
       'кепілдендірілген — тапсырыс беруші алдын ала төлейді. Өз қалаңдағы '
       'ауысымдарды қара: $link';
+  @override
+  String get operatorTitle => 'Құжаттарды тексеру';
+  @override
+  String get operatorKey => 'Қызметтік кілт';
+  @override
+  String get operatorKeyHint =>
+      'Сервер кілті (хостинг баптауларындағы ADMIN_KEY). Ол тек осы экранда '
+      'сақталады және экранды жапқанда жойылады.';
+  @override
+  String get operatorOpen => 'Кезекті ашу';
+  @override
+  String get operatorEmpty => 'Кезек бос — барлық құжат тексерілді';
+  @override
+  String get operatorApprove => 'Мақұлдау';
+  @override
+  String get operatorReject => 'Қабылдамау';
+  @override
+  String operatorValidUntil(String date) => '$date дейін жарамды';
 }
 
 class _En extends ProfileStrings {
@@ -1052,4 +1096,22 @@ class _En extends ProfileStrings {
   String inviteText(String link) =>
       'I find side gigs on fastwork: one-day shifts, guaranteed pay — the '
       'employer pays upfront. See shifts in your city: $link';
+  @override
+  String get operatorTitle => 'Document review';
+  @override
+  String get operatorKey => 'Admin key';
+  @override
+  String get operatorKeyHint =>
+      'The server key (ADMIN_KEY in the hosting settings). It stays only on '
+      'this screen and is gone when you close it.';
+  @override
+  String get operatorOpen => 'Open the queue';
+  @override
+  String get operatorEmpty => 'The queue is empty — every document is reviewed';
+  @override
+  String get operatorApprove => 'Approve';
+  @override
+  String get operatorReject => 'Reject';
+  @override
+  String operatorValidUntil(String date) => 'valid until $date';
 }
