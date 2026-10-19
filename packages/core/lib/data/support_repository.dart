@@ -67,16 +67,26 @@ class DbDocumentRepository implements DocumentRepository {
     required String number,
     DateTime? expiresAt,
   }) async {
-    // insertOnConflictUpdate: если документ такого типа уже есть, он
-    // заменяется. За уникальность пары (пользователь, тип) следит база.
-    await db.into(db.documentRows).insertOnConflictUpdate(
-          DocumentRowsCompanion.insert(
-            userId: session.workerId,
-            type: type,
-            number: number,
-            expiresAt: Value(expiresAt),
-            status: DocumentStatus.pending,
-            createdAt: DateTime.now(),
+    // Документ такого типа уже есть — заменяем его и снова отправляем
+    // на проверку. За уникальность пары (пользователь, тип) следит база.
+    //
+    // Конфликт — именно по этой паре. Раньше здесь стоял
+    // `insertOnConflictUpdate`, а он ловит конфликт только по номеру
+    // строки: вторая книжка взамен просроченной падала с ошибкой
+    // уникальности, и обновить документ было нельзя.
+    final row = DocumentRowsCompanion.insert(
+      userId: session.workerId,
+      type: type,
+      number: number,
+      expiresAt: Value(expiresAt),
+      status: DocumentStatus.pending,
+      createdAt: DateTime.now(),
+    );
+    await db.into(db.documentRows).insert(
+          row,
+          onConflict: DoUpdate(
+            (_) => row,
+            target: [db.documentRows.userId, db.documentRows.type],
           ),
         );
   }

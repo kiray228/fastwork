@@ -109,6 +109,7 @@ abstract class FeedStrings {
   String get guestCity;
   String get guestEmptyTitle;
   String get guestEmptySubtitle;
+  String get medicalBookTag;
 }
 
 class _Ru extends FeedStrings {
@@ -276,6 +277,8 @@ class _Ru extends FeedStrings {
   String get guestEmptySubtitle =>
       'В этом городе на ближайшие две недели смен нет. '
       'Посмотрите другой город или загляните позже.';
+  @override
+  String get medicalBookTag => 'Санкнижка';
 }
 
 class _Kk extends FeedStrings {
@@ -447,6 +450,8 @@ class _Kk extends FeedStrings {
   String get guestEmptySubtitle =>
       'Бұл қалада алдағы екі аптада ауысым жоқ. '
       'Басқа қаланы қараңыз немесе кейінірек кіріңіз.';
+  @override
+  String get medicalBookTag => 'Санкітапша';
 }
 
 class _En extends FeedStrings {
@@ -614,4 +619,6 @@ class _En extends FeedStrings {
   String get guestEmptySubtitle =>
       'No shifts in this city for the next two weeks. '
       'Try another city or check back later.';
+  @override
+  String get medicalBookTag => 'Medical book';
 }

@@ -250,6 +250,7 @@ class ApiShiftRepository implements ShiftRepository {
     List<String> duties = const [],
     String? dressCode,
     double? minRating,
+    bool needsMedicalBook = false,
   }) async {
     final data = await client.post('/api/shifts', {
       // Ни номера карты, ни денег: только способ. Платит человек у
@@ -269,6 +270,7 @@ class ApiShiftRepository implements ShiftRepository {
       'duties': duties,
       'dressCode': dressCode,
       'minRating': minRating,
+      'needsMedicalBook': needsMedicalBook,
     });
     return PaymentCheckout.fromJson(data as Map<String, dynamic>);
   }

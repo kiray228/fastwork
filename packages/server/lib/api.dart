@@ -916,6 +916,7 @@ class Api {
             duties: (body['duties'] as List<dynamic>? ?? []).cast<String>(),
             dressCode: body['dressCode'] as String?,
             minRating: minRating,
+            needsMedicalBook: body['needsMedicalBook'] as bool? ?? false,
           );
         } on PaymentDeclined catch (e) {
           return _declined(e);

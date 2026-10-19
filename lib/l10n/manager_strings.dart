@@ -217,6 +217,8 @@ abstract class ManagerStrings {
   String knownWorkerStats(String rating, String shifts);
   String knownWorkerMissed(int count);
   String get useAddress;
+  String get medicalBookTitle;
+  String get medicalBookHelp;
 }
 
 class _Ru extends ManagerStrings {
@@ -622,6 +624,12 @@ class _Ru extends ManagerStrings {
   String knownWorkerMissed(int count) => 'невыходов: $count';
   @override
   String get useAddress => 'Подставить этот адрес';
+  @override
+  String get medicalBookTitle => 'Нужна санитарная книжка';
+  @override
+  String get medicalBookHelp =>
+      'Для работы с продуктами. Записаться смогут только те, у кого книжка '
+      'проверена и действует в день смены.';
 }
 
 class _Kk extends ManagerStrings {
@@ -1034,6 +1042,12 @@ class _Kk extends ManagerStrings {
   String knownWorkerMissed(int count) => 'келмеді: $count';
   @override
   String get useAddress => 'Осы мекенжайды қою';
+  @override
+  String get medicalBookTitle => 'Санитарлық кітапша қажет';
+  @override
+  String get medicalBookHelp =>
+      'Азық-түлікпен жұмыс үшін. Кітапшасы тексерілген және ауысым күні '
+      'жарамды адамдар ғана жазыла алады.';
 }
 
 class _En extends ManagerStrings {
@@ -1440,4 +1454,10 @@ class _En extends ManagerStrings {
   String knownWorkerMissed(int count) => 'no-shows: $count';
   @override
   String get useAddress => 'Use this address';
+  @override
+  String get medicalBookTitle => 'Medical book required';
+  @override
+  String get medicalBookHelp =>
+      'For work with food. Only people whose medical book is verified and '
+      'valid on the day of the shift can book.';
 }

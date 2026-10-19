@@ -427,6 +427,26 @@ void main() {
     expect(list, isEmpty);
   });
 
+  test('санкнижка из запроса доходит до смены и проверяется при записи',
+      () async {
+    final (_, checkout) = await call('POST', '/api/shifts',
+        token: managerToken,
+        body: {
+          ...shiftBody(),
+          'method': 'kaspi',
+          'phone': '87011234567',
+          'needsMedicalBook': true,
+        });
+    await call('POST', '/api/payments/${checkout['id']}/sandbox',
+        token: managerToken, body: {});
+    final shiftId = checkout['shiftId'] as int;
+    final (_, shift) = await call('GET', '/api/public/shifts/$shiftId');
+    expect(shift['needsMedicalBook'], isTrue);
+    final (_, applied) =
+        await call('POST', '/api/shifts/$shiftId/apply', token: workerToken);
+    expect(applied['result'], 'needsMedicalBook');
+  });
+
   group('гость без входа', () {
     test('видит оплаченные смены своего города, но не чужие отклики',
         () async {

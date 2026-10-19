@@ -29,6 +29,9 @@ class Shift {
   final double? minRating; // порог допуска; null — ограничений нет
   final int? createdBy; // какой заказчик создал смену
 
+  /// Нужна санитарная книжка — работа с продуктами.
+  final bool needsMedicalBook;
+
   /// Статус моего отклика на эту смену: `active`, `cancelled`,
   /// `completed` или null, если я на неё не откликался.
   final String? myStatus;
@@ -71,6 +74,7 @@ class Shift {
     this.cancelDeadlineHours = 10,
     this.minRating,
     this.createdBy,
+    this.needsMedicalBook = false,
     this.myStatus,
     this.myCheckedInAt,
     this.myComingConfirmedAt,
@@ -123,6 +127,7 @@ class Shift {
         cancelDeadlineHours: cancelDeadlineHours,
         minRating: minRating,
         createdBy: createdBy,
+        needsMedicalBook: needsMedicalBook,
         myStatus: clearMyStatus ? null : (myStatus ?? this.myStatus),
         myCheckedInAt: myCheckedInAt ?? this.myCheckedInAt,
         myComingConfirmedAt: myComingConfirmedAt ?? this.myComingConfirmedAt,
@@ -698,6 +703,7 @@ extension ShiftJson on Shift {
         'cancelDeadlineHours': cancelDeadlineHours,
         'minRating': minRating,
         'createdBy': createdBy,
+        'needsMedicalBook': needsMedicalBook,
         'myStatus': myStatus,
         'myCheckedInAt': myCheckedInAt?.toIso8601String(),
         'myComingConfirmedAt': myComingConfirmedAt?.toIso8601String(),
@@ -731,6 +737,8 @@ Shift shiftFromJson(Map<String, dynamic> json) => Shift(
       cancelDeadlineHours: json['cancelDeadlineHours'] as int,
       minRating: (json['minRating'] as num?)?.toDouble(),
       createdBy: json['createdBy'] as int?,
+      // Старый сервер поля не знает — значит, книжка не нужна.
+      needsMedicalBook: json['needsMedicalBook'] as bool? ?? false,
       myStatus: json['myStatus'] as String?,
       myCheckedInAt: json['myCheckedInAt'] == null
           ? null

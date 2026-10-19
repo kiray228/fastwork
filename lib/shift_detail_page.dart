@@ -147,6 +147,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
         BookingResult.noSlots => tr.shift.bookNoSlots,
         BookingResult.alreadyBooked => tr.shift.bookAlreadyBooked,
         BookingResult.ratingTooLow => tr.shift.bookRatingTooLow,
+        BookingResult.needsMedicalBook => tr.shift.bookNeedsMedicalBook,
         BookingResult.alreadyStarted => tr.shift.bookAlreadyStarted,
         BookingResult.timeConflict => tr.shift.bookTimeConflict,
         BookingResult.alreadyFinished => tr.shift.bookAlreadyFinished,
@@ -568,6 +569,14 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
                     ),
                   ),
                 ],
+                if (current.needsMedicalBook) ...[
+                  const SizedBox(height: 14),
+                  _TextSection(
+                    icon: Icons.medical_information_outlined,
+                    title: tr.shift.requirementsTitle,
+                    text: tr.shift.medicalBookRequirement,
+                  ),
+                ],
                 if (current.dressCode != null) ...[
                   const SizedBox(height: 14),
                   _TextSection(
@@ -936,6 +945,11 @@ class _HeroCard extends StatelessWidget {
             children: [
               CategoryChip(category: shift.category),
               if (shift.isFunded) const GuaranteeChip(),
+              if (shift.needsMedicalBook)
+                TagChip(
+                  text: tr.feed.medicalBookTag,
+                  icon: Icons.medical_information_outlined,
+                ),
               for (final tag in shift.tagsAt(DateTime.now()))
                 TagChip(
                   text: tr.core.tag(tag),

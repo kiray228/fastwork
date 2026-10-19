@@ -66,6 +66,13 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
   /// Порог рейтинга исполнителя. null — пускать всех.
   double? minRating;
 
+  /// Нужна санитарная книжка.
+  bool needsMedicalBook = false;
+
+  /// Заказчик сам переключал «санкнижку» — категория её больше не
+  /// трогает: его решение важнее подсказки.
+  bool medicalBookTouched = false;
+
   late DateTime date;
   late TimeOfDay start;
   late TimeOfDay end;
@@ -115,6 +122,8 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
     // Повтор раньше терял форму одежды: образец её хранил, а форма — нет.
     dressCodeController = TextEditingController(text: shift?.dressCode ?? '');
     minRating = shift?.minRating;
+    needsMedicalBook = shift?.needsMedicalBook ?? false;
+    medicalBookTouched = shift != null;
 
     // Повтор ставим на завтра: день у образца почти наверняка прошёл.
     date = widget.editing?.workDate ??
@@ -186,6 +195,11 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
     setState(() {
       category = picked;
       error = null;
+      // Кухня, кафе, пекарня — работа с продуктами: книжку там требует
+      // закон. Подсказываем, пока заказчик не решил сам.
+      if (!medicalBookTouched && !isEditing) {
+        needsMedicalBook = categoryById(picked).group == 'food';
+      }
     });
   }
 
@@ -342,6 +356,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
               duties: duties,
               dressCode: dressCode.isEmpty ? null : dressCode,
               minRating: minRating,
+              needsMedicalBook: needsMedicalBook,
             )
           : widget.repository.retryPayment(
               previous!.shiftId!,
@@ -623,6 +638,31 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
                           onSelected: (_) => setState(() => minRating = bar),
                         ),
                     ],
+                  ),
+                  // Как и порог: задаётся при создании, задним числом не
+                  // меняется — записавшихся уже проверили по старым условиям.
+                  const SizedBox(height: 6),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: needsMedicalBook,
+                    onChanged: (value) => setState(() {
+                      needsMedicalBook = value;
+                      medicalBookTouched = true;
+                    }),
+                    title: Text(
+                      tr.manager.medicalBookTitle,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    subtitle: Text(
+                      tr.manager.medicalBookHelp,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: AppColors.muted,
+                      ),
+                    ),
                   ),
                 ],
               ],

@@ -219,6 +219,22 @@ class $ShiftRowsTable extends ShiftRows
     type: DriftSqlType.double,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _needsMedicalBookMeta = const VerificationMeta(
+    'needsMedicalBook',
+  );
+  @override
+  late final GeneratedColumn<bool> needsMedicalBook = GeneratedColumn<bool>(
+    'needs_medical_book',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintsDependsOnDialect({
+      SqlDialect.sqlite: 'CHECK ("needs_medical_book" IN (0, 1))',
+      SqlDialect.postgres: '',
+    }),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _cancelledAtMeta = const VerificationMeta(
     'cancelledAt',
   );
@@ -262,6 +278,7 @@ class $ShiftRowsTable extends ShiftRows
     createdBy,
     cancelDeadlineHours,
     minRating,
+    needsMedicalBook,
     cancelledAt,
     checkInCode,
   ];
@@ -422,6 +439,15 @@ class $ShiftRowsTable extends ShiftRows
         minRating.isAcceptableOrUnknown(data['min_rating']!, _minRatingMeta),
       );
     }
+    if (data.containsKey('needs_medical_book')) {
+      context.handle(
+        _needsMedicalBookMeta,
+        needsMedicalBook.isAcceptableOrUnknown(
+          data['needs_medical_book']!,
+          _needsMedicalBookMeta,
+        ),
+      );
+    }
     if (data.containsKey('cancelled_at')) {
       context.handle(
         _cancelledAtMeta,
@@ -525,6 +551,10 @@ class $ShiftRowsTable extends ShiftRows
         DriftSqlType.double,
         data['${effectivePrefix}min_rating'],
       ),
+      needsMedicalBook: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}needs_medical_book'],
+      )!,
       cancelledAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}cancelled_at'],
@@ -577,6 +607,11 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
   /// Добавлена в третьей версии схемы.
   final double? minRating;
 
+  /// Нужна санитарная книжка: работа с продуктами. Записаться может
+  /// только тот, у кого книжка проверена и действует в день смены.
+  /// Добавлена в 26-й версии схемы.
+  final bool needsMedicalBook;
+
   /// Когда заказчик отменил смену. null — смена в силе.
   ///
   /// Строку не удаляем, а помечаем. Удали мы её — вместе со сменой по
@@ -612,6 +647,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     this.createdBy,
     required this.cancelDeadlineHours,
     this.minRating,
+    required this.needsMedicalBook,
     this.cancelledAt,
     this.checkInCode,
   });
@@ -645,6 +681,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     if (!nullToAbsent || minRating != null) {
       map['min_rating'] = Variable<double>(minRating);
     }
+    map['needs_medical_book'] = Variable<bool>(needsMedicalBook);
     if (!nullToAbsent || cancelledAt != null) {
       map['cancelled_at'] = Variable<DateTime>(cancelledAt);
     }
@@ -683,6 +720,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       minRating: minRating == null && nullToAbsent
           ? const Value.absent()
           : Value(minRating),
+      needsMedicalBook: Value(needsMedicalBook),
       cancelledAt: cancelledAt == null && nullToAbsent
           ? const Value.absent()
           : Value(cancelledAt),
@@ -719,6 +757,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
         json['cancelDeadlineHours'],
       ),
       minRating: serializer.fromJson<double?>(json['minRating']),
+      needsMedicalBook: serializer.fromJson<bool>(json['needsMedicalBook']),
       cancelledAt: serializer.fromJson<DateTime?>(json['cancelledAt']),
       checkInCode: serializer.fromJson<String?>(json['checkInCode']),
     );
@@ -746,6 +785,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
       'createdBy': serializer.toJson<int?>(createdBy),
       'cancelDeadlineHours': serializer.toJson<int>(cancelDeadlineHours),
       'minRating': serializer.toJson<double?>(minRating),
+      'needsMedicalBook': serializer.toJson<bool>(needsMedicalBook),
       'cancelledAt': serializer.toJson<DateTime?>(cancelledAt),
       'checkInCode': serializer.toJson<String?>(checkInCode),
     };
@@ -771,6 +811,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     Value<int?> createdBy = const Value.absent(),
     int? cancelDeadlineHours,
     Value<double?> minRating = const Value.absent(),
+    bool? needsMedicalBook,
     Value<DateTime?> cancelledAt = const Value.absent(),
     Value<String?> checkInCode = const Value.absent(),
   }) => ShiftRow(
@@ -795,6 +836,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     createdBy: createdBy.present ? createdBy.value : this.createdBy,
     cancelDeadlineHours: cancelDeadlineHours ?? this.cancelDeadlineHours,
     minRating: minRating.present ? minRating.value : this.minRating,
+    needsMedicalBook: needsMedicalBook ?? this.needsMedicalBook,
     cancelledAt: cancelledAt.present ? cancelledAt.value : this.cancelledAt,
     checkInCode: checkInCode.present ? checkInCode.value : this.checkInCode,
   );
@@ -835,6 +877,9 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
           ? data.cancelDeadlineHours.value
           : this.cancelDeadlineHours,
       minRating: data.minRating.present ? data.minRating.value : this.minRating,
+      needsMedicalBook: data.needsMedicalBook.present
+          ? data.needsMedicalBook.value
+          : this.needsMedicalBook,
       cancelledAt: data.cancelledAt.present
           ? data.cancelledAt.value
           : this.cancelledAt,
@@ -866,6 +911,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
           ..write('createdBy: $createdBy, ')
           ..write('cancelDeadlineHours: $cancelDeadlineHours, ')
           ..write('minRating: $minRating, ')
+          ..write('needsMedicalBook: $needsMedicalBook, ')
           ..write('cancelledAt: $cancelledAt, ')
           ..write('checkInCode: $checkInCode')
           ..write(')'))
@@ -893,6 +939,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
     createdBy,
     cancelDeadlineHours,
     minRating,
+    needsMedicalBook,
     cancelledAt,
     checkInCode,
   ]);
@@ -919,6 +966,7 @@ class ShiftRow extends DataClass implements Insertable<ShiftRow> {
           other.createdBy == this.createdBy &&
           other.cancelDeadlineHours == this.cancelDeadlineHours &&
           other.minRating == this.minRating &&
+          other.needsMedicalBook == this.needsMedicalBook &&
           other.cancelledAt == this.cancelledAt &&
           other.checkInCode == this.checkInCode);
 }
@@ -943,6 +991,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
   final Value<int?> createdBy;
   final Value<int> cancelDeadlineHours;
   final Value<double?> minRating;
+  final Value<bool> needsMedicalBook;
   final Value<DateTime?> cancelledAt;
   final Value<String?> checkInCode;
   const ShiftRowsCompanion({
@@ -965,6 +1014,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     this.createdBy = const Value.absent(),
     this.cancelDeadlineHours = const Value.absent(),
     this.minRating = const Value.absent(),
+    this.needsMedicalBook = const Value.absent(),
     this.cancelledAt = const Value.absent(),
     this.checkInCode = const Value.absent(),
   });
@@ -988,6 +1038,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     this.createdBy = const Value.absent(),
     this.cancelDeadlineHours = const Value.absent(),
     this.minRating = const Value.absent(),
+    this.needsMedicalBook = const Value.absent(),
     this.cancelledAt = const Value.absent(),
     this.checkInCode = const Value.absent(),
   }) : workDate = Value(workDate),
@@ -1018,6 +1069,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     Expression<int>? createdBy,
     Expression<int>? cancelDeadlineHours,
     Expression<double>? minRating,
+    Expression<bool>? needsMedicalBook,
     Expression<DateTime>? cancelledAt,
     Expression<String>? checkInCode,
   }) {
@@ -1042,6 +1094,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
       if (cancelDeadlineHours != null)
         'cancel_deadline_hours': cancelDeadlineHours,
       if (minRating != null) 'min_rating': minRating,
+      if (needsMedicalBook != null) 'needs_medical_book': needsMedicalBook,
       if (cancelledAt != null) 'cancelled_at': cancelledAt,
       if (checkInCode != null) 'check_in_code': checkInCode,
     });
@@ -1067,6 +1120,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     Value<int?>? createdBy,
     Value<int>? cancelDeadlineHours,
     Value<double?>? minRating,
+    Value<bool>? needsMedicalBook,
     Value<DateTime?>? cancelledAt,
     Value<String?>? checkInCode,
   }) {
@@ -1090,6 +1144,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
       createdBy: createdBy ?? this.createdBy,
       cancelDeadlineHours: cancelDeadlineHours ?? this.cancelDeadlineHours,
       minRating: minRating ?? this.minRating,
+      needsMedicalBook: needsMedicalBook ?? this.needsMedicalBook,
       cancelledAt: cancelledAt ?? this.cancelledAt,
       checkInCode: checkInCode ?? this.checkInCode,
     );
@@ -1155,6 +1210,9 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
     if (minRating.present) {
       map['min_rating'] = Variable<double>(minRating.value);
     }
+    if (needsMedicalBook.present) {
+      map['needs_medical_book'] = Variable<bool>(needsMedicalBook.value);
+    }
     if (cancelledAt.present) {
       map['cancelled_at'] = Variable<DateTime>(cancelledAt.value);
     }
@@ -1186,6 +1244,7 @@ class ShiftRowsCompanion extends UpdateCompanion<ShiftRow> {
           ..write('createdBy: $createdBy, ')
           ..write('cancelDeadlineHours: $cancelDeadlineHours, ')
           ..write('minRating: $minRating, ')
+          ..write('needsMedicalBook: $needsMedicalBook, ')
           ..write('cancelledAt: $cancelledAt, ')
           ..write('checkInCode: $checkInCode')
           ..write(')'))
@@ -11176,6 +11235,7 @@ typedef $$ShiftRowsTableCreateCompanionBuilder = ShiftRowsCompanion Function({
   Value<int?> createdBy,
   Value<int> cancelDeadlineHours,
   Value<double?> minRating,
+  Value<bool> needsMedicalBook,
   Value<DateTime?> cancelledAt,
   Value<String?> checkInCode,
 });
@@ -11199,6 +11259,7 @@ typedef $$ShiftRowsTableUpdateCompanionBuilder = ShiftRowsCompanion Function({
   Value<int?> createdBy,
   Value<int> cancelDeadlineHours,
   Value<double?> minRating,
+  Value<bool> needsMedicalBook,
   Value<DateTime?> cancelledAt,
   Value<String?> checkInCode,
 });
@@ -11441,6 +11502,11 @@ class $$ShiftRowsTableFilterComposer
 
   ColumnFilters<double> get minRating => $composableBuilder(
     column: $table.minRating,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get needsMedicalBook => $composableBuilder(
+    column: $table.needsMedicalBook,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -11734,6 +11800,11 @@ class $$ShiftRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get needsMedicalBook => $composableBuilder(
+    column: $table.needsMedicalBook,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get cancelledAt => $composableBuilder(
     column: $table.cancelledAt,
     builder: (column) => ColumnOrderings(column),
@@ -11826,6 +11897,11 @@ class $$ShiftRowsTableAnnotationComposer
 
   GeneratedColumn<double> get minRating =>
       $composableBuilder(column: $table.minRating, builder: (column) => column);
+
+  GeneratedColumn<bool> get needsMedicalBook => $composableBuilder(
+    column: $table.needsMedicalBook,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get cancelledAt => $composableBuilder(
     column: $table.cancelledAt,
@@ -12068,6 +12144,7 @@ class $$ShiftRowsTableTableManager
                 Value<int?> createdBy = const Value.absent(),
                 Value<int> cancelDeadlineHours = const Value.absent(),
                 Value<double?> minRating = const Value.absent(),
+                Value<bool> needsMedicalBook = const Value.absent(),
                 Value<DateTime?> cancelledAt = const Value.absent(),
                 Value<String?> checkInCode = const Value.absent(),
               }) => ShiftRowsCompanion(
@@ -12090,6 +12167,7 @@ class $$ShiftRowsTableTableManager
                 createdBy: createdBy,
                 cancelDeadlineHours: cancelDeadlineHours,
                 minRating: minRating,
+                needsMedicalBook: needsMedicalBook,
                 cancelledAt: cancelledAt,
                 checkInCode: checkInCode,
               ),
@@ -12114,6 +12192,7 @@ class $$ShiftRowsTableTableManager
                 Value<int?> createdBy = const Value.absent(),
                 Value<int> cancelDeadlineHours = const Value.absent(),
                 Value<double?> minRating = const Value.absent(),
+                Value<bool> needsMedicalBook = const Value.absent(),
                 Value<DateTime?> cancelledAt = const Value.absent(),
                 Value<String?> checkInCode = const Value.absent(),
               }) => ShiftRowsCompanion.insert(
@@ -12136,6 +12215,7 @@ class $$ShiftRowsTableTableManager
                 createdBy: createdBy,
                 cancelDeadlineHours: cancelDeadlineHours,
                 minRating: minRating,
+                needsMedicalBook: needsMedicalBook,
                 cancelledAt: cancelledAt,
                 checkInCode: checkInCode,
               ),

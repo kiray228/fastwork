@@ -188,6 +188,9 @@ abstract class ShiftStrings {
   String get cancelReasonTitle;
   String get signInToBook;
   String get signInToWaitlist;
+  String get requirementsTitle;
+  String get medicalBookRequirement;
+  String get bookNeedsMedicalBook;
 }
 
 class _Ru extends ShiftStrings {
@@ -535,6 +538,16 @@ class _Ru extends ShiftStrings {
   String get signInToBook => 'Войти и записаться';
   @override
   String get signInToWaitlist => 'Мест нет · Войти и ждать места';
+  @override
+  String get requirementsTitle => 'Требования';
+  @override
+  String get medicalBookRequirement =>
+      'Санитарная книжка — проверенная и действующая в день смены. '
+      'Добавить её можно в Профиль → Документы.';
+  @override
+  String get bookNeedsMedicalBook =>
+      'Для этой смены нужна проверенная санитарная книжка. '
+      'Добавьте её в Профиль → Документы';
 }
 
 class _Kk extends ShiftStrings {
@@ -869,6 +882,16 @@ class _Kk extends ShiftStrings {
   String get signInToBook => 'Кіріп, жазылу';
   @override
   String get signInToWaitlist => 'Орын жоқ · Кіріп, орын күту';
+  @override
+  String get requirementsTitle => 'Талаптар';
+  @override
+  String get medicalBookRequirement =>
+      'Санитарлық кітапша — тексерілген және ауысым күні жарамды. '
+      'Оны Профиль → Құжаттар бөліміне қосуға болады.';
+  @override
+  String get bookNeedsMedicalBook =>
+      'Бұл ауысымға тексерілген санитарлық кітапша керек. '
+      'Оны Профиль → Құжаттар бөліміне қосыңыз';
 }
 
 class _En extends ShiftStrings {
@@ -1201,4 +1224,14 @@ class _En extends ShiftStrings {
   String get signInToBook => 'Sign in to book';
   @override
   String get signInToWaitlist => 'No spots · Sign in to wait for one';
+  @override
+  String get requirementsTitle => 'Requirements';
+  @override
+  String get medicalBookRequirement =>
+      'A medical book, verified and valid on the day of the shift. '
+      'Add it in Profile → Documents.';
+  @override
+  String get bookNeedsMedicalBook =>
+      'This shift needs a verified medical book. '
+      'Add it in Profile → Documents';
 }
