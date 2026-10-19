@@ -40,6 +40,16 @@ class ProfilePage extends StatelessWidget {
     required this.onOpenTab,
   });
 
+  Future<void> _setEmailNotices(BuildContext context, bool on) async {
+    final user = session.user;
+    if (user == null) return;
+    final updated = await guarded(
+      context,
+      () => repos.auth.setEmailNotices(user.id, on: on),
+    );
+    if (updated != null) session.setUser(updated);
+  }
+
   /// Выбрать оформление: как в системе, светлое или тёмное.
   ///
   /// «Как в системе» — по умолчанию: телефон сам темнеет вечером, и
@@ -374,6 +384,19 @@ class ProfilePage extends StatelessWidget {
                   trailing: tr.core.city(user.city),
                   onTap: () => _changeCity(context),
                 ),
+                // Письма — только у тех, кто входит по почте: без адреса
+                // слать некуда.
+                if (user.email != null && user.email!.isNotEmpty)
+                  SwitchListTile(
+                    secondary: const Icon(Icons.mail_outline_rounded),
+                    title: Text(tr.profile.emailNoticesTitle),
+                    subtitle: Text(
+                      tr.profile.emailNoticesHint,
+                      style: const TextStyle(fontSize: 12.5),
+                    ),
+                    value: user.emailNotices,
+                    onChanged: (on) => _setEmailNotices(context, on),
+                  ),
                 _MenuRow(
                   icon: Icons.translate_rounded,
                   title: tr.common.language,

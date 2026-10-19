@@ -2015,6 +2015,22 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _emailNoticesMeta = const VerificationMeta(
+    'emailNotices',
+  );
+  @override
+  late final GeneratedColumn<bool> emailNotices = GeneratedColumn<bool>(
+    'email_notices',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintsDependsOnDialect({
+      SqlDialect.sqlite: 'CHECK ("email_notices" IN (0, 1))',
+      SqlDialect.postgres: '',
+    }),
+    defaultValue: const Constant(true),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2031,6 +2047,7 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
     termsAcceptedAt,
     language,
     referredBy,
+    emailNotices,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2139,6 +2156,15 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
         referredBy.isAcceptableOrUnknown(data['referred_by']!, _referredByMeta),
       );
     }
+    if (data.containsKey('email_notices')) {
+      context.handle(
+        _emailNoticesMeta,
+        emailNotices.isAcceptableOrUnknown(
+          data['email_notices']!,
+          _emailNoticesMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -2204,6 +2230,10 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
         DriftSqlType.int,
         data['${effectivePrefix}referred_by'],
       ),
+      emailNotices: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}email_notices'],
+      )!,
     );
   }
 
@@ -2259,6 +2289,9 @@ class UserRow extends DataClass implements Insertable<UserRow> {
   /// Кто пригласил: по чьей ссылке человек пришёл. null — сам.
   /// Добавлена в 27-й версии схемы.
   final int? referredBy;
+
+  /// Дублировать ли важные уведомления письмом. Добавлена в 29-й версии.
+  final bool emailNotices;
   const UserRow({
     required this.id,
     required this.phone,
@@ -2274,6 +2307,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     this.termsAcceptedAt,
     this.language,
     this.referredBy,
+    required this.emailNotices,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2302,6 +2336,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     if (!nullToAbsent || referredBy != null) {
       map['referred_by'] = Variable<int>(referredBy);
     }
+    map['email_notices'] = Variable<bool>(emailNotices);
     return map;
   }
 
@@ -2331,6 +2366,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
       referredBy: referredBy == null && nullToAbsent
           ? const Value.absent()
           : Value(referredBy),
+      emailNotices: Value(emailNotices),
     );
   }
 
@@ -2354,6 +2390,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
       termsAcceptedAt: serializer.fromJson<DateTime?>(json['termsAcceptedAt']),
       language: serializer.fromJson<String?>(json['language']),
       referredBy: serializer.fromJson<int?>(json['referredBy']),
+      emailNotices: serializer.fromJson<bool>(json['emailNotices']),
     );
   }
   @override
@@ -2374,6 +2411,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
       'termsAcceptedAt': serializer.toJson<DateTime?>(termsAcceptedAt),
       'language': serializer.toJson<String?>(language),
       'referredBy': serializer.toJson<int?>(referredBy),
+      'emailNotices': serializer.toJson<bool>(emailNotices),
     };
   }
 
@@ -2392,6 +2430,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     Value<DateTime?> termsAcceptedAt = const Value.absent(),
     Value<String?> language = const Value.absent(),
     Value<int?> referredBy = const Value.absent(),
+    bool? emailNotices,
   }) => UserRow(
     id: id ?? this.id,
     phone: phone ?? this.phone,
@@ -2409,6 +2448,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
         : this.termsAcceptedAt,
     language: language.present ? language.value : this.language,
     referredBy: referredBy.present ? referredBy.value : this.referredBy,
+    emailNotices: emailNotices ?? this.emailNotices,
   );
   UserRow copyWithCompanion(UserRowsCompanion data) {
     return UserRow(
@@ -2434,6 +2474,9 @@ class UserRow extends DataClass implements Insertable<UserRow> {
       referredBy: data.referredBy.present
           ? data.referredBy.value
           : this.referredBy,
+      emailNotices: data.emailNotices.present
+          ? data.emailNotices.value
+          : this.emailNotices,
     );
   }
 
@@ -2453,7 +2496,8 @@ class UserRow extends DataClass implements Insertable<UserRow> {
           ..write('termsVersion: $termsVersion, ')
           ..write('termsAcceptedAt: $termsAcceptedAt, ')
           ..write('language: $language, ')
-          ..write('referredBy: $referredBy')
+          ..write('referredBy: $referredBy, ')
+          ..write('emailNotices: $emailNotices')
           ..write(')'))
         .toString();
   }
@@ -2474,6 +2518,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     termsAcceptedAt,
     language,
     referredBy,
+    emailNotices,
   );
   @override
   bool operator ==(Object other) =>
@@ -2492,7 +2537,8 @@ class UserRow extends DataClass implements Insertable<UserRow> {
           other.termsVersion == this.termsVersion &&
           other.termsAcceptedAt == this.termsAcceptedAt &&
           other.language == this.language &&
-          other.referredBy == this.referredBy);
+          other.referredBy == this.referredBy &&
+          other.emailNotices == this.emailNotices);
 }
 
 class UserRowsCompanion extends UpdateCompanion<UserRow> {
@@ -2510,6 +2556,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
   final Value<DateTime?> termsAcceptedAt;
   final Value<String?> language;
   final Value<int?> referredBy;
+  final Value<bool> emailNotices;
   const UserRowsCompanion({
     this.id = const Value.absent(),
     this.phone = const Value.absent(),
@@ -2525,6 +2572,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     this.termsAcceptedAt = const Value.absent(),
     this.language = const Value.absent(),
     this.referredBy = const Value.absent(),
+    this.emailNotices = const Value.absent(),
   });
   UserRowsCompanion.insert({
     this.id = const Value.absent(),
@@ -2541,6 +2589,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     this.termsAcceptedAt = const Value.absent(),
     this.language = const Value.absent(),
     this.referredBy = const Value.absent(),
+    this.emailNotices = const Value.absent(),
   }) : phone = Value(phone),
        fullName = Value(fullName),
        city = Value(city),
@@ -2560,6 +2609,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     Expression<DateTime>? termsAcceptedAt,
     Expression<String>? language,
     Expression<int>? referredBy,
+    Expression<bool>? emailNotices,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2576,6 +2626,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
       if (termsAcceptedAt != null) 'terms_accepted_at': termsAcceptedAt,
       if (language != null) 'language': language,
       if (referredBy != null) 'referred_by': referredBy,
+      if (emailNotices != null) 'email_notices': emailNotices,
     });
   }
 
@@ -2594,6 +2645,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     Value<DateTime?>? termsAcceptedAt,
     Value<String?>? language,
     Value<int?>? referredBy,
+    Value<bool>? emailNotices,
   }) {
     return UserRowsCompanion(
       id: id ?? this.id,
@@ -2610,6 +2662,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
       termsAcceptedAt: termsAcceptedAt ?? this.termsAcceptedAt,
       language: language ?? this.language,
       referredBy: referredBy ?? this.referredBy,
+      emailNotices: emailNotices ?? this.emailNotices,
     );
   }
 
@@ -2658,6 +2711,9 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     if (referredBy.present) {
       map['referred_by'] = Variable<int>(referredBy.value);
     }
+    if (emailNotices.present) {
+      map['email_notices'] = Variable<bool>(emailNotices.value);
+    }
     return map;
   }
 
@@ -2677,7 +2733,8 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
           ..write('termsVersion: $termsVersion, ')
           ..write('termsAcceptedAt: $termsAcceptedAt, ')
           ..write('language: $language, ')
-          ..write('referredBy: $referredBy')
+          ..write('referredBy: $referredBy, ')
+          ..write('emailNotices: $emailNotices')
           ..write(')'))
         .toString();
   }
@@ -5724,6 +5781,17 @@ class $NotificationRowsTable extends NotificationRows
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _emailStateMeta = const VerificationMeta(
+    'emailState',
+  );
+  @override
+  late final GeneratedColumn<String> emailState = GeneratedColumn<String>(
+    'email_state',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _remindedStartMeta = const VerificationMeta(
     'remindedStart',
   );
@@ -5755,6 +5823,7 @@ class $NotificationRowsTable extends NotificationRows
     shiftId,
     createdAt,
     readAt,
+    emailState,
     remindedStart,
     peerId,
   ];
@@ -5825,6 +5894,12 @@ class $NotificationRowsTable extends NotificationRows
         readAt.isAcceptableOrUnknown(data['read_at']!, _readAtMeta),
       );
     }
+    if (data.containsKey('email_state')) {
+      context.handle(
+        _emailStateMeta,
+        emailState.isAcceptableOrUnknown(data['email_state']!, _emailStateMeta),
+      );
+    }
     if (data.containsKey('reminded_start')) {
       context.handle(
         _remindedStartMeta,
@@ -5881,6 +5956,10 @@ class $NotificationRowsTable extends NotificationRows
         DriftSqlType.dateTime,
         data['${effectivePrefix}read_at'],
       ),
+      emailState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}email_state'],
+      ),
       remindedStart: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}reminded_start'],
@@ -5921,6 +6000,11 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
   /// Когда прочитано. null — ещё не прочитано.
   final DateTime? readAt;
 
+  /// Что с письмом об этом уведомлении: null — ещё не решали, `sent` —
+  /// отправлено, `skipped` — решили не слать (предел, отписка, нет
+  /// почты). Добавлена в 29-й версии.
+  final String? emailState;
+
   /// Только у напоминаний: на какое начало смены оно было.
   ///
   /// Повтор напоминаний раньше отсекали по паре «человек и смена». Смену
@@ -5941,6 +6025,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
     this.shiftId,
     required this.createdAt,
     this.readAt,
+    this.emailState,
     this.remindedStart,
     this.peerId,
   });
@@ -5958,6 +6043,9 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || readAt != null) {
       map['read_at'] = Variable<DateTime>(readAt);
+    }
+    if (!nullToAbsent || emailState != null) {
+      map['email_state'] = Variable<String>(emailState);
     }
     if (!nullToAbsent || remindedStart != null) {
       map['reminded_start'] = Variable<DateTime>(remindedStart);
@@ -5982,6 +6070,9 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
       readAt: readAt == null && nullToAbsent
           ? const Value.absent()
           : Value(readAt),
+      emailState: emailState == null && nullToAbsent
+          ? const Value.absent()
+          : Value(emailState),
       remindedStart: remindedStart == null && nullToAbsent
           ? const Value.absent()
           : Value(remindedStart),
@@ -6005,6 +6096,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
       shiftId: serializer.fromJson<int?>(json['shiftId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       readAt: serializer.fromJson<DateTime?>(json['readAt']),
+      emailState: serializer.fromJson<String?>(json['emailState']),
       remindedStart: serializer.fromJson<DateTime?>(json['remindedStart']),
       peerId: serializer.fromJson<int?>(json['peerId']),
     );
@@ -6021,6 +6113,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
       'shiftId': serializer.toJson<int?>(shiftId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'readAt': serializer.toJson<DateTime?>(readAt),
+      'emailState': serializer.toJson<String?>(emailState),
       'remindedStart': serializer.toJson<DateTime?>(remindedStart),
       'peerId': serializer.toJson<int?>(peerId),
     };
@@ -6035,6 +6128,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
     Value<int?> shiftId = const Value.absent(),
     DateTime? createdAt,
     Value<DateTime?> readAt = const Value.absent(),
+    Value<String?> emailState = const Value.absent(),
     Value<DateTime?> remindedStart = const Value.absent(),
     Value<int?> peerId = const Value.absent(),
   }) => NotificationRow(
@@ -6046,6 +6140,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
     shiftId: shiftId.present ? shiftId.value : this.shiftId,
     createdAt: createdAt ?? this.createdAt,
     readAt: readAt.present ? readAt.value : this.readAt,
+    emailState: emailState.present ? emailState.value : this.emailState,
     remindedStart: remindedStart.present
         ? remindedStart.value
         : this.remindedStart,
@@ -6061,6 +6156,9 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
       shiftId: data.shiftId.present ? data.shiftId.value : this.shiftId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       readAt: data.readAt.present ? data.readAt.value : this.readAt,
+      emailState: data.emailState.present
+          ? data.emailState.value
+          : this.emailState,
       remindedStart: data.remindedStart.present
           ? data.remindedStart.value
           : this.remindedStart,
@@ -6079,6 +6177,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
           ..write('shiftId: $shiftId, ')
           ..write('createdAt: $createdAt, ')
           ..write('readAt: $readAt, ')
+          ..write('emailState: $emailState, ')
           ..write('remindedStart: $remindedStart, ')
           ..write('peerId: $peerId')
           ..write(')'))
@@ -6095,6 +6194,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
     shiftId,
     createdAt,
     readAt,
+    emailState,
     remindedStart,
     peerId,
   );
@@ -6110,6 +6210,7 @@ class NotificationRow extends DataClass implements Insertable<NotificationRow> {
           other.shiftId == this.shiftId &&
           other.createdAt == this.createdAt &&
           other.readAt == this.readAt &&
+          other.emailState == this.emailState &&
           other.remindedStart == this.remindedStart &&
           other.peerId == this.peerId);
 }
@@ -6123,6 +6224,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
   final Value<int?> shiftId;
   final Value<DateTime> createdAt;
   final Value<DateTime?> readAt;
+  final Value<String?> emailState;
   final Value<DateTime?> remindedStart;
   final Value<int?> peerId;
   const NotificationRowsCompanion({
@@ -6134,6 +6236,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
     this.shiftId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.readAt = const Value.absent(),
+    this.emailState = const Value.absent(),
     this.remindedStart = const Value.absent(),
     this.peerId = const Value.absent(),
   });
@@ -6146,6 +6249,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
     this.shiftId = const Value.absent(),
     required DateTime createdAt,
     this.readAt = const Value.absent(),
+    this.emailState = const Value.absent(),
     this.remindedStart = const Value.absent(),
     this.peerId = const Value.absent(),
   }) : userId = Value(userId),
@@ -6162,6 +6266,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
     Expression<int>? shiftId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? readAt,
+    Expression<String>? emailState,
     Expression<DateTime>? remindedStart,
     Expression<int>? peerId,
   }) {
@@ -6174,6 +6279,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
       if (shiftId != null) 'shift_id': shiftId,
       if (createdAt != null) 'created_at': createdAt,
       if (readAt != null) 'read_at': readAt,
+      if (emailState != null) 'email_state': emailState,
       if (remindedStart != null) 'reminded_start': remindedStart,
       if (peerId != null) 'peer_id': peerId,
     });
@@ -6188,6 +6294,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
     Value<int?>? shiftId,
     Value<DateTime>? createdAt,
     Value<DateTime?>? readAt,
+    Value<String?>? emailState,
     Value<DateTime?>? remindedStart,
     Value<int?>? peerId,
   }) {
@@ -6200,6 +6307,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
       shiftId: shiftId ?? this.shiftId,
       createdAt: createdAt ?? this.createdAt,
       readAt: readAt ?? this.readAt,
+      emailState: emailState ?? this.emailState,
       remindedStart: remindedStart ?? this.remindedStart,
       peerId: peerId ?? this.peerId,
     );
@@ -6232,6 +6340,9 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
     if (readAt.present) {
       map['read_at'] = Variable<DateTime>(readAt.value);
     }
+    if (emailState.present) {
+      map['email_state'] = Variable<String>(emailState.value);
+    }
     if (remindedStart.present) {
       map['reminded_start'] = Variable<DateTime>(remindedStart.value);
     }
@@ -6252,6 +6363,7 @@ class NotificationRowsCompanion extends UpdateCompanion<NotificationRow> {
           ..write('shiftId: $shiftId, ')
           ..write('createdAt: $createdAt, ')
           ..write('readAt: $readAt, ')
+          ..write('emailState: $emailState, ')
           ..write('remindedStart: $remindedStart, ')
           ..write('peerId: $peerId')
           ..write(')'))
@@ -13203,6 +13315,7 @@ typedef $$UserRowsTableCreateCompanionBuilder = UserRowsCompanion Function({
   Value<DateTime?> termsAcceptedAt,
   Value<String?> language,
   Value<int?> referredBy,
+  Value<bool> emailNotices,
 });
 typedef $$UserRowsTableUpdateCompanionBuilder = UserRowsCompanion Function({
   Value<int> id,
@@ -13219,6 +13332,7 @@ typedef $$UserRowsTableUpdateCompanionBuilder = UserRowsCompanion Function({
   Value<DateTime?> termsAcceptedAt,
   Value<String?> language,
   Value<int?> referredBy,
+  Value<bool> emailNotices,
 });
 
 class $$UserRowsTableFilterComposer
@@ -13297,6 +13411,11 @@ class $$UserRowsTableFilterComposer
 
   ColumnFilters<int> get referredBy => $composableBuilder(
     column: $table.referredBy,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get emailNotices => $composableBuilder(
+    column: $table.emailNotices,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -13379,6 +13498,11 @@ class $$UserRowsTableOrderingComposer
     column: $table.referredBy,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get emailNotices => $composableBuilder(
+    column: $table.emailNotices,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$UserRowsTableAnnotationComposer
@@ -13439,6 +13563,11 @@ class $$UserRowsTableAnnotationComposer
     column: $table.referredBy,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get emailNotices => $composableBuilder(
+    column: $table.emailNotices,
+    builder: (column) => column,
+  );
 }
 
 class $$UserRowsTableTableManager
@@ -13483,6 +13612,7 @@ class $$UserRowsTableTableManager
                 Value<DateTime?> termsAcceptedAt = const Value.absent(),
                 Value<String?> language = const Value.absent(),
                 Value<int?> referredBy = const Value.absent(),
+                Value<bool> emailNotices = const Value.absent(),
               }) => UserRowsCompanion(
                 id: id,
                 phone: phone,
@@ -13498,6 +13628,7 @@ class $$UserRowsTableTableManager
                 termsAcceptedAt: termsAcceptedAt,
                 language: language,
                 referredBy: referredBy,
+                emailNotices: emailNotices,
               ),
           createCompanionCallback:
               ({
@@ -13515,6 +13646,7 @@ class $$UserRowsTableTableManager
                 Value<DateTime?> termsAcceptedAt = const Value.absent(),
                 Value<String?> language = const Value.absent(),
                 Value<int?> referredBy = const Value.absent(),
+                Value<bool> emailNotices = const Value.absent(),
               }) => UserRowsCompanion.insert(
                 id: id,
                 phone: phone,
@@ -13530,6 +13662,7 @@ class $$UserRowsTableTableManager
                 termsAcceptedAt: termsAcceptedAt,
                 language: language,
                 referredBy: referredBy,
+                emailNotices: emailNotices,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -15696,6 +15829,7 @@ typedef $$NotificationRowsTableCreateCompanionBuilder =
       Value<int?> shiftId,
       required DateTime createdAt,
       Value<DateTime?> readAt,
+      Value<String?> emailState,
       Value<DateTime?> remindedStart,
       Value<int?> peerId,
     });
@@ -15709,6 +15843,7 @@ typedef $$NotificationRowsTableUpdateCompanionBuilder =
       Value<int?> shiftId,
       Value<DateTime> createdAt,
       Value<DateTime?> readAt,
+      Value<String?> emailState,
       Value<DateTime?> remindedStart,
       Value<int?> peerId,
     });
@@ -15759,6 +15894,11 @@ class $$NotificationRowsTableFilterComposer
 
   ColumnFilters<DateTime> get readAt => $composableBuilder(
     column: $table.readAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get emailState => $composableBuilder(
+    column: $table.emailState,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -15822,6 +15962,11 @@ class $$NotificationRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get emailState => $composableBuilder(
+    column: $table.emailState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get remindedStart => $composableBuilder(
     column: $table.remindedStart,
     builder: (column) => ColumnOrderings(column),
@@ -15865,6 +16010,11 @@ class $$NotificationRowsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get readAt =>
       $composableBuilder(column: $table.readAt, builder: (column) => column);
+
+  GeneratedColumn<String> get emailState => $composableBuilder(
+    column: $table.emailState,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get remindedStart => $composableBuilder(
     column: $table.remindedStart,
@@ -15920,6 +16070,7 @@ class $$NotificationRowsTableTableManager
                 Value<int?> shiftId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> readAt = const Value.absent(),
+                Value<String?> emailState = const Value.absent(),
                 Value<DateTime?> remindedStart = const Value.absent(),
                 Value<int?> peerId = const Value.absent(),
               }) => NotificationRowsCompanion(
@@ -15931,6 +16082,7 @@ class $$NotificationRowsTableTableManager
                 shiftId: shiftId,
                 createdAt: createdAt,
                 readAt: readAt,
+                emailState: emailState,
                 remindedStart: remindedStart,
                 peerId: peerId,
               ),
@@ -15944,6 +16096,7 @@ class $$NotificationRowsTableTableManager
                 Value<int?> shiftId = const Value.absent(),
                 required DateTime createdAt,
                 Value<DateTime?> readAt = const Value.absent(),
+                Value<String?> emailState = const Value.absent(),
                 Value<DateTime?> remindedStart = const Value.absent(),
                 Value<int?> peerId = const Value.absent(),
               }) => NotificationRowsCompanion.insert(
@@ -15955,6 +16108,7 @@ class $$NotificationRowsTableTableManager
                 shiftId: shiftId,
                 createdAt: createdAt,
                 readAt: readAt,
+                emailState: emailState,
                 remindedStart: remindedStart,
                 peerId: peerId,
               ),

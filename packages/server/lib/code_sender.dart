@@ -23,14 +23,28 @@ abstract class CodeSender {
   String get name;
 }
 
+/// Кто доставляет письмо-уведомление: «вас позвали на смену», «смену
+/// отменили». Те же почтовые сервисы, что и для кода, — только письмо
+/// другое.
+abstract class NoticeMailer {
+  Future<void> sendNotice(String email, String subject, String text);
+}
+
 /// Печатает код в окно сервера вместо отправки письма.
 ///
 /// Так разрабатывают всегда: подключать настоящую почту ради каждой
 /// проверки долго, а иногда и платно. Заглушка ведёт себя точно так же
 /// с точки зрения остального кода.
-class ConsoleCodeSender implements CodeSender {
+class ConsoleCodeSender implements CodeSender, NoticeMailer {
   @override
   String get name => 'console';
+
+  // Без почты уведомления в окно сервера не печатаем целиком: их много,
+  // и они заслонили бы коды входа. Одной строки хватает, чтобы видеть,
+  // что письмо ушло бы.
+  @override
+  Future<void> sendNotice(String email, String subject, String text) async =>
+      stdout.writeln('письмо для $email: $subject');
 
   @override
   Future<void> send(String email, String code) async {
@@ -61,7 +75,7 @@ class ConsoleCodeSender implements CodeSender {
 ///
 /// Для нас это снова та же история с интерфейсом: способ доставки
 /// поменялся целиком, а всё остальное приложение об этом не узнало.
-class BrevoCodeSender implements CodeSender {
+class BrevoCodeSender implements CodeSender, NoticeMailer {
   final String apiKey;
   final String from;
   final String fromName;
@@ -89,8 +103,16 @@ class BrevoCodeSender implements CodeSender {
   @override
   String get name => 'email';
 
+  // Письмо — на языке, на котором человек открыл приложение.
   @override
-  Future<void> send(String email, String code) async {
+  Future<void> send(String email, String code) =>
+      _post(email, serverTr.emailSubject(code), serverTr.emailBody(code));
+
+  @override
+  Future<void> sendNotice(String email, String subject, String text) =>
+      _post(email, subject, text);
+
+  Future<void> _post(String email, String subject, String text) async {
     final response = await http
         .post(
           Uri.parse('https://api.brevo.com/v3/smtp/email'),
@@ -104,9 +126,8 @@ class BrevoCodeSender implements CodeSender {
             'to': [
               {'email': email},
             ],
-            // Письмо — на языке, на котором человек открыл приложение.
-            'subject': serverTr.emailSubject(code),
-            'textContent': serverTr.emailBody(code),
+            'subject': subject,
+            'textContent': text,
           }),
         )
         // Без ограничения времени запрос может висеть очень долго, и
@@ -149,7 +170,7 @@ class CodeSendFailure implements Exception {
 ///
 /// Для Gmail нужен именно **пароль приложения** (создаётся в настройках
 /// аккаунта при включённой двухфакторной защите), а не обычный пароль.
-class SmtpCodeSender implements CodeSender {
+class SmtpCodeSender implements CodeSender, NoticeMailer {
   final String host;
   final int port;
   final String username;
@@ -196,7 +217,14 @@ class SmtpCodeSender implements CodeSender {
   String get name => 'email';
 
   @override
-  Future<void> send(String email, String code) async {
+  Future<void> send(String email, String code) =>
+      _send(email, serverTr.emailSubject(code), serverTr.emailBody(code));
+
+  @override
+  Future<void> sendNotice(String email, String subject, String text) =>
+      _send(email, subject, text);
+
+  Future<void> _send(String email, String subject, String text) async {
     final server = SmtpServer(
       host,
       port: port,
@@ -210,8 +238,8 @@ class SmtpCodeSender implements CodeSender {
     final message = Message()
       ..from = Address(from, 'fastwork')
       ..recipients.add(email)
-      ..subject = serverTr.emailSubject(code)
-      ..text = serverTr.emailBody(code);
+      ..subject = subject
+      ..text = text;
 
     // Ограничение времени: без него запрос к заблокированному порту
     // висит минуту, и всё это время человек смотрит на крутящуюся кнопку.

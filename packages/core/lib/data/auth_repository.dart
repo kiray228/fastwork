@@ -77,6 +77,9 @@ abstract class AuthRepository {
   /// имя видит заказчик в списке записавшихся и в отзывах.
   Future<AppUser?> changeName(int userId, String fullName);
 
+  /// Включить или выключить письма о сменах.
+  Future<AppUser?> setEmailNotices(int userId, {required bool on});
+
   /// Удалить аккаунт.
   ///
   /// Магазины приложений требуют, чтобы аккаунт можно было удалить из
@@ -174,6 +177,7 @@ class DbAuthRepository implements AuthRepository {
       completedShifts: rows.first.read<int>('c'),
       noShows: rows.first.read<int>('missed'),
       termsVersion: row.termsVersion,
+      emailNotices: row.emailNotices,
     );
   }
 
@@ -265,6 +269,13 @@ class DbAuthRepository implements AuthRepository {
     final name = checkedFullName(fullName);
     await (db.update(db.userRows)..where((u) => u.id.equals(userId)))
         .write(UserRowsCompanion(fullName: Value(name)));
+    return refresh(userId);
+  }
+
+  @override
+  Future<AppUser?> setEmailNotices(int userId, {required bool on}) async {
+    await (db.update(db.userRows)..where((u) => u.id.equals(userId)))
+        .write(UserRowsCompanion(emailNotices: Value(on)));
     return refresh(userId);
   }
 
@@ -414,6 +425,17 @@ class FakeAuthRepository implements AuthRepository {
       _users[i] = updated;
       if (_current?.id == userId) _current = updated;
       return updated;
+    }
+    return null;
+  }
+
+  @override
+  Future<AppUser?> setEmailNotices(int userId, {required bool on}) async {
+    for (var i = 0; i < _users.length; i++) {
+      if (_users[i].id != userId) continue;
+      _users[i] = _users[i].copyWith(emailNotices: on);
+      if (_current?.id == userId) _current = _users[i];
+      return _users[i];
     }
     return null;
   }

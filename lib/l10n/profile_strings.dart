@@ -187,6 +187,8 @@ abstract class ProfileStrings {
   String get availabilityTitle;
   String get availabilityHint;
   String availabilityMarked(int count);
+  String get emailNoticesTitle;
+  String get emailNoticesHint;
 }
 
 class _Ru extends ProfileStrings {
@@ -511,6 +513,12 @@ class _Ru extends ProfileStrings {
   @override
   String availabilityMarked(int count) =>
       'Отмечено дней: $count — ждите приглашений в уведомлениях';
+  @override
+  String get emailNoticesTitle => 'Письма о сменах';
+  @override
+  String get emailNoticesHint =>
+      'Приглашения, отмены и напоминания — на почту, даже когда приложение '
+      'закрыто';
 }
 
 class _Kk extends ProfileStrings {
@@ -829,6 +837,12 @@ class _Kk extends ProfileStrings {
   @override
   String availabilityMarked(int count) =>
       'Белгіленген күндер: $count — шақыруларды хабарламалардан күтіңіз';
+  @override
+  String get emailNoticesTitle => 'Ауысымдар туралы хаттар';
+  @override
+  String get emailNoticesHint =>
+      'Шақырулар, болдырмаулар мен еске салулар — қолданба жабық болса да '
+      'поштаға';
 }
 
 class _En extends ProfileStrings {
@@ -1144,4 +1158,10 @@ class _En extends ProfileStrings {
   @override
   String availabilityMarked(int count) =>
       'Days marked: $count — invitations will come as notifications';
+  @override
+  String get emailNoticesTitle => 'Shift emails';
+  @override
+  String get emailNoticesHint =>
+      'Invitations, cancellations and reminders by email, even when the app '
+      'is closed';
 }
