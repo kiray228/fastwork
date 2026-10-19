@@ -302,6 +302,25 @@ class _RegisterPageState extends State<RegisterPage> {
               textAlign: TextAlign.center,
               style: text.bodyLarge?.copyWith(color: AppColors.muted),
             ),
+            // Сразу под названием, а не под анкетой: на своём устройстве
+            // анкета длинная, и кнопка внизу оказывалась за краем экрана.
+            // Человек пришёл посмотреть, сколько платят, — пусть видит это
+            // первым делом.
+            if (widget.guest != null && step != _Step.code) ...[
+              const SizedBox(height: 16),
+              Center(
+                child: OutlinedButton.icon(
+                  onPressed: busy ? null : _browse,
+                  icon: const Icon(Icons.search_rounded, size: 18),
+                  label: Text(tr.auth.browseShiftsButton),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 44),
+                    shape: const StadiumBorder(),
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 36),
 
             Text(_title, style: text.headlineSmall?.copyWith(fontSize: 22)),
@@ -381,15 +400,6 @@ class _RegisterPageState extends State<RegisterPage> {
                           error = null;
                         }),
                 child: Text(tr.auth.otherEmailButton),
-              ),
-            ],
-
-            if (widget.guest != null && step != _Step.code) ...[
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: busy ? null : _browse,
-                icon: const Icon(Icons.search_rounded, size: 18),
-                label: Text(tr.auth.browseShiftsButton),
               ),
             ],
 
