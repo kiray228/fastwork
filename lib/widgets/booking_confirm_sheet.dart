@@ -148,6 +148,16 @@ class _BookingConfirmSheetState extends State<_BookingConfirmSheet> {
                       icon: Icons.verified_user_rounded,
                       text: tr.shift.termFunded,
                     ),
+                  // Обещание в обе стороны: исполнитель не отменяет в
+                  // последний момент — и заказчику это обходится дорого.
+                  if (shift.isFunded)
+                    _Term(
+                      icon: Icons.shield_outlined,
+                      text: tr.shift.termLateCancel(
+                        shift.cancelDeadlineHours,
+                        formatMoney(shift.lateCancelCompensation),
+                      ),
+                    ),
                   _Term(
                     icon: Icons.account_balance_wallet_outlined,
                     text: shift.payoutDelayDays == 1

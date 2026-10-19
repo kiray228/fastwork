@@ -7,6 +7,7 @@ import 'package:fastwork/data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/data/support_repository.dart';
 import 'package:fastwork_core/data/user_language.dart';
+import 'package:fastwork_core/data/wallet_repository.dart';
 import 'package:fastwork_core/errors.dart';
 import 'package:fastwork_core/l10n/core_strings.dart';
 import 'package:fastwork_core/lang.dart';
@@ -476,6 +477,49 @@ void main() {
     final cancelled = (await shifts.notifications())
         .where((n) => n.kind == NotificationKind.shiftCancelled);
     expect(cancelled, hasLength(1));
+  });
+
+  test('поздняя отмена: записавшимся компенсация, заказчику — остаток',
+      () async {
+    // Смена сегодня в 10:00, на часах 6:00 — срок отмены (10 ч) прошёл.
+    final (shiftId, worker, manager) = await upcomingShift();
+    final shift = (await shifts.shiftById(shiftId))!;
+    expect(shift.isLateCancelAt(clock.now), isTrue);
+    final compensation = shift.lateCancelCompensation;
+    expect(compensation, shift.totalPay * 30 ~/ 100 ~/ 100 * 100);
+
+    session.setUser(manager);
+    final wallet = DbWalletRepository(db, session);
+    final paid = -(await wallet.summary())
+        .entries
+        .where((e) => e.kind == WalletEntryKind.charge)
+        .fold<int>(0, (sum, e) => sum + e.amount);
+    expect(await shifts.cancelShift(shiftId), BookingResult.ok);
+    final refunded = (await wallet.summary())
+        .entries
+        .where((e) => e.kind == WalletEntryKind.refund)
+        .fold<int>(0, (sum, e) => sum + e.amount);
+    // Возвращается всё, кроме компенсации с комиссией за неё.
+    expect(refunded,
+        paid - ShiftCost(slotPay: compensation, slots: 1).total);
+
+    session.setUser(worker);
+    final mine = await wallet.summary();
+    expect(mine.balance, compensation);
+    final note = (await shifts.notifications())
+        .singleWhere((n) => n.kind == NotificationKind.shiftCancelled);
+    expect(note.title, contains('компенсация'));
+  });
+
+  test('ранняя отмена — без компенсации, заказчику всё', () async {
+    final (shiftId, worker, manager) = await upcomingShift();
+    // За сутки до смены: срок отмены ещё не прошёл.
+    clock.now = clock.now.subtract(const Duration(days: 1));
+    session.setUser(manager);
+    expect(await shifts.cancelShift(shiftId), BookingResult.ok);
+
+    session.setUser(worker);
+    expect((await DbWalletRepository(db, session).summary()).balance, 0);
   });
 
   test('чужую смену отменить нельзя', () async {

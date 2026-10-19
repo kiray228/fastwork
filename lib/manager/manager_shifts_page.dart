@@ -84,14 +84,29 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
   /// Отменить смену. Спрашиваем подтверждение: действие видят все
   /// записавшиеся, и «случайно нажал» здесь обходится дорого.
   Future<void> _cancelShift(Shift shift) async {
+    // Поздно отменять — значит платить записавшимся компенсацию. Сумму
+    // заказчик должен увидеть до того, как нажмёт, а не в выписке.
+    final late = shift.workersHired > 0 &&
+        shift.isFunded &&
+        shift.isLateCancelAt(DateTime.now());
+    final each = shift.lateCancelCompensation;
     final agreed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(tr.manager.cancelShiftTitle),
         content: Text(
-          shift.workersHired > 0
-              ? tr.manager.cancelShiftHired(shift.workersHired)
-              : tr.manager.cancelShiftEmpty,
+          [
+            shift.workersHired > 0
+                ? tr.manager.cancelShiftHired(shift.workersHired)
+                : tr.manager.cancelShiftEmpty,
+            if (late)
+              tr.manager.cancelLateWarning(
+                shift.workersHired,
+                formatMoney(each),
+                formatMoney(each * shift.workersHired),
+                shift.cancelDeadlineHours,
+              ),
+          ].join('\n\n'),
         ),
         actions: [
           TextButton(

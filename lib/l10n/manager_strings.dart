@@ -219,6 +219,7 @@ abstract class ManagerStrings {
   String get useAddress;
   String get medicalBookTitle;
   String get medicalBookHelp;
+  String cancelLateWarning(int people, String each, String total, int hours);
 }
 
 class _Ru extends ManagerStrings {
@@ -630,6 +631,10 @@ class _Ru extends ManagerStrings {
   String get medicalBookHelp =>
       'Для работы с продуктами. Записаться смогут только те, у кого книжка '
       'проверена и действует в день смены.';
+  @override
+  String cancelLateWarning(int people, String each, String total, int hours) =>
+      'До начала меньше $hours ч. Записавшимся ($people) положена компенсация '
+      '— по $each, всего $total. Остальное вернётся вам.';
 }
 
 class _Kk extends ManagerStrings {
@@ -1048,6 +1053,10 @@ class _Kk extends ManagerStrings {
   String get medicalBookHelp =>
       'Азық-түлікпен жұмыс үшін. Кітапшасы тексерілген және ауысым күні '
       'жарамды адамдар ғана жазыла алады.';
+  @override
+  String cancelLateWarning(int people, String each, String total, int hours) =>
+      'Басталуға $hours сағаттан аз қалды. Жазылғандарға ($people) өтемақы '
+      'тиесілі — әрқайсысына $each, барлығы $total. Қалғаны сізге қайтарылады.';
 }
 
 class _En extends ManagerStrings {
@@ -1460,4 +1469,8 @@ class _En extends ManagerStrings {
   String get medicalBookHelp =>
       'For work with food. Only people whose medical book is verified and '
       'valid on the day of the shift can book.';
+  @override
+  String cancelLateWarning(int people, String each, String total, int hours) =>
+      'Less than $hours h before the start. The $people booked get compensation '
+      '— $each each, $total in total. The rest is refunded to you.';
 }

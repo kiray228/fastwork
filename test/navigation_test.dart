@@ -516,6 +516,8 @@ void main() {
 
       expect(find.text('Подтвердите запись'), findsOneWidget);
       expect(find.text('Вы обязуетесь'), findsOneWidget);
+      // Обещание в обе стороны: поздняя отмена заказчиком — компенсация.
+      expect(find.textContaining('вам компенсация'), findsOneWidget);
 
       // Пока галочка не поставлена — подтвердить нельзя.
       final confirm = tester.widget<FilledButton>(
@@ -1830,6 +1832,34 @@ void main() {
       await tester.pumpAndSettle();
       expect(await repo.shiftById(1), isNotNull);
       expect((await repo.shiftById(1))!.isCancelled, isFalse);
+    });
+
+    testWidgets('поздняя отмена: заказчик видит сумму компенсации заранее',
+        (tester) async {
+      // Через два часа: срок отмены (10 ч) уже прошёл.
+      final soon = DateTime.now().add(const Duration(hours: 2));
+      final start = soon.hour * 60 + soon.minute;
+      final repo = FakeShiftRepository(clock: morning(), shifts: [
+        Shift(
+          id: 1,
+          workDate: DateTime(soon.year, soon.month, soon.day),
+          title: 'Услуги фасовщика',
+          company: 'Magnum',
+          address: 'г. Алматы, ул. Абая, 1',
+          startMinutes: start,
+          endMinutes: (start + 240) % 1440,
+          hourlyRate: 100000,
+          workersNeeded: 3,
+          workersHired: 2,
+          createdBy: 1,
+        ),
+      ]);
+      await openApp(tester, role: UserRole.manager, shifts: repo);
+
+      await tester.tap(find.text('Отменить'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('положена компенсация'), findsOneWidget);
+      expect(find.textContaining('по 1 200 ₸, всего 2 400 ₸'), findsOneWidget);
     });
 
     testWidgets('после подтверждения смена помечается отменённой',

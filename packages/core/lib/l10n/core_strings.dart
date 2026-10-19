@@ -203,6 +203,8 @@ abstract class CoreStrings {
   Note noShow(String title, DateTime day);
   Note rated(int rating, String title, DateTime day);
   Note shiftCancelled(String title, DateTime day);
+  Note shiftCancelledCompensated(String title, DateTime day, String amount);
+  String lateCancelCompensation(String title, DateTime day);
   Note shiftChanged(String title, DateTime day, List<String> changes);
 
   /// Правка смены сняла запись: новое время налезло на другую смену

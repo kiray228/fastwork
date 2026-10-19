@@ -749,6 +749,12 @@ class FakeShiftRepository implements ShiftRepository {
     final shift = _decorate(_shifts[index]);
     if (shift.isCancelled) return BookingResult.alreadyCancelled;
     if (shift.hasStartedAt(clock())) return BookingResult.alreadyStarted;
+    // Поздняя отмена — «мне», записанному, компенсация, как в базе.
+    if (shift.isApplied && shift.isFunded && shift.isLateCancelAt(clock())) {
+      _record(WalletEntryKind.earning, shift.lateCancelCompensation,
+          coreTr.lateCancelCompensation(shift.title, shift.workDate),
+          shiftId: shiftId);
+    }
     var rest = shift.awaitingPayment
         ? 0
         : _paidFor(shift) - (_noShowRefunds[shiftId] ?? 0);
