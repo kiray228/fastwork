@@ -336,6 +336,34 @@ class ApiShiftRepository implements ShiftRepository {
   }
 
   @override
+  Future<Set<DateTime>> availability() async {
+    final data = await client.get('/api/me/availability') as List<dynamic>;
+    return {
+      for (final e in data)
+        () {
+          final d = DateTime.parse(e as String);
+          return DateTime(d.year, d.month, d.day);
+        }(),
+    };
+  }
+
+  @override
+  Future<void> setAvailable(DateTime day, {required bool available}) =>
+      client.post('/api/me/availability', {
+        'day': DateTime(day.year, day.month, day.day).toIso8601String(),
+        'available': available,
+      });
+
+  @override
+  Future<List<KnownWorker>> availableWorkers(int shiftId) async {
+    final data = await client.get('/api/shifts/$shiftId/available-workers')
+        as List<dynamic>;
+    return data
+        .map((e) => knownWorkerFromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
   Future<ReferralStats> referralStats() async => ReferralStats.fromJson(
       await client.get('/api/me/referrals') as Map<String, dynamic>);
 

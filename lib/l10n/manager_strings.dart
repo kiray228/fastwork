@@ -220,6 +220,9 @@ abstract class ManagerStrings {
   String get medicalBookTitle;
   String get medicalBookHelp;
   String cancelLateWarning(int people, String each, String total, int hours);
+  String get availableTitle;
+  String get availableHint;
+  String availableStats(String rating, String shifts);
 }
 
 class _Ru extends ManagerStrings {
@@ -635,6 +638,15 @@ class _Ru extends ManagerStrings {
   String cancelLateWarning(int people, String each, String total, int hours) =>
       'До начала меньше $hours ч. Записавшимся ($people) положена компенсация '
       '— по $each, всего $total. Остальное вернётся вам.';
+  @override
+  String get availableTitle => 'Свободны в этот день';
+  @override
+  String get availableHint =>
+      'Исполнители вашего города, которые сами отметили, что свободны в день '
+      'смены.';
+  @override
+  String availableStats(String rating, String shifts) =>
+      '★ $rating · опыт: $shifts';
 }
 
 class _Kk extends ManagerStrings {
@@ -1057,6 +1069,15 @@ class _Kk extends ManagerStrings {
   String cancelLateWarning(int people, String each, String total, int hours) =>
       'Басталуға $hours сағаттан аз қалды. Жазылғандарға ($people) өтемақы '
       'тиесілі — әрқайсысына $each, барлығы $total. Қалғаны сізге қайтарылады.';
+  @override
+  String get availableTitle => 'Осы күні бос';
+  @override
+  String get availableHint =>
+      'Ауысым күні бос екенін өздері белгілеген сіздің қалаңыздағы '
+      'орындаушылар.';
+  @override
+  String availableStats(String rating, String shifts) =>
+      '★ $rating · тәжірибе: $shifts';
 }
 
 class _En extends ManagerStrings {
@@ -1473,4 +1494,12 @@ class _En extends ManagerStrings {
   String cancelLateWarning(int people, String each, String total, int hours) =>
       'Less than $hours h before the start. The $people booked get compensation '
       '— $each each, $total in total. The rest is refunded to you.';
+  @override
+  String get availableTitle => 'Free on this day';
+  @override
+  String get availableHint =>
+      'Workers in your city who marked themselves free on the shift day.';
+  @override
+  String availableStats(String rating, String shifts) =>
+      '★ $rating · experience: $shifts';
 }

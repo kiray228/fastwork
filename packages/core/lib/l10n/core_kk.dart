@@ -192,6 +192,9 @@ class CoreKk extends CoreStrings {
   @override
   String get documentNotFound => 'Құжат табылмады';
   @override
+  String get availabilityOutOfRange =>
+      'Тек алдағы екі аптаны белгілеуге болады';
+  @override
   String get unknownDocumentType => 'Мұндай құжат түрі жоқ';
   @override
   String get documentNeedsExpiry =>

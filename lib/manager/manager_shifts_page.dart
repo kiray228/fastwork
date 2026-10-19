@@ -1113,6 +1113,10 @@ class _InviteKnownSheet extends StatefulWidget {
 
 class _InviteKnownSheetState extends State<_InviteKnownSheet> {
   Async<List<KnownWorker>> state = const Loading();
+
+  /// Свободные в день смены — люди, которые сами отметили день.
+  /// Не узнали — раздела просто нет.
+  List<KnownWorker> free = const [];
   final invited = <int>{};
   final pending = <int>{};
 
@@ -1123,9 +1127,16 @@ class _InviteKnownSheetState extends State<_InviteKnownSheet> {
   }
 
   Future<void> _load() async {
+    final freeFuture = widget.repository
+        .availableWorkers(widget.shift.id)
+        .catchError((Object _) => <KnownWorker>[]);
     final result = await load(widget.repository.knownWorkers);
+    final available = await freeFuture;
     if (!mounted) return;
-    setState(() => state = result);
+    setState(() {
+      state = result;
+      free = available;
+    });
   }
 
   Future<void> _invite(AppUser user) async {
@@ -1213,7 +1224,13 @@ class _InviteKnownSheetState extends State<_InviteKnownSheet> {
           for (final k in value)
             if (!widget.skip.contains(k.user.id)) k,
         ];
-        if (people.isEmpty) {
+        final known = {for (final k in value) k.user.id};
+        final strangers = [
+          for (final k in free)
+            if (!widget.skip.contains(k.user.id) && !known.contains(k.user.id))
+              k,
+        ];
+        if (people.isEmpty && strangers.isEmpty) {
           return [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
@@ -1225,19 +1242,42 @@ class _InviteKnownSheetState extends State<_InviteKnownSheet> {
           Flexible(
             child: ListView(
               shrinkWrap: true,
-              children: [for (final k in people) _tile(k)],
+              children: [
+                for (final k in people) _tile(k),
+                if (strangers.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 2),
+                    child: Text(
+                      tr.manager.availableTitle,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                    child: Text(tr.manager.availableHint, style: muted),
+                  ),
+                  for (final k in strangers) _tile(k, stranger: true),
+                ],
+              ],
             ),
           ),
         ];
     }
   }
 
-  Widget _tile(KnownWorker known) {
+  /// [stranger] — свободный в этот день, но у заказчика ещё не работал:
+  /// у него опыт вообще, а не «смен у вас».
+  Widget _tile(KnownWorker known, {bool stranger = false}) {
     final user = known.user;
-    final stats = tr.manager.knownWorkerStats(
-      user.rating.toStringAsFixed(1),
-      shiftsLabel(user.completedShifts),
-    );
+    final stats = stranger
+        ? tr.manager.availableStats(
+            user.rating.toStringAsFixed(1),
+            shiftsLabel(user.completedShifts),
+          )
+        : tr.manager.knownWorkerStats(
+            user.rating.toStringAsFixed(1),
+            shiftsLabel(user.completedShifts),
+          );
     return ListTile(
       leading: Icon(
         known.isFavorite ? Icons.star_rounded : Icons.person_outline_rounded,

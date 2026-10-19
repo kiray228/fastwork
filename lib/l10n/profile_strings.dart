@@ -184,6 +184,9 @@ abstract class ProfileStrings {
   String get operatorApprove;
   String get operatorReject;
   String operatorValidUntil(String date);
+  String get availabilityTitle;
+  String get availabilityHint;
+  String availabilityMarked(int count);
 }
 
 class _Ru extends ProfileStrings {
@@ -499,6 +502,15 @@ class _Ru extends ProfileStrings {
   String get operatorReject => 'Отклонить';
   @override
   String operatorValidUntil(String date) => 'действует до $date';
+  @override
+  String get availabilityTitle => 'Когда вы свободны?';
+  @override
+  String get availabilityHint =>
+      'Отметьте дни — заказчики, которым не хватает людей, смогут позвать '
+      'вас на смену. Записываетесь вы сами.';
+  @override
+  String availabilityMarked(int count) =>
+      'Отмечено дней: $count — ждите приглашений в уведомлениях';
 }
 
 class _Kk extends ProfileStrings {
@@ -808,6 +820,15 @@ class _Kk extends ProfileStrings {
   String get operatorReject => 'Қабылдамау';
   @override
   String operatorValidUntil(String date) => '$date дейін жарамды';
+  @override
+  String get availabilityTitle => 'Қашан боссыз?';
+  @override
+  String get availabilityHint =>
+      'Күндерді белгілеңіз — адам жетпейтін тапсырыс берушілер сізді '
+      'ауысымға шақыра алады. Жазылуды өзіңіз шешесіз.';
+  @override
+  String availabilityMarked(int count) =>
+      'Белгіленген күндер: $count — шақыруларды хабарламалардан күтіңіз';
 }
 
 class _En extends ProfileStrings {
@@ -1114,4 +1135,13 @@ class _En extends ProfileStrings {
   String get operatorReject => 'Reject';
   @override
   String operatorValidUntil(String date) => 'valid until $date';
+  @override
+  String get availabilityTitle => 'When are you free?';
+  @override
+  String get availabilityHint =>
+      'Mark the days — employers short of people can invite you to a '
+      'shift. You still decide whether to book.';
+  @override
+  String availabilityMarked(int count) =>
+      'Days marked: $count — invitations will come as notifications';
 }

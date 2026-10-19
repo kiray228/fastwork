@@ -1421,6 +1421,11 @@ void main() {
       // Уже записанного в списке нет — он только на экране под окном.
       expect(find.text('Исполнитель 11'), findsOneWidget);
 
+      // Свободные в этот день — отдельным разделом, без повторов.
+      expect(find.text('Свободны в этот день'), findsOneWidget);
+      expect(find.text('Исполнитель 31'), findsOneWidget);
+      expect(find.text('Исполнитель 21'), findsOneWidget);
+
       await tester.tap(find.text('Позвать').first);
       await tester.pumpAndSettle();
       expect(repo.invitations, [(1, 21)]);
@@ -2431,6 +2436,13 @@ class _KnownWorkersRepository extends FakeShiftRepository {
   @override
   Future<List<ShiftApplicant>> applicantsFor(int shiftId) async =>
       [ShiftApplicant(user: _person(11), status: 'active', checkedInAt: null)];
+
+  @override
+  Future<List<KnownWorker>> availableWorkers(int shiftId) async => [
+        KnownWorker(user: _person(31), isFavorite: false),
+        // Он и так в знакомых — второй раз не показываем.
+        KnownWorker(user: _person(21), isFavorite: false),
+      ];
 
   @override
   Future<List<KnownWorker>> knownWorkers() async => [

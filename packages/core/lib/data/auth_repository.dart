@@ -564,6 +564,12 @@ Future<void> deleteAccountIn(
     await (db.delete(db.categoryFollowRows)
           ..where((x) => x.userId.equals(userId)))
         .go();
+    await (db.delete(db.availabilityRows)
+          ..where((x) => x.userId.equals(userId)))
+        .go();
+    await (db.delete(db.hiddenCompanyRows)
+          ..where((x) => x.userId.equals(userId)))
+        .go();
     await (db.delete(db.notificationRows)
           ..where((x) => x.userId.equals(userId)))
         .go();

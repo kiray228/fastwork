@@ -511,6 +511,29 @@ void main() {
     expect(other, {'joined': 0, 'worked': 0});
   });
 
+  test('«свободен»: отметить, прочитать; свободных видит только заказчик',
+      () async {
+    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    final day = DateTime(tomorrow.year, tomorrow.month, tomorrow.day);
+    final (ok, _) = await call('POST', '/api/me/availability',
+        token: workerToken,
+        body: {'day': day.toIso8601String(), 'available': true});
+    expect(ok, 200);
+    final (_, days) =
+        await call('GET', '/api/me/availability', token: workerToken);
+    expect(days, [day.toIso8601String()]);
+
+    final shiftId = await bookedShift();
+    final (worker, _) = await call(
+        'GET', '/api/shifts/$shiftId/available-workers',
+        token: workerToken);
+    expect(worker, 403);
+    final (code, _) = await call(
+        'GET', '/api/shifts/$shiftId/available-workers',
+        token: managerToken);
+    expect(code, 200);
+  });
+
   group('гость без входа', () {
     test('видит оплаченные смены своего города, но не чужие отклики',
         () async {

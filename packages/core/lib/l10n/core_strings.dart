@@ -136,6 +136,7 @@ abstract class CoreStrings {
   String get termsNotAccepted;
   String get documentNotFound;
   String get unknownDocumentType;
+  String get availabilityOutOfRange;
   String get documentNeedsExpiry;
   String get ticketNotFound;
   String withdrawMin(String amount);

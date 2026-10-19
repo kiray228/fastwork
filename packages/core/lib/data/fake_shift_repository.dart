@@ -672,6 +672,26 @@ class FakeShiftRepository implements ShiftRepository {
   @override
   Future<ReferralStats> referralStats() async => const ReferralStats();
 
+  /// Дни «свободен» у «меня».
+  final Set<DateTime> _available = {};
+
+  @override
+  Future<Set<DateTime>> availability() async {
+    final now = clock();
+    final today = DateTime(now.year, now.month, now.day);
+    return {for (final d in _available) if (!d.isBefore(today)) d};
+  }
+
+  @override
+  Future<void> setAvailable(DateTime day, {required bool available}) async {
+    final date = DateTime(day.year, day.month, day.day);
+    available ? _available.add(date) : _available.remove(date);
+  }
+
+  // Других исполнителей здесь нет — свободных звать некого.
+  @override
+  Future<List<KnownWorker>> availableWorkers(int shiftId) async => const [];
+
   // Исполнитель здесь один — «я». Знакомый, если в любимых или
   // отработал хоть одну смену.
   @override

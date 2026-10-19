@@ -11152,6 +11152,308 @@ class HiddenCompanyRowsCompanion extends UpdateCompanion<HiddenCompanyRow> {
   }
 }
 
+class $AvailabilityRowsTable extends AvailabilityRows
+    with TableInfo<$AvailabilityRowsTable, AvailabilityRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AvailabilityRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<int> userId = GeneratedColumn<int>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dayMeta = const VerificationMeta('day');
+  @override
+  late final GeneratedColumn<DateTime> day = GeneratedColumn<DateTime>(
+    'day',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, userId, day, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'availability_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AvailabilityRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('day')) {
+      context.handle(
+        _dayMeta,
+        day.isAcceptableOrUnknown(data['day']!, _dayMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dayMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {userId, day},
+  ];
+  @override
+  AvailabilityRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AvailabilityRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}user_id'],
+      )!,
+      day: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}day'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $AvailabilityRowsTable createAlias(String alias) {
+    return $AvailabilityRowsTable(attachedDatabase, alias);
+  }
+}
+
+class AvailabilityRow extends DataClass implements Insertable<AvailabilityRow> {
+  final int id;
+  final int userId;
+
+  /// День — полночь, как `work_date` у смены.
+  final DateTime day;
+  final DateTime createdAt;
+  const AvailabilityRow({
+    required this.id,
+    required this.userId,
+    required this.day,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['user_id'] = Variable<int>(userId);
+    map['day'] = Variable<DateTime>(day);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  AvailabilityRowsCompanion toCompanion(bool nullToAbsent) {
+    return AvailabilityRowsCompanion(
+      id: Value(id),
+      userId: Value(userId),
+      day: Value(day),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory AvailabilityRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AvailabilityRow(
+      id: serializer.fromJson<int>(json['id']),
+      userId: serializer.fromJson<int>(json['userId']),
+      day: serializer.fromJson<DateTime>(json['day']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'userId': serializer.toJson<int>(userId),
+      'day': serializer.toJson<DateTime>(day),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  AvailabilityRow copyWith({
+    int? id,
+    int? userId,
+    DateTime? day,
+    DateTime? createdAt,
+  }) => AvailabilityRow(
+    id: id ?? this.id,
+    userId: userId ?? this.userId,
+    day: day ?? this.day,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  AvailabilityRow copyWithCompanion(AvailabilityRowsCompanion data) {
+    return AvailabilityRow(
+      id: data.id.present ? data.id.value : this.id,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      day: data.day.present ? data.day.value : this.day,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AvailabilityRow(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('day: $day, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, userId, day, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AvailabilityRow &&
+          other.id == this.id &&
+          other.userId == this.userId &&
+          other.day == this.day &&
+          other.createdAt == this.createdAt);
+}
+
+class AvailabilityRowsCompanion extends UpdateCompanion<AvailabilityRow> {
+  final Value<int> id;
+  final Value<int> userId;
+  final Value<DateTime> day;
+  final Value<DateTime> createdAt;
+  const AvailabilityRowsCompanion({
+    this.id = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.day = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  AvailabilityRowsCompanion.insert({
+    this.id = const Value.absent(),
+    required int userId,
+    required DateTime day,
+    required DateTime createdAt,
+  }) : userId = Value(userId),
+       day = Value(day),
+       createdAt = Value(createdAt);
+  static Insertable<AvailabilityRow> custom({
+    Expression<int>? id,
+    Expression<int>? userId,
+    Expression<DateTime>? day,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (userId != null) 'user_id': userId,
+      if (day != null) 'day': day,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  AvailabilityRowsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? userId,
+    Value<DateTime>? day,
+    Value<DateTime>? createdAt,
+  }) {
+    return AvailabilityRowsCompanion(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      day: day ?? this.day,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<int>(userId.value);
+    }
+    if (day.present) {
+      map['day'] = Variable<DateTime>(day.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AvailabilityRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('userId: $userId, ')
+          ..write('day: $day, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -11193,6 +11495,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $HiddenCompanyRowsTable hiddenCompanyRows =
       $HiddenCompanyRowsTable(this);
+  late final $AvailabilityRowsTable availabilityRows = $AvailabilityRowsTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -11221,6 +11526,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     categoryFollowRows,
     shiftMessageRows,
     hiddenCompanyRows,
+    availabilityRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -18776,6 +19082,196 @@ typedef $$HiddenCompanyRowsTableProcessedTableManager =
       HiddenCompanyRow,
       PrefetchHooks Function()
     >;
+typedef $$AvailabilityRowsTableCreateCompanionBuilder =
+    AvailabilityRowsCompanion Function({
+      Value<int> id,
+      required int userId,
+      required DateTime day,
+      required DateTime createdAt,
+    });
+typedef $$AvailabilityRowsTableUpdateCompanionBuilder =
+    AvailabilityRowsCompanion Function({
+      Value<int> id,
+      Value<int> userId,
+      Value<DateTime> day,
+      Value<DateTime> createdAt,
+    });
+
+class $$AvailabilityRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $AvailabilityRowsTable> {
+  $$AvailabilityRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get day => $composableBuilder(
+    column: $table.day,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AvailabilityRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AvailabilityRowsTable> {
+  $$AvailabilityRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get day => $composableBuilder(
+    column: $table.day,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AvailabilityRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AvailabilityRowsTable> {
+  $$AvailabilityRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get day =>
+      $composableBuilder(column: $table.day, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$AvailabilityRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AvailabilityRowsTable,
+          AvailabilityRow,
+          $$AvailabilityRowsTableFilterComposer,
+          $$AvailabilityRowsTableOrderingComposer,
+          $$AvailabilityRowsTableAnnotationComposer,
+          $$AvailabilityRowsTableCreateCompanionBuilder,
+          $$AvailabilityRowsTableUpdateCompanionBuilder,
+          (
+            AvailabilityRow,
+            BaseReferences<
+              _$AppDatabase,
+              $AvailabilityRowsTable,
+              AvailabilityRow
+            >,
+          ),
+          AvailabilityRow,
+          PrefetchHooks Function()
+        > {
+  $$AvailabilityRowsTableTableManager(
+    _$AppDatabase db,
+    $AvailabilityRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AvailabilityRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AvailabilityRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AvailabilityRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> userId = const Value.absent(),
+                Value<DateTime> day = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => AvailabilityRowsCompanion(
+                id: id,
+                userId: userId,
+                day: day,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int userId,
+                required DateTime day,
+                required DateTime createdAt,
+              }) => AvailabilityRowsCompanion.insert(
+                id: id,
+                userId: userId,
+                day: day,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$AvailabilityRowsTable, AvailabilityRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $AvailabilityRowsTable,
+                    AvailabilityRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AvailabilityRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AvailabilityRowsTable,
+      AvailabilityRow,
+      $$AvailabilityRowsTableFilterComposer,
+      $$AvailabilityRowsTableOrderingComposer,
+      $$AvailabilityRowsTableAnnotationComposer,
+      $$AvailabilityRowsTableCreateCompanionBuilder,
+      $$AvailabilityRowsTableUpdateCompanionBuilder,
+      (
+        AvailabilityRow,
+        BaseReferences<_$AppDatabase, $AvailabilityRowsTable, AvailabilityRow>,
+      ),
+      AvailabilityRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -18826,4 +19322,6 @@ class $AppDatabaseManager {
       $$ShiftMessageRowsTableTableManager(_db, _db.shiftMessageRows);
   $$HiddenCompanyRowsTableTableManager get hiddenCompanyRows =>
       $$HiddenCompanyRowsTableTableManager(_db, _db.hiddenCompanyRows);
+  $$AvailabilityRowsTableTableManager get availabilityRows =>
+      $$AvailabilityRowsTableTableManager(_db, _db.availabilityRows);
 }
