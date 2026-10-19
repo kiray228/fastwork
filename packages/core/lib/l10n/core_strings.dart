@@ -233,6 +233,10 @@ abstract class CoreStrings {
   /// Новая смена по виду работ, на который человек подписан.
   Note newShiftInCategory(String category, String company, String title,
       DateTime day, String time, String amount);
+  /// [missing] — сколько мест свободно, [free] — сколько исполнителей
+  /// города отметили этот день свободным.
+  Note underfilled(String title, String when, String time, int missing,
+      int free);
   Note reminder(String when, String time, String title, String company,
       String address);
 

@@ -208,7 +208,7 @@ class _ManagerShiftsPageState extends State<ManagerShiftsPage> {
   Future<void> _openApplicants(Shift shift) async {
     await Navigator.of(context).push(
       appRoute(
-        _ApplicantsPage(
+        ApplicantsPage(
           shift: shift,
           repository: repository,
           session: widget.session,
@@ -649,23 +649,25 @@ class _ManagerShiftCard extends StatelessWidget {
   }
 }
 
-/// Кто записался на смену.
-class _ApplicantsPage extends StatefulWidget {
+/// Кто записался на смену заказчика — с отметками выхода, кодом и
+/// приглашениями. Открывается со списка смен и из уведомлений.
+class ApplicantsPage extends StatefulWidget {
   final Shift shift;
   final ShiftRepository repository;
   final AppSession session;
 
-  const _ApplicantsPage({
+  const ApplicantsPage({
+    super.key,
     required this.shift,
     required this.repository,
     required this.session,
   });
 
   @override
-  State<_ApplicantsPage> createState() => _ApplicantsPageState();
+  State<ApplicantsPage> createState() => _ApplicantsPageState();
 }
 
-class _ApplicantsPageState extends State<_ApplicantsPage> {
+class _ApplicantsPageState extends State<ApplicantsPage> {
   Async<List<ShiftApplicant>> state = const Loading();
 
   /// Код отметки этой смены. null — ещё не пришёл или смена не своя.

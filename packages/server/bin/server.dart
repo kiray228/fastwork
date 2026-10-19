@@ -161,9 +161,13 @@ Future<void> _refreshDemo(AppDatabase db) async {
 /// Разослать напоминания о сменах на ближайшие сутки.
 Future<void> _remind(AppDatabase db) async {
   try {
-    final sent =
-        await DbShiftRepository(db, const StaticUser(null)).sendReminders();
+    final shifts = DbShiftRepository(db, const StaticUser(null));
+    final sent = await shifts.sendReminders();
     if (sent > 0) stdout.writeln('напоминаний о сменах: $sent');
+    // Заказчикам — о сменах, на которые меньше чем за сутки не хватает
+    // людей.
+    final short = await shifts.sendUnderfilledAlerts();
+    if (short > 0) stdout.writeln('предупреждений о недоборе: $short');
   } catch (error) {
     stderr.writeln('напоминания не отправились: $error');
   }

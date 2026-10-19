@@ -435,6 +435,16 @@ class CoreRu extends CoreStrings {
             'Вы подписаны на этот вид работ.',
       );
   @override
+  Note underfilled(String title, String when, String time, int missing,
+          int free) =>
+      (
+        title: 'На смену не хватает людей',
+        body: '«$title» $when в $time: свободных мест — $missing. '
+            '${free > 0 ? 'Отметили этот день свободным: $free — позовите '
+                'их в «Записались».' : 'Позовите знакомых в «Записались» '
+                'или поднимите ставку.'}',
+      );
+  @override
   Note reminder(String when, String time, String title, String company,
           String address) =>
       (

@@ -2248,6 +2248,47 @@ void main() {
         (4, 2, 1));
   });
 
+  test('заказчик узнаёт о недоборе за сутки — один раз, со свободными',
+      () async {
+    // Сегодня в 10:00, мест два, записан один.
+    final (shiftId, _, manager) = await upcomingShift();
+    final free = await auth.register(
+      phone: '77090000031',
+      fullName: 'Свободный',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    session.setUser(free);
+    await shifts.setAvailable(daysAgo(0), available: true);
+
+    // Смена через три дня — рано предупреждать; заполненная — не о чем.
+    session.setUser(manager);
+    await shifts.publishShift(
+      workDate: daysAgo(-3),
+      title: 'Далёкая',
+      company: 'Magnum',
+      address: 'г. Алматы, ул. Абая, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 2,
+      createdBy: manager.id,
+      city: 'Алматы',
+      card: testCard,
+    );
+
+    await shifts.sendUnderfilledAlerts();
+    await shifts.sendUnderfilledAlerts(); // второй раз — без повтора
+    final notes = [
+      for (final n in await shifts.notifications())
+        if (n.kind == NotificationKind.underfilled) n,
+    ];
+    expect(notes, hasLength(1));
+    expect(notes.single.shiftId, shiftId);
+    expect(notes.single.body, contains('свободных мест — 1'));
+    expect(notes.single.body, contains('свободным: 1'));
+  });
+
   test('приглашённые считаются, выдуманный пригласивший — не ошибка',
       () async {
     final inviter = await auth.register(

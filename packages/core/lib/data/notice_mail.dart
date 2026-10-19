@@ -24,6 +24,9 @@ const kEmailedKinds = {
   NotificationKind.reminder,
   NotificationKind.confirmed,
   NotificationKind.message,
+  NotificationKind.applied,
+  NotificationKind.withdrew,
+  NotificationKind.underfilled,
 };
 
 /// Эти — всегда, без дневного предела: они про смену, на которую человек
@@ -32,6 +35,10 @@ const kAlwaysEmailed = {
   NotificationKind.shiftCancelled,
   NotificationKind.shiftChanged,
   NotificationKind.reminder,
+  // Заказчику: человек снял запись, на смену не хватает людей — узнать
+  // об этом утром на точке уже поздно.
+  NotificationKind.withdrew,
+  NotificationKind.underfilled,
 };
 
 /// Сколько остальных писем в день. Больше — уже рассылка, от которой

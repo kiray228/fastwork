@@ -92,6 +92,7 @@ Future<AppRepositories> _localRepositories(AppSession session) async {
     // Напомнить о сменах на ближайшие сутки — сервера нет, и разослать
     // напоминания больше некому, кроме самого приложения при запуске.
     await dbShifts.sendReminders();
+    await dbShifts.sendUnderfilledAlerts();
     return AppRepositories(
       shifts: dbShifts,
       auth: DbAuthRepository(database),
