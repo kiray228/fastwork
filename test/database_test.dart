@@ -1988,6 +1988,70 @@ void main() {
     expect(await shifts.inviteToShift(shiftId: shiftId, workerId: workerId),
         BookingResult.notMine);
   });
+  test('отработавшего у заказчика можно позвать и не делая любимым',
+      () async {
+    final (_, workerId, managerId) = await workedShift();
+    final manager = (await auth.refresh(managerId))!;
+    session.setUser(manager);
+
+    // Знакомые: с общей историей, но пока не в любимых.
+    final known = await shifts.knownWorkers();
+    expect(known.map((k) => k.user.id), [workerId]);
+    expect(known.single.isFavorite, isFalse);
+    expect(known.single.user.completedShifts, 1);
+    expect(known.single.user.noShows, 0);
+
+    final shiftId = await shifts.publishShift(
+      workDate: daysAgo(-1),
+      title: 'Услуги грузчика',
+      company: 'Magnum',
+      address: 'г. Алматы, ул. Абая, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 2,
+      createdBy: managerId,
+      city: 'Алматы',
+      card: testCard,
+    );
+    expect(await shifts.inviteToShift(shiftId: shiftId, workerId: workerId),
+        BookingResult.ok);
+    session.setUser((await auth.refresh(workerId))!);
+    expect(
+        (await shifts.notifications())
+            .where((n) =>
+                n.kind == NotificationKind.invited && n.shiftId == shiftId)
+            .length,
+        1);
+
+    // Незнакомого — по-прежнему нельзя.
+    final stranger = await auth.register(
+      phone: '77090000002',
+      fullName: 'Незнакомец',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    session.setUser(manager);
+    expect(await shifts.inviteToShift(shiftId: shiftId, workerId: stranger.id),
+        BookingResult.notMine);
+
+    // Любимый — в списке первым и со звёздочкой.
+    await shifts.setFavorite(workerId: workerId, favorite: true);
+    expect((await shifts.knownWorkers()).single.isFavorite, isTrue);
+
+    // У другого заказчика своих знакомых нет.
+    final other = await auth.register(
+      phone: '77090000003',
+      fullName: 'Другой Заказчик',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      role: UserRole.manager,
+      company: 'Small',
+    );
+    session.setUser(other);
+    expect(await shifts.knownWorkers(), isEmpty);
+  });
+
   test('непрочитанные сообщения считаются и гаснут после прочтения', () async {
     final (shiftId, worker, manager) = await upcomingShift();
     session.setUser(worker);

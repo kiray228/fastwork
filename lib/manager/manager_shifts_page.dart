@@ -12,6 +12,7 @@ import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/stats.dart';
 import '../l10n/strings.dart';
 import '../theme/app_colors.dart';
+import '../theme/glass.dart';
 import 'package:fastwork_core/user.dart';
 import '../widgets/async_state.dart';
 import '../widgets/common.dart';
@@ -675,6 +676,35 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
     }
   }
 
+  /// Звать на смену есть смысл, пока она впереди, оплачена и в ней
+  /// остались места. Хранилище проверит то же самое ещё раз.
+  bool get _canInvite {
+    final shift = widget.shift;
+    return !shift.isCancelled &&
+        !shift.awaitingPayment &&
+        !shift.hasStartedAt(DateTime.now()) &&
+        shift.hasFreeSlots;
+  }
+
+  /// Позвать знакомых: любимых и тех, кто уже отработал у заказчика.
+  /// Кто уже записан, в списке не нужен.
+  Future<void> _inviteKnown() async {
+    final booked = switch (state) {
+      Ready(:final value) => {for (final a in value) a.user.id},
+      _ => <int>{},
+    };
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _InviteKnownSheet(
+        shift: widget.shift,
+        repository: widget.repository,
+        skip: booked,
+      ),
+    );
+  }
+
   Future<void> _load() async {
     final result =
         await load(() => widget.repository.applicantsFor(widget.shift.id));
@@ -897,6 +927,13 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
       appBar: AppBar(
         title: Text(tr.manager.applicantsTitle),
         actions: [
+          // Смена недобирает людей — позвать тех, с кем уже работали.
+          if (_canInvite)
+            IconButton(
+              tooltip: tr.manager.inviteKnownButton,
+              icon: const Icon(Icons.person_add_alt_1_rounded),
+              onPressed: _inviteKnown,
+            ),
           // Список для проходной или рабочего чата: охране нужны имена,
           // старшему смены — ещё и телефоны.
           if (state case Ready(:final value) when value.isNotEmpty)
@@ -930,6 +967,8 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
               icon: Icons.person_search_rounded,
               title: tr.manager.noApplicantsTitle,
               subtitle: tr.manager.noApplicantsSubtitle,
+              actionLabel: _canInvite ? tr.manager.inviteKnownButton : null,
+              onAction: _canInvite ? _inviteKnown : null,
             ),
           // Потянуть вниз — увидеть, кто отметился на месте.
           Ready(:final value) => RefreshIndicator(
@@ -1032,6 +1071,184 @@ class _ApplicantsPageState extends State<_ApplicantsPage> {
             ),
         },
       ),
+    );
+  }
+}
+
+/// Кого позвать на смену: любимые и все, кто уже отработал у заказчика.
+///
+/// Каждого — своей кнопкой, а не «позвать всех»: приглашение — личное,
+/// и заказчик сам решает, кого хочет видеть снова.
+class _InviteKnownSheet extends StatefulWidget {
+  final Shift shift;
+  final ShiftRepository repository;
+
+  /// Кто уже записан — их не показываем.
+  final Set<int> skip;
+
+  const _InviteKnownSheet({
+    required this.shift,
+    required this.repository,
+    required this.skip,
+  });
+
+  @override
+  State<_InviteKnownSheet> createState() => _InviteKnownSheetState();
+}
+
+class _InviteKnownSheetState extends State<_InviteKnownSheet> {
+  Async<List<KnownWorker>> state = const Loading();
+  final invited = <int>{};
+  final pending = <int>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final result = await load(widget.repository.knownWorkers);
+    if (!mounted) return;
+    setState(() => state = result);
+  }
+
+  Future<void> _invite(AppUser user) async {
+    setState(() => pending.add(user.id));
+    final result = await guarded(
+      context,
+      () => widget.repository
+          .inviteToShift(shiftId: widget.shift.id, workerId: user.id),
+    );
+    if (!mounted) return;
+    final ok = result == BookingResult.ok ||
+        result == BookingResult.alreadyBooked;
+    setState(() {
+      pending.remove(user.id);
+      if (ok) invited.add(user.id);
+    });
+    // null — сбой уже показан; остальное — отказ по правилам.
+    if (result != null && !ok) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(tr.manager.inviteFailed),
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context)
+        .textTheme
+        .bodyMedium
+        ?.copyWith(color: AppColors.muted, height: 1.4);
+    return GlassSheet(
+      child: SafeArea(
+        top: false,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.8,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SheetHandle(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
+                child: Text(
+                  tr.manager.inviteKnownTitle,
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineSmall
+                      ?.copyWith(fontSize: 19),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(tr.manager.inviteKnownHint, style: muted),
+              ),
+              ..._content(muted),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _content(TextStyle? muted) {
+    switch (state) {
+      case Loading():
+        return const [
+          Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+        ];
+      case Failed(:final error):
+        return [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+            child: Text(describeError(error), style: muted),
+          ),
+        ];
+      case Ready(:final value):
+        final people = [
+          for (final k in value)
+            if (!widget.skip.contains(k.user.id)) k,
+        ];
+        if (people.isEmpty) {
+          return [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              child: Text(tr.manager.inviteKnownEmpty, style: muted),
+            ),
+          ];
+        }
+        return [
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              children: [for (final k in people) _tile(k)],
+            ),
+          ),
+        ];
+    }
+  }
+
+  Widget _tile(KnownWorker known) {
+    final user = known.user;
+    final stats = tr.manager.knownWorkerStats(
+      user.rating.toStringAsFixed(1),
+      shiftsLabel(user.completedShifts),
+    );
+    return ListTile(
+      leading: Icon(
+        known.isFavorite ? Icons.star_rounded : Icons.person_outline_rounded,
+        color: known.isFavorite ? AppColors.brand : AppColors.muted,
+      ),
+      title: Text(user.fullName),
+      subtitle: Text(
+        user.noShows > 0
+            ? '$stats · ${tr.manager.knownWorkerMissed(user.noShows)}'
+            : stats,
+      ),
+      trailing: invited.contains(user.id)
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.check_rounded,
+                    size: 18, color: AppColors.brand),
+                const SizedBox(width: 4),
+                Text(tr.manager.inviteKnownDone),
+              ],
+            )
+          : TextButton(
+              onPressed:
+                  pending.contains(user.id) ? null : () => _invite(user),
+              child: Text(tr.manager.inviteKnownAction),
+            ),
     );
   }
 }

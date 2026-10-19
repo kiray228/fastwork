@@ -334,6 +334,15 @@ class ApiShiftRepository implements ShiftRepository {
   }
 
   @override
+  Future<List<KnownWorker>> knownWorkers() async {
+    final data =
+        await client.get('/api/manager/known-workers') as List<dynamic>;
+    return data
+        .map((e) => knownWorkerFromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
   Future<List<PendingRating>> workersToRate(int managerId) async {
     final data = await client.get('/api/manager/to-rate') as List<dynamic>;
     return data

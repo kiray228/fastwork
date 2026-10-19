@@ -415,6 +415,18 @@ void main() {
     });
   });
 
+  test('знакомых заказчика видит только заказчик — свои', () async {
+    final (worker, _) =
+        await call('GET', '/api/manager/known-workers', token: workerToken);
+    expect(worker, 403);
+    final (anon, _) = await call('GET', '/api/manager/known-workers');
+    expect(anon, 401);
+    final (code, list) =
+        await call('GET', '/api/manager/known-workers', token: managerToken);
+    expect(code, 200);
+    expect(list, isEmpty);
+  });
+
   group('гость без входа', () {
     test('видит оплаченные смены своего города, но не чужие отклики',
         () async {
