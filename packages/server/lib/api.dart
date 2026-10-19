@@ -63,6 +63,17 @@ class Api {
   /// почте и коде этого хватает с запасом, перебору — нет.
   final RateLimiter loginLimit;
 
+  /// Предел на смены без входа (`/api/public/*`) с одного адреса.
+  /// Человеку, который листает ленту и переключает города, двухсот
+  /// запросов в минуту хватает с запасом; скрипту, который выкачивает
+  /// ленту или нагружает базу, — нет.
+  final RateLimiter publicLimit;
+
+  /// Лента гостя по городам — на полминуты. Каждый запрос ленты — это
+  /// полтора десятка запросов к базе, а гостей много и смотрят они одно
+  /// и то же.
+  final _guestFeed = <String, (DateTime, List<Map<String, dynamic>>)>{};
+
   Api(
     this.db,
     CodeSender sender, {
@@ -70,7 +81,10 @@ class Api {
     PaymentGateway? payments,
     this.webhookSecrets = const {},
     RateLimiter? loginLimit,
+    RateLimiter? publicLimit,
   })  : auth = AuthService(db, sender),
+        publicLimit = publicLimit ??
+            RateLimiter(limit: 200, window: const Duration(minutes: 1)),
         payments = payments ?? SandboxPaymentGateway(),
         loginLimit = loginLimit ??
             RateLimiter(limit: 30, window: const Duration(minutes: 10));
@@ -89,6 +103,10 @@ class Api {
   Future<Response> _guarded(Request request, Handler routes) async {
     if (request.url.path.startsWith('api/auth/') &&
         !loginLimit.allow(clientAddress(request))) {
+      return _error(serverTr.tooManyRequests, status: 429);
+    }
+    if (request.url.path.startsWith('api/public/') &&
+        !publicLimit.allow(clientAddress(request))) {
       return _error(serverTr.tooManyRequests, status: 429);
     }
     final limited = await _limitBody(request);
@@ -176,6 +194,16 @@ class Api {
   /// Сессия создаётся **на каждый запрос заново**. Это важно: сервер
   /// обслуживает много людей одновременно, и одна общая сессия перепутала
   /// бы их между собой.
+  /// Смена для гостя — без номера заказчика: связывать смены с аккаунтом
+  /// тому, кто даже не вошёл, незачем.
+  static Map<String, dynamic> _guestJson(Shift shift) =>
+      shift.toJson()..remove('createdBy');
+
+  /// Служебный адрес: ключ из заголовка совпал с ключом сервера.
+  bool _isAdmin(Request request) =>
+      adminKey.isNotEmpty &&
+      sameSecret(request.headers['x-admin-key'] ?? '', adminKey);
+
   /// Смены глазами гостя: никто не вошёл, известен только город.
   GuestShifts get _guestShifts => RepositoryGuestShifts(
         (city) => DbShiftRepository(db, GuestCity(city), payments: payments),
@@ -513,10 +541,7 @@ class Api {
     //     -H 'X-Admin-Key: …' \
     //     -d '{"validFrom": "2027-01-01", "tenge": 4700}'
     router.post('/api/admin/mrp', (Request request) async {
-      if (adminKey.isEmpty ||
-          !sameSecret(request.headers['x-admin-key'] ?? '', adminKey)) {
-        return _error(serverTr.noAccess, status: 403);
-      }
+      if (!_isAdmin(request)) return _error(serverTr.noAccess, status: 403);
       final body = await _body(request);
       final validFrom = DateTime.tryParse(body['validFrom'] as String? ?? '');
       final tenge = body['tenge'] as int? ?? 0;
@@ -545,15 +570,23 @@ class Api {
     router.get('/api/public/shifts', (Request request) async {
       final city = request.url.queryParameters['city'] ?? '';
       if (!kCities.contains(city)) return _error(serverTr.unknownCity);
+      final now = DateTime.now();
+      final cached = _guestFeed[city];
+      if (cached != null &&
+          now.difference(cached.$1) < const Duration(seconds: 30)) {
+        return _json(cached.$2);
+      }
       final shifts = await _guestShifts.upcoming(city);
-      return _json(shifts.map((s) => s.toJson()).toList());
+      final list = [for (final s in shifts) _guestJson(s)];
+      _guestFeed[city] = (now, list);
+      return _json(list);
     });
 
     router.get('/api/public/shifts/<id|[0-9]+>',
         (Request request, String id) async {
       final shift = await _guestShifts.shiftById(int.parse(id));
       if (shift == null) return _error(coreTr.shiftNotFound, status: 404);
-      return _json(shift.toJson());
+      return _json(_guestJson(shift));
     });
 
     // --- лента смен --------------------------------------------------------
@@ -1261,16 +1294,48 @@ class Api {
       });
     });
 
-    router.post('/api/documents/<id|[0-9]+>/review',
+    // Проверку документов делает оператор — служебным ключом. Раньше
+    // этот адрес был открыт любому вошедшему, и приложение само
+    // «одобряло» документ через две секунды: санкнижку мог себе
+    // «проверить» кто угодно и записаться на смену с продуктами.
+    router.get('/api/admin/documents', (Request request) async {
+      if (!_isAdmin(request)) return _error(serverTr.noAccess, status: 403);
+      final rows = await db.customSelect(
+        'SELECT d.id, d.user_id, u.full_name, d.type, d.number, '
+        'd.expires_at, d.created_at FROM document_rows d '
+        'JOIN user_rows u ON u.id = d.user_id '
+        "WHERE d.status = 'pending' ORDER BY d.created_at",
+        readsFrom: {db.documentRows, db.userRows},
+      ).get();
+      return _json([
+        for (final r in rows)
+          {
+            'id': r.read<int>('id'),
+            'userId': r.read<int>('user_id'),
+            'fullName': r.read<String>('full_name'),
+            'type': r.read<String>('type'),
+            'number': r.read<String>('number'),
+            'expiresAt':
+                r.readNullable<DateTime>('expires_at')?.toIso8601String(),
+            'createdAt': r.read<DateTime>('created_at').toIso8601String(),
+          },
+      ]);
+    });
+
+    router.post('/api/admin/documents/<id|[0-9]+>/review',
         (Request request, String id) async {
-      return _authorized(request, (user) async {
-        final body = await _body(request);
-        await DbDocumentRepository(db, StaticUser(user)).review(
+      if (!_isAdmin(request)) return _error(serverTr.noAccess, status: 403);
+      final body = await _body(request);
+      try {
+        await reviewDocument(
+          db,
           int.parse(id),
-          approved: body['approved'] as bool? ?? true,
+          approved: body['approved'] as bool? ?? false,
         );
-        return _json({'ok': true});
-      });
+      } on UserError catch (e) {
+        return _error(e.message, status: 404);
+      }
+      return _json({'ok': true});
     });
 
     // --- поддержка ---------------------------------------------------------

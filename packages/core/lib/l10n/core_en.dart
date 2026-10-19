@@ -195,6 +195,11 @@ class CoreEn extends CoreStrings {
   @override
   String get documentNotFound => 'Document not found';
   @override
+  String get unknownDocumentType => 'Unknown document type';
+  @override
+  String get documentNeedsExpiry =>
+      'Enter the date the document is valid until';
+  @override
   String get ticketNotFound => 'Request not found';
   @override
   String withdrawMin(String amount) => 'The minimum withdrawal is $amount';
@@ -358,22 +363,22 @@ class CoreEn extends CoreStrings {
       );
   @override
   Note releasedByEdit(String title, DateTime day, List<String> changes,
-          {required bool overLimit}) =>
+          {required bool overLimit, bool medicalBook = false}) =>
       (
         title: 'Your booking was released',
         body: '“$title”, ${dayMonth(day)}: ${changes.join(', ')}. '
-            '${overLimit ? 'With the new pay your income this month would '
+            '${medicalBook ? 'Your medical book is no longer valid on the new date' : overLimit ? 'With the new pay your income this month would '
                 'exceed the 300 MCI cap' : 'The new time clashes with '
                 'another shift of yours'}, so the booking was released. It '
             'does not count as your cancellation.',
       );
   @override
   Note workerReleased(String name, String title, DateTime day,
-          {required bool overLimit}) =>
+          {required bool overLimit, bool medicalBook = false}) =>
       (
         title: 'A booking was released after your edit',
         body: '$name cannot come to “$title” on ${dayMonth(day)}: '
-            '${overLimit ? 'with the new pay their income this month would '
+            '${medicalBook ? 'their medical book is not valid on the new date' : overLimit ? 'with the new pay their income this month would '
                 'exceed the 300 MCI cap' : 'they have another shift at the '
                 'new time'}. The place is free again.',
       );

@@ -17,12 +17,45 @@ abstract class DocumentRepository {
     DateTime? expiresAt,
   });
 
-  /// Решение оператора по документу.
-  ///
-  /// В боевом приложении это делает сотрудник платформы из своего
-  /// интерфейса. У нас его нет, поэтому экран вызывает метод сам —
-  /// чтобы было видно, как работает цепочка статусов.
+  /// Решение по своему документу — только там, где проверяет само
+  /// приложение ([selfReview]).
   Future<void> review(int documentId, {required bool approved});
+
+  /// Проверяет ли документы само приложение.
+  ///
+  /// На своём устройстве оператора нет, и экран, чтобы было видно, как
+  /// работает цепочка статусов, одобряет документ сам. С сервером так
+  /// нельзя: тогда любой «проверил» бы себе санкнижку и попал на смену
+  /// с продуктами. Там решает оператор — служебным адресом сервера.
+  bool get selfReview;
+}
+
+/// Решение оператора по документу — чьему угодно.
+///
+/// Удостоверение одобрено — человек считается проверенным.
+Future<void> reviewDocument(
+  AppDatabase db,
+  int documentId, {
+  required bool approved,
+}) async {
+  final doc = await (db.select(db.documentRows)
+        ..where((d) => d.id.equals(documentId)))
+      .getSingleOrNull();
+  if (doc == null) throw UserError(coreTr.documentNotFound);
+  await (db.update(db.documentRows)..where((d) => d.id.equals(documentId)))
+      .write(DocumentRowsCompanion(
+    status: Value(
+      approved ? DocumentStatus.approved : DocumentStatus.rejected,
+    ),
+  ));
+
+  final idCard = await (db.select(db.documentRows)
+        ..where((d) => d.userId.equals(doc.userId) & d.type.equals('id_card')))
+      .getSingleOrNull();
+  await (db.update(db.userRows)..where((u) => u.id.equals(doc.userId)))
+      .write(UserRowsCompanion(
+    isVerified: Value(idCard?.status == DocumentStatus.approved),
+  ));
 }
 
 /// Переписка с поддержкой.
@@ -41,7 +74,10 @@ class DbDocumentRepository implements DocumentRepository {
   final AppDatabase db;
   final CurrentUser session;
 
-  DbDocumentRepository(this.db, this.session);
+  @override
+  final bool selfReview;
+
+  DbDocumentRepository(this.db, this.session, {this.selfReview = true});
 
   @override
   Future<List<UserDocument>> documents() async {
@@ -67,6 +103,14 @@ class DbDocumentRepository implements DocumentRepository {
     required String number,
     DateTime? expiresAt,
   }) async {
+    if (!kDocumentTypes.contains(type)) {
+      throw UserError(coreTr.unknownDocumentType);
+    }
+    // Книжка без срока считалась бы действующей вечно — а медосмотр
+    // нужно проходить регулярно.
+    if (documentsWithExpiry.contains(type) && expiresAt == null) {
+      throw UserError(coreTr.documentNeedsExpiry);
+    }
     // Документ такого типа уже есть — заменяем его и снова отправляем
     // на проверку. За уникальность пары (пользователь, тип) следит база.
     //
@@ -93,28 +137,15 @@ class DbDocumentRepository implements DocumentRepository {
 
   @override
   Future<void> review(int documentId, {required bool approved}) async {
+    if (!selfReview) throw UserError(coreTr.documentNotFound);
     // Только свой документ. Раньше номер документа можно было подставить
     // любой — и одобрить или отклонить чужое удостоверение.
-    final changed = await (db.update(db.documentRows)
+    final mine = await (db.select(db.documentRows)
           ..where((d) =>
               d.id.equals(documentId) & d.userId.equals(session.workerId)))
-        .write(DocumentRowsCompanion(
-      status: Value(
-        approved ? DocumentStatus.approved : DocumentStatus.rejected,
-      ),
-    ));
-    if (changed == 0) throw UserError(coreTr.documentNotFound);
-
-    // Пользователь считается проверенным, когда одобрено удостоверение.
-    final idCard = await (db.select(db.documentRows)
-          ..where((d) =>
-              d.userId.equals(session.workerId) & d.type.equals('id_card')))
         .getSingleOrNull();
-
-    final verified = idCard?.status == DocumentStatus.approved;
-    await (db.update(db.userRows)
-          ..where((u) => u.id.equals(session.workerId)))
-        .write(UserRowsCompanion(isVerified: Value(verified)));
+    if (mine == null) throw UserError(coreTr.documentNotFound);
+    await reviewDocument(db, documentId, approved: approved);
   }
 }
 
@@ -242,6 +273,9 @@ class FakeDocumentRepository implements DocumentRepository {
       createdAt: DateTime.now(),
     ));
   }
+
+  @override
+  bool get selfReview => true;
 
   @override
   Future<void> review(int documentId, {required bool approved}) async {

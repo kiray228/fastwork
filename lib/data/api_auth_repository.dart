@@ -194,13 +194,13 @@ class ApiDocumentRepository implements DocumentRepository {
     });
   }
 
+  // С сервером документы проверяет оператор, а не приложение.
   @override
-  Future<void> review(int documentId, {required bool approved}) async {
-    await client.post(
-      '/api/documents/$documentId/review',
-      {'approved': approved},
-    );
-  }
+  bool get selfReview => false;
+
+  @override
+  Future<void> review(int documentId, {required bool approved}) async =>
+      throw UnsupportedError('documents are reviewed by an operator');
 }
 
 /// Поддержка на сервере.
