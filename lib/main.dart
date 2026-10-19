@@ -14,6 +14,7 @@ import 'package:fastwork_core/data/auth_repository.dart';
 import 'package:fastwork_core/data/database.dart';
 import 'data/database_flutter.dart';
 import 'package:fastwork_core/data/fake_shift_repository.dart';
+import 'package:fastwork_core/data/guest_shifts.dart';
 import 'data/repositories.dart';
 import 'data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
@@ -85,6 +86,10 @@ Future<AppRepositories> _localRepositories(AppSession session) async {
       documents: DbDocumentRepository(database, session),
       support: DbSupportRepository(database, session),
       wallet: DbWalletRepository(database, session, payments: payments),
+      guest: RepositoryGuestShifts(
+        (city) => DbShiftRepository(database, GuestCity(city),
+            payments: payments),
+      ),
     );
   } catch (error, stack) {
     // Если база не открылась (например, браузер запретил хранилище) —
@@ -99,6 +104,7 @@ Future<AppRepositories> _localRepositories(AppSession session) async {
       documents: FakeDocumentRepository(),
       support: FakeSupportRepository(),
       wallet: FakeWalletRepository(shifts),
+      guest: RepositoryGuestShifts((city) => FakeShiftRepository(city: city)),
     );
   }
 }
@@ -127,6 +133,7 @@ Future<AppRepositories> _serverRepositories(String url) async {
     documents: ApiDocumentRepository(client),
     support: ApiSupportRepository(client),
     wallet: ApiWalletRepository(client),
+    guest: ApiGuestShifts(client),
   );
 }
 
@@ -232,6 +239,7 @@ class _FastworkAppState extends State<FastworkApp> {
           preferences: preferences,
           pendingShift: () => pendingShift,
           onShiftOpened: () => pendingShift = null,
+          onWantShift: (id) => pendingShift = id,
         ),
       ),
     );
@@ -249,6 +257,7 @@ class _AuthGate extends StatelessWidget {
   final AppPreferences preferences;
   final int? Function() pendingShift;
   final VoidCallback onShiftOpened;
+  final ValueChanged<int> onWantShift;
 
   const _AuthGate({
     required this.session,
@@ -256,6 +265,7 @@ class _AuthGate extends StatelessWidget {
     required this.preferences,
     required this.pendingShift,
     required this.onShiftOpened,
+    required this.onWantShift,
   });
 
   @override
@@ -269,6 +279,9 @@ class _AuthGate extends StatelessWidget {
             session: session,
             auth: repos.auth,
             preferences: preferences,
+            guest: repos.guest,
+            sharedShift: pendingShift(),
+            onWantShift: onWantShift,
           );
         }
         // Вошёл, но действующие правила не принимал — сначала они.

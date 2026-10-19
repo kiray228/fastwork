@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:fastwork_core/data/auth_repository.dart';
+import 'package:fastwork_core/data/guest_shifts.dart';
 import 'package:fastwork_core/data/database.dart';
 import '../data/session.dart';
+import '../guest_shifts_page.dart';
+import '../shift_detail_page.dart';
 import '../theme/app_colors.dart';
 import '../theme/glass.dart';
 import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_core/user.dart';
 import '../widgets/async_state.dart';
 import '../widgets/common.dart';
+import '../widgets/nav.dart';
 import 'terms_page.dart';
 import '../data/app_preferences.dart';
 import '../widgets/language_picker.dart';
@@ -29,11 +33,23 @@ class RegisterPage extends StatefulWidget {
   /// кнопки языка нет: так в тестах.
   final AppPreferences? preferences;
 
+  /// Смены для гостя. null — кнопки «Посмотреть смены» нет.
+  final GuestShifts? guest;
+
+  /// Смена из ссылки от друга: её показываем сразу, ещё до входа.
+  final int? sharedShift;
+
+  /// Гость выбрал смену и пошёл входить — после входа открыть её.
+  final ValueChanged<int>? onWantShift;
+
   const RegisterPage({
     super.key,
     required this.session,
     required this.auth,
     this.preferences,
+    this.guest,
+    this.sharedShift,
+    this.onWantShift,
   });
 
   @override
@@ -52,7 +68,10 @@ class _RegisterPageState extends State<RegisterPage> {
   final phoneController = TextEditingController();
   final nameController = TextEditingController();
   final companyController = TextEditingController();
-  String city = kCities.first;
+  // Гость смотрел смены в каком-то городе — скорее всего, он оттуда.
+  late String city = kCities.contains(widget.preferences?.guestCity)
+      ? widget.preferences!.guestCity!
+      : kCities.first;
 
   /// Кто регистрируется: исполнитель или заказчик.
   String role = UserRole.worker;
@@ -69,6 +88,48 @@ class _RegisterPageState extends State<RegisterPage> {
 
   /// Куда ушёл код: `email` — письмом, `console` — в окно сервера.
   String delivery = 'email';
+
+  @override
+  void initState() {
+    super.initState();
+    // Пришли по ссылке на смену — сначала сама смена: что за работа и
+    // сколько платят. Анкета подождёт, пока человек не решит записаться.
+    final shared = widget.sharedShift;
+    final guest = widget.guest;
+    if (shared != null && guest != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.of(context).push(
+          appRoute(
+            ShiftDetailPage.guest(
+              shiftId: shared,
+              guest: guest,
+              onSignIn: () => _backToSignIn(shared),
+            ),
+          ),
+        );
+      });
+    }
+  }
+
+  /// Гость решил войти: закрыть всё, что он смотрел, и вернуться к
+  /// анкете. Выбранную смену запоминаем — после входа она откроется.
+  void _backToSignIn(int? shiftId) {
+    if (shiftId != null) widget.onWantShift?.call(shiftId);
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  void _browse() {
+    Navigator.of(context).push(
+      appRoute(
+        GuestShiftsPage(
+          guest: widget.guest!,
+          preferences: widget.preferences,
+          onSignIn: _backToSignIn,
+        ),
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -320,6 +381,15 @@ class _RegisterPageState extends State<RegisterPage> {
                           error = null;
                         }),
                 child: Text(tr.auth.otherEmailButton),
+              ),
+            ],
+
+            if (widget.guest != null && step != _Step.code) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: busy ? null : _browse,
+                icon: const Icon(Icons.search_rounded, size: 18),
+                label: Text(tr.auth.browseShiftsButton),
               ),
             ],
 

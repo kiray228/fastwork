@@ -539,7 +539,7 @@ class _ShiftsPageState extends State<ShiftsPage> {
                           if (index == 0 ||
                               !isSameDay(value[index - 1].workDate,
                                   shift.workDate))
-                            _DayHeading(date: shift.workDate),
+                            DayHeading(date: shift.workDate),
                           AnimatedEntrance(
                             key: ValueKey('all/${shift.id}'),
                             index: index,
@@ -763,10 +763,10 @@ class _ListHeader extends StatelessWidget {
 }
 
 /// Подпись дня в списке «Все дни»: «Завтра, 9 окт, пт».
-class _DayHeading extends StatelessWidget {
+class DayHeading extends StatelessWidget {
   final DateTime date;
 
-  const _DayHeading({required this.date});
+  const DayHeading({super.key, required this.date});
 
   @override
   Widget build(BuildContext context) {

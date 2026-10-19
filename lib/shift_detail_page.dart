@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'data/session.dart';
 import 'chat_page.dart';
+import 'package:fastwork_core/data/guest_shifts.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'company_page.dart';
 import 'links.dart';
@@ -20,15 +21,33 @@ import 'l10n/strings.dart';
 /// Экран «Подробнее»: одна смена целиком.
 class ShiftDetailPage extends StatefulWidget {
   final int shiftId;
-  final ShiftRepository repository;
-  final AppSession session;
+  final ShiftRepository? repository;
+  final AppSession? session;
+
+  /// Откуда читать смену гостю. Задан — экран для того, кто не вошёл.
+  final GuestShifts? guest;
+
+  /// Гость нажал «Войти и записаться».
+  final VoidCallback? onSignIn;
 
   const ShiftDetailPage({
     super.key,
     required this.shiftId,
-    required this.repository,
-    required this.session,
-  });
+    required ShiftRepository this.repository,
+    required AppSession this.session,
+  })  : guest = null,
+        onSignIn = null;
+
+  /// Смена глазами гостя: всё, что видно исполнителю, а вместо
+  /// «Записаться» — «Войти и записаться». Ни переписки, ни страницы
+  /// компании: они — для тех, кто вошёл.
+  const ShiftDetailPage.guest({
+    super.key,
+    required this.shiftId,
+    required GuestShifts this.guest,
+    required VoidCallback this.onSignIn,
+  })  : repository = null,
+        session = null;
 
   @override
   State<ShiftDetailPage> createState() => _ShiftDetailPageState();
@@ -50,10 +69,20 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
   /// Непрочитанные сообщения от заказчика — значок на кнопке переписки.
   int unreadChat = 0;
 
+  /// Хранилище того, кто вошёл. У гостя его нет — и до действий, которым
+  /// оно нужно, гость не доходит: вместо них кнопка входа.
+  ShiftRepository get _repository => widget.repository!;
+
+  bool get _isGuest => widget.guest != null;
+
+  /// Рейтинг для допуска. У гостя его ещё нет — замок не показываем:
+  /// о пороге он узнает после входа, как и все новенькие.
+  double get _rating => widget.session?.rating ?? 5;
+
   /// Узнать отдельно и молча: не узнали — просто без значка.
   Future<void> _loadUnreadChat() async {
     try {
-      final count = await widget.repository.unreadChat(widget.shiftId);
+      final count = await _repository.unreadChat(widget.shiftId);
       if (mounted) setState(() => unreadChat = count);
     } catch (_) {
       // Без числа на значке переписка всё равно открывается.
@@ -70,7 +99,8 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
   /// кнопка действия после него не застревает в «крутится».
   Future<void> _load() async {
     final result = await load(
-      () => widget.repository.shiftById(widget.shiftId),
+      () => widget.guest?.shiftById(widget.shiftId) ??
+          _repository.shiftById(widget.shiftId),
     );
     if (!mounted) return;
     setState(() {
@@ -104,7 +134,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     setState(() => busy = true);
     final result = await guarded(
       context,
-      () => widget.repository.apply(widget.shiftId),
+      () => _repository.apply(widget.shiftId),
     );
     await _load();
     if (!mounted) return;
@@ -141,7 +171,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     setState(() => busy = true);
     final result = await guarded(
       context,
-      () => widget.repository.checkIn(widget.shiftId, code: code),
+      () => _repository.checkIn(widget.shiftId, code: code),
     );
     await _load();
     if (!mounted) return;
@@ -166,7 +196,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     setState(() => busy = true);
     final result = await guarded(
       context,
-      () => widget.repository.confirmComing(widget.shiftId),
+      () => _repository.confirmComing(widget.shiftId),
     );
     await _load();
     if (!mounted) return;
@@ -253,7 +283,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     setState(() => busy = true);
     final result = await guarded(
       context,
-      () => widget.repository
+      () => _repository
           .cancelApplication(widget.shiftId, reason: reason),
     );
     await _load();
@@ -282,7 +312,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
     setState(() => busy = true);
     final result = await guarded(
       context,
-      () => widget.repository.setWaitlist(widget.shiftId, join: join),
+      () => _repository.setWaitlist(widget.shiftId, join: join),
     );
     await _load();
     if (!mounted) return;
@@ -418,7 +448,7 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
                 await Navigator.of(context).push(
                   appRoute(
                     ChatPage(
-                      repository: widget.repository,
+                      repository: _repository,
                       shiftId: current.id,
                       subtitle: '${current.company} · ${current.title}',
                     ),
@@ -456,10 +486,10 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
                     onConfirmComing: _confirmComing,
                   ),
                   const SizedBox(height: 14),
-                ] else if (!current.ratingAllows(widget.session.rating)) ...[
+                ] else if (!current.ratingAllows(_rating)) ...[
                   _RatingLockBanner(
                     required: current.minRating!,
-                    actual: widget.session.rating,
+                    actual: _rating,
                   ),
                   const SizedBox(height: 14),
                 ],
@@ -475,21 +505,23 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
                   onCalendar: current.isApplied
                       ? () => _open(calendarLink(current))
                       : null,
-                  onCompanyTap: () => Navigator.of(context).push(
-                    appRoute(
-                      CompanyPage(
-                        company: current.company,
-                        repository: widget.repository,
-                        onOpenShift: (id) => Navigator.of(context).push(
-                          appRoute(ShiftDetailPage(
-                            shiftId: id,
-                            repository: widget.repository,
-                            session: widget.session,
-                          )),
-                        ),
-                      ),
-                    ),
-                  ),
+                  onCompanyTap: _isGuest
+                      ? null
+                      : () => Navigator.of(context).push(
+                            appRoute(
+                              CompanyPage(
+                                company: current.company,
+                                repository: _repository,
+                                onOpenShift: (id) => Navigator.of(context).push(
+                                  appRoute(ShiftDetailPage(
+                                    shiftId: id,
+                                    repository: _repository,
+                                    session: widget.session!,
+                                  )),
+                                ),
+                              ),
+                            ),
+                          ),
                 ),
                 const SizedBox(height: 14),
                 _PayCard(shift: current),
@@ -560,7 +592,8 @@ class _ShiftDetailPageState extends State<ShiftDetailPage> {
           _BottomBar(
             shift: current,
             busy: busy,
-            userRating: widget.session.rating,
+            userRating: _rating,
+            onSignIn: widget.onSignIn,
             onBook: _book,
             onCancel: _cancel,
             onCheckIn: _checkIn,
@@ -727,7 +760,9 @@ class _RatingLockBanner extends StatelessWidget {
 /// Шапка: бейдж даты, название, компания, адрес, время, ярлыки.
 class _HeroCard extends StatelessWidget {
   final Shift shift;
-  final VoidCallback onCompanyTap;
+
+  /// null — компания не открывается (у гостя).
+  final VoidCallback? onCompanyTap;
   final VoidCallback onCopyAddress;
   final VoidCallback onRoute;
 
@@ -822,11 +857,12 @@ class _HeroCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          const Icon(
-                            Icons.chevron_right_rounded,
-                            size: 20,
-                            color: AppColors.muted,
-                          ),
+                          if (onCompanyTap != null)
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              size: 20,
+                              color: AppColors.muted,
+                            ),
                         ],
                       ),
                     ),
@@ -1207,6 +1243,9 @@ class _BottomBar extends StatelessWidget {
   final Shift shift;
   final bool busy;
   final double userRating;
+
+  /// Задан — смотрит гость: записаться он может, только войдя.
+  final VoidCallback? onSignIn;
   final VoidCallback onBook;
   final VoidCallback onCancel;
   final VoidCallback onCheckIn;
@@ -1216,6 +1255,7 @@ class _BottomBar extends StatelessWidget {
     required this.shift,
     required this.busy,
     required this.userRating,
+    this.onSignIn,
     required this.onBook,
     required this.onCancel,
     required this.onCheckIn,
@@ -1249,6 +1289,17 @@ class _BottomBar extends StatelessWidget {
       label = tr.shift.statusNoShow;
       action = null;
       outlined = true;
+    } else if (onSignIn != null) {
+      // Гость: что бы он ни хотел сделать со сменой, сначала вход.
+      // Смена уже началась — записываться не на что, как и у всех.
+      final started = shift.hasStartedAt(now);
+      label = started
+          ? tr.shift.bookAlreadyStarted
+          : shift.hasFreeSlots
+              ? tr.shift.signInToBook
+              : tr.shift.signInToWaitlist;
+      action = started ? null : onSignIn;
+      outlined = started || !shift.hasFreeSlots;
     } else if (shift.isCheckedIn) {
       label = tr.shift.statusCheckedIn;
       action = null;

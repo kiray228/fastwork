@@ -75,6 +75,7 @@ abstract class AuthStrings {
         Lang.kk => const _Kk(),
         Lang.en => const _En(),
       };
+  String get browseShiftsButton;
 }
 
 class _Ru extends AuthStrings {
@@ -180,6 +181,8 @@ class _Ru extends AuthStrings {
       'данных';
   @override
   String get checkboxTailEmployer => 'и обработку персональных данных';
+  @override
+  String get browseShiftsButton => 'Посмотреть смены без входа';
 }
 
 class _Kk extends AuthStrings {
@@ -286,6 +289,8 @@ class _Kk extends AuthStrings {
   @override
   String get checkboxTailEmployer =>
       'және дербес деректерді өңдеуді қабылдаймын';
+  @override
+  String get browseShiftsButton => 'Кірмей-ақ ауысымдарды көру';
 }
 
 class _En extends AuthStrings {
@@ -392,4 +397,6 @@ class _En extends AuthStrings {
       'processing';
   @override
   String get checkboxTailEmployer => 'and personal data processing';
+  @override
+  String get browseShiftsButton => 'Browse shifts without signing in';
 }

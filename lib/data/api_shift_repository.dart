@@ -7,6 +7,7 @@ import 'package:fastwork_core/review.dart';
 import 'package:fastwork_core/shift.dart';
 import 'package:fastwork_core/user.dart';
 import 'api_client.dart';
+import 'package:fastwork_core/data/guest_shifts.dart';
 import 'package:fastwork_core/data/shift_filter.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 
@@ -427,5 +428,31 @@ class ApiShiftRepository implements ShiftRepository {
   Future<void> prepareDemoHistory(int userId) async {
     // Учебную историю заводит сервер при первом запуске — клиенту тут
     // делать нечего.
+  }
+}
+
+/// Смены для гостя — с сервера, без токена.
+class ApiGuestShifts implements GuestShifts {
+  final ApiClient client;
+
+  ApiGuestShifts(this.client);
+
+  @override
+  Future<List<Shift>> upcoming(String city) async {
+    final data = await client.get('/api/public/shifts', {'city': city});
+    return (data as List<dynamic>)
+        .map((e) => shiftFromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  @override
+  Future<Shift?> shiftById(int id) async {
+    try {
+      final data = await client.get('/api/public/shifts/$id');
+      return shiftFromJson(data as Map<String, dynamic>);
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) return null;
+      rethrow;
+    }
   }
 }
