@@ -238,6 +238,22 @@ AppUser userFromJson(Map<String, dynamic> json) => AppUser(
       termsVersion: json['termsVersion'] as int? ?? 0,
     );
 
+/// Сколько людей пришло по ссылке-приглашению и сколько из них уже
+/// отработали хотя бы одну смену.
+class ReferralStats {
+  final int joined;
+  final int worked;
+
+  const ReferralStats({this.joined = 0, this.worked = 0});
+
+  Map<String, dynamic> toJson() => {'joined': joined, 'worked': worked};
+
+  static ReferralStats fromJson(Map<String, dynamic> json) => ReferralStats(
+        joined: json['joined'] as int? ?? 0,
+        worked: json['worked'] as int? ?? 0,
+      );
+}
+
 /// Исполнитель, которого заказчик уже знает: отработал у него хотя бы
 /// одну смену или отмечен любимым.
 ///

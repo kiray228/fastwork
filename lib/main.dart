@@ -44,6 +44,11 @@ Future<void> main() async {
   final preferences = await AppPreferences.open();
   appLang = preferences.language;
 
+  // Открыли по ссылке-приглашению — запомним, кто позвал: регистрация
+  // может случиться не сразу.
+  final referrer = referrerId(Uri.base);
+  if (referrer != null) await preferences.setReferrer(referrer);
+
   final session = AppSession();
   final repos = apiUrl.isEmpty
       ? await _localRepositories(session)

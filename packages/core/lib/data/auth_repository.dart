@@ -50,6 +50,7 @@ abstract class AuthRepository {
     String? email,
     String role = UserRole.worker,
     String? company,
+    int? referredBy,
   });
 
   /// Принять действующие правила — для тех, кто зарегистрировался раньше,
@@ -213,9 +214,13 @@ class DbAuthRepository implements AuthRepository {
     String? email,
     String role = UserRole.worker,
     String? company,
+    int? referredBy,
   }) async {
     requireCurrentTerms(acceptedTermsVersion);
     final now = DateTime.now();
+    // Пригласивший должен существовать: номер из ссылки мог быть
+    // выдуман или аккаунт уже удалён.
+    final inviter = referredBy == null ? null : await refresh(referredBy);
     final id = await db.into(db.userRows).insert(
           UserRowsCompanion.insert(
             phone: phone,
@@ -227,6 +232,7 @@ class DbAuthRepository implements AuthRepository {
             createdAt: now,
             termsVersion: Value(acceptedTermsVersion),
             termsAcceptedAt: Value(now),
+            referredBy: Value(inviter?.id),
           ),
         );
 
@@ -363,6 +369,7 @@ class FakeAuthRepository implements AuthRepository {
     String? email,
     String role = UserRole.worker,
     String? company,
+    int? referredBy,
   }) async {
     requireCurrentTerms(acceptedTermsVersion);
     final user = AppUser(

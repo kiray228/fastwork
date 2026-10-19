@@ -1989,6 +1989,55 @@ void main() {
     expect(await shifts.inviteToShift(shiftId: shiftId, workerId: workerId),
         BookingResult.notMine);
   });
+  test('приглашённые считаются, выдуманный пригласивший — не ошибка',
+      () async {
+    final inviter = await auth.register(
+      phone: '77030000001',
+      fullName: 'Ернар Калдыбеков',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    final friend = await auth.register(
+      phone: '77030000002',
+      fullName: 'Друг Первый',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      referredBy: inviter.id,
+    );
+    await auth.register(
+      phone: '77030000003',
+      fullName: 'Друг Второй',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      referredBy: inviter.id,
+    );
+    // Номер из ссылки мог быть выдуман — регистрация всё равно проходит.
+    final lost = await auth.register(
+      phone: '77030000004',
+      fullName: 'Без Пригласившего',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      referredBy: 999999,
+    );
+    expect(lost.id, isPositive);
+
+    session.setUser(inviter);
+    var stats = await shifts.referralStats();
+    expect((stats.joined, stats.worked), (2, 0));
+
+    // Первый друг отработал смену — теперь он «вышел на смену».
+    final (shiftId, _, _) = await workedShift();
+    await db.into(db.applicationRows).insert(ApplicationRowsCompanion.insert(
+          shiftId: shiftId,
+          workerId: friend.id,
+          status: 'completed',
+          createdAt: DateTime.now(),
+        ));
+    session.setUser(inviter);
+    stats = await shifts.referralStats();
+    expect((stats.joined, stats.worked), (2, 1));
+  });
+
   test('на смену с санкнижкой — только с проверенной и действующей',
       () async {
     final manager = await auth.register(

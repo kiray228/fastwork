@@ -121,6 +121,10 @@ class UserRows extends Table {
   /// получателя, — сам получатель в этот момент может быть офлайн.
   /// null — не знаем: пишем на языке того, кто действует.
   TextColumn get language => text().nullable()();
+
+  /// Кто пригласил: по чьей ссылке человек пришёл. null — сам.
+  /// Добавлена в 27-й версии схемы.
+  IntColumn get referredBy => integer().nullable()();
 }
 
 /// Значения МРП.
@@ -882,7 +886,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 26;
+  int get schemaVersion => 27;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1009,6 +1013,9 @@ class AppDatabase extends _$AppDatabase {
           if (from < 26) {
             await addColumnIfMissing(
                 m, shiftRows, shiftRows.needsMedicalBook);
+          }
+          if (from < 27) {
+            await addColumnIfMissing(m, userRows, userRows.referredBy);
           }
         },
         beforeOpen: (details) async {

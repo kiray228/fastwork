@@ -27,6 +27,9 @@ class AppPreferences extends ChangeNotifier {
   /// Город, который смотрел гость до входа.
   String? _guestCity;
 
+  /// Кто позвал: номер из ссылки-приглашения, до регистрации.
+  int? _referrer;
+
   /// [deviceLanguage] — язык телефона. Им говорим, пока человек не выбрал
   /// язык сам; не передали — по-русски, как в тестах.
   AppPreferences({SharedPreferences? store, String? deviceLanguage})
@@ -36,7 +39,8 @@ class AppPreferences extends ChangeNotifier {
             Lang.fromCode(store?.getString(_languageKey) ?? deviceLanguage)),
         _seenStories = {...?store?.getStringList(_seenKey)},
         _interestsHidden = store?.getBool(_interestsKey) ?? false,
-        _guestCity = store?.getString(_guestCityKey);
+        _guestCity = store?.getString(_guestCityKey),
+        _referrer = store?.getInt(_referrerKey);
 
   /// Открыть настройки с диска.
   ///
@@ -62,6 +66,7 @@ class AppPreferences extends ChangeNotifier {
   static const _seenKey = 'seen_stories';
   static const _interestsKey = 'interests_hidden';
   static const _guestCityKey = 'guest_city';
+  static const _referrerKey = 'referrer';
 
   static ThemeMode _readThemeMode(SharedPreferences? store) =>
       switch (store?.getString(_themeKey)) {
@@ -120,6 +125,15 @@ class AppPreferences extends ChangeNotifier {
   Future<void> setGuestCity(String city) async {
     _guestCity = city;
     await _store?.setString(_guestCityKey, city);
+  }
+
+  /// Кто позвал. Хранится на телефоне: друг открыл ссылку сегодня, а
+  /// зарегистрировался через три дня — приглашение не должно потеряться.
+  int? get referrer => _referrer;
+
+  Future<void> setReferrer(int userId) async {
+    _referrer = userId;
+    await _store?.setInt(_referrerKey, userId);
   }
 
   Future<void> hideInterests() async {

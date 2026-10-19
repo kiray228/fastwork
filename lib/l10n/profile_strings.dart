@@ -170,6 +170,12 @@ abstract class ProfileStrings {
   String get hiddenCompaniesTitle;
   String get hiddenCompaniesEmpty;
   String get showAgain;
+  String get inviteTitle;
+  String get inviteHint;
+  String inviteStats(int joined, int worked);
+  String get inviteCopy;
+  String get inviteCopied;
+  String inviteText(String link);
 }
 
 class _Ru extends ProfileStrings {
@@ -450,6 +456,23 @@ class _Ru extends ProfileStrings {
       'Скрыть компанию можно на её странице — её смены пропадут из ленты';
   @override
   String get showAgain => 'Показывать';
+  @override
+  String get inviteTitle => 'Позовите друзей';
+  @override
+  String get inviteHint =>
+      'Отправьте ссылку в WhatsApp или Telegram — друг сразу увидит смены, '
+      'даже без входа.';
+  @override
+  String inviteStats(int joined, int worked) =>
+      'По вашей ссылке пришли: $joined · вышли на смену: $worked';
+  @override
+  String get inviteCopy => 'Скопировать приглашение';
+  @override
+  String get inviteCopied => 'Приглашение скопировано — вставьте его в чат';
+  @override
+  String inviteText(String link) =>
+      'Нахожу подработку в fastwork: смены на день, оплата гарантирована — '
+      'заказчик платит заранее. Посмотри смены в своём городе: $link';
 }
 
 class _Kk extends ProfileStrings {
@@ -723,6 +746,24 @@ class _Kk extends ProfileStrings {
       'Компанияны оның бетінде жасыруға болады — ауысымдары лентадан жоғалады';
   @override
   String get showAgain => 'Көрсету';
+  @override
+  String get inviteTitle => 'Достарыңызды шақырыңыз';
+  @override
+  String get inviteHint =>
+      'Сілтемені WhatsApp не Telegram арқылы жіберіңіз — досыңыз '
+      'ауысымдарды бірден көреді, кірмей-ақ.';
+  @override
+  String inviteStats(int joined, int worked) =>
+      'Сілтемеңіз арқылы келгендер: $joined · ауысымға шыққандар: $worked';
+  @override
+  String get inviteCopy => 'Шақыруды көшіру';
+  @override
+  String get inviteCopied => 'Шақыру көшірілді — оны чатқа қойыңыз';
+  @override
+  String inviteText(String link) =>
+      'fastwork арқылы қосымша жұмыс табамын: бір күндік ауысымдар, төлем '
+      'кепілдендірілген — тапсырыс беруші алдын ала төлейді. Өз қалаңдағы '
+      'ауысымдарды қара: $link';
 }
 
 class _En extends ProfileStrings {
@@ -994,4 +1035,21 @@ class _En extends ProfileStrings {
       'You can hide a company on its page — its shifts will leave your feed';
   @override
   String get showAgain => 'Show';
+  @override
+  String get inviteTitle => 'Invite friends';
+  @override
+  String get inviteHint =>
+      'Send the link via WhatsApp or Telegram — your friend sees shifts '
+      'right away, even without signing in.';
+  @override
+  String inviteStats(int joined, int worked) =>
+      'Joined via your link: $joined · worked a shift: $worked';
+  @override
+  String get inviteCopy => 'Copy invitation';
+  @override
+  String get inviteCopied => 'Invitation copied — paste it into a chat';
+  @override
+  String inviteText(String link) =>
+      'I find side gigs on fastwork: one-day shifts, guaranteed pay — the '
+      'employer pays upfront. See shifts in your city: $link';
 }

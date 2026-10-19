@@ -405,6 +405,9 @@ class Api {
           // Старое приложение этого поля не шлёт — значит, правил человек
           // не видел, и аккаунт без них не создаём.
           acceptedTermsVersion: body['acceptedTermsVersion'] as int? ?? 0,
+          // По чьей ссылке пришёл. Хранилище само проверит, что такой
+          // человек есть.
+          referredBy: body['referredBy'] as int?,
         );
       } on UserError catch (e) {
         return _error(e.message);
@@ -468,6 +471,13 @@ class Api {
     router.get('/api/me/taste', (Request request) async {
       return _authorized(request, (user) async {
         return _json((await _shiftsFor(user).workerTaste()).toJson());
+      });
+    });
+
+    // Сколько людей пришло по ссылке-приглашению.
+    router.get('/api/me/referrals', (Request request) async {
+      return _authorized(request, (user) async {
+        return _json((await _shiftsFor(user).referralStats()).toJson());
       });
     });
 

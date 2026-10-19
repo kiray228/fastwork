@@ -336,6 +336,10 @@ class ApiShiftRepository implements ShiftRepository {
   }
 
   @override
+  Future<ReferralStats> referralStats() async => ReferralStats.fromJson(
+      await client.get('/api/me/referrals') as Map<String, dynamic>);
+
+  @override
   Future<List<KnownWorker>> knownWorkers() async {
     final data =
         await client.get('/api/manager/known-workers') as List<dynamic>;
