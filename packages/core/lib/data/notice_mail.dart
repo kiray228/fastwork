@@ -80,16 +80,45 @@ Future<List<NoticeEmail>> takeNoticeEmails(
   int limit = 50,
 }) async {
   final kinds = [for (final k in kEmailedKinds) k.name];
-  final rows = await db.customSelect(
-    'SELECT n.id, n.user_id, n.kind, n.title, n.body, n.shift_id, '
-    'u.email, u.language, u.email_notices, u.phone '
-    'FROM notification_rows n JOIN user_rows u ON u.id = n.user_id '
-    'WHERE n.email_state IS NULL AND n.created_at >= ? '
-    'AND n.kind IN (${List.filled(kinds.length, '?').join(', ')}) '
-    'ORDER BY n.id LIMIT ?',
+  final always = [for (final k in kAlwaysEmailed) k.name];
+  String marks(int n) => List.filled(n, '?').join(', ');
+
+  // Сначала разом помечаем то, что письмом не уйдёт никогда: устаревшее,
+  // неважное, людям без почты или с отпиской, про учебные смены. Иначе
+  // такие строки висели бы «нерешёнными» вечно, и запрос раз в минуту
+  // перебирал бы их снова и снова.
+  await db.customUpdate(
+    db.portableSql(
+      "UPDATE notification_rows SET email_state = 'skipped' "
+      'WHERE email_state IS NULL AND (created_at < ? '
+      'OR kind NOT IN (${marks(kinds.length)}) '
+      'OR user_id IN (SELECT u.id FROM user_rows u WHERE u.email IS NULL '
+      "OR u.email = '' OR u.email_notices = ? "
+      "OR u.phone LIKE 'deleted-%') "
+      // Учебные смены никто не создавал: письма о них — письма о
+      // выдуманной работе.
+      'OR shift_id IN (SELECT s.id FROM shift_rows s '
+      'WHERE s.created_by IS NULL))',
+    ),
     variables: [
       Variable.withDateTime(now.subtract(kNoticeEmailWindow)),
       for (final k in kinds) Variable.withString(k),
+      const Variable(false),
+    ],
+    updates: {db.notificationRows},
+  );
+
+  // Срочные — первыми: отмена смены не должна ждать за тысячей писем о
+  // новой смене популярной компании.
+  final rows = await db.query(
+    'SELECT n.id, n.user_id, n.kind, n.title, n.body, n.shift_id, '
+    'u.email, u.language '
+    'FROM notification_rows n JOIN user_rows u ON u.id = n.user_id '
+    'WHERE n.email_state IS NULL '
+    'ORDER BY CASE WHEN n.kind IN (${marks(always.length)}) '
+    'THEN 0 ELSE 1 END, n.id LIMIT ?',
+    variables: [
+      for (final k in always) Variable.withString(k),
       Variable.withInt(limit),
     ],
     readsFrom: {db.notificationRows, db.userRows},
@@ -104,10 +133,7 @@ Future<List<NoticeEmail>> takeNoticeEmails(
     final email = r.readNullable<String>('email');
     final kind = NotificationKind.values.byName(r.read<String>('kind'));
 
-    var send = email != null &&
-        email.isNotEmpty &&
-        r.read<bool>('email_notices') &&
-        !r.read<String>('phone').startsWith('deleted-');
+    var send = email != null && email.isNotEmpty;
     if (send && !kAlwaysEmailed.contains(kind)) {
       final count = sentToday[userId] ??= await _sentSince(db, userId, today);
       if (count >= kNoticeEmailsPerDay) send = false;
@@ -137,7 +163,7 @@ Future<List<NoticeEmail>> takeNoticeEmails(
 /// Сколько писем с пределом человек уже получил с [since].
 Future<int> _sentSince(AppDatabase db, int userId, DateTime since) async {
   final always = [for (final k in kAlwaysEmailed) k.name];
-  final row = await db.customSelect(
+  final row = await db.query(
     'SELECT COUNT(*) AS c FROM notification_rows '
     "WHERE user_id = ? AND email_state = 'sent' AND created_at >= ? "
     'AND kind NOT IN (${List.filled(always.length, '?').join(', ')})',

@@ -42,9 +42,11 @@ class ConsoleCodeSender implements CodeSender, NoticeMailer {
   // Без почты уведомления в окно сервера не печатаем целиком: их много,
   // и они заслонили бы коды входа. Одной строки хватает, чтобы видеть,
   // что письмо ушло бы.
+  // Адрес в журнал не пишем: журнал сервера читают не только те, кому
+  // положено видеть почту людей.
   @override
   Future<void> sendNotice(String email, String subject, String text) async =>
-      stdout.writeln('письмо для $email: $subject');
+      stdout.writeln('письмо-уведомление (почта не настроена): $subject');
 
   @override
   Future<void> send(String email, String code) async {

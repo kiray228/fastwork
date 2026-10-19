@@ -2108,6 +2108,35 @@ void main() {
     expect(list.single.user.phone, isEmpty,
         reason: 'согласие на приглашение — не на звонки');
 
+    // Скрыл компанию — его нет в списке, и звать его нельзя.
+    session.setUser(free);
+    await shifts.hideCompany('Magnum', hide: true);
+    session.setUser(manager);
+    expect(await shifts.availableWorkers(shiftId), isEmpty);
+    expect(await shifts.inviteToShift(shiftId: shiftId, workerId: free.id),
+        BookingResult.notMine);
+    session.setUser(free);
+    await shifts.hideCompany('Magnum', hide: false);
+    session.setUser(manager);
+
+    // Неоплаченная смена — списка нет: иначе свободных можно было бы
+    // смотреть, не платя.
+    final unpaid = await shifts.createShift(
+      workDate: day,
+      title: 'Неоплаченная',
+      company: 'Magnum',
+      address: 'г. Алматы, ул. Абая, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 3,
+      createdBy: manager.id,
+      city: 'Алматы',
+      method: PaymentMethod.kaspi,
+      phone: '87011234567',
+    );
+    expect(await shifts.availableWorkers(unpaid.shiftId!), isEmpty);
+
     // Позвать свободного можно, хотя вместе не работали.
     expect(await shifts.inviteToShift(shiftId: shiftId, workerId: free.id),
         BookingResult.ok);

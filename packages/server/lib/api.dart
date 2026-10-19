@@ -1341,7 +1341,7 @@ class Api {
     // «проверить» кто угодно и записаться на смену с продуктами.
     router.get('/api/admin/documents', (Request request) async {
       if (!_isAdmin(request)) return _error(serverTr.noAccess, status: 403);
-      final rows = await db.customSelect(
+      final rows = await db.query(
         'SELECT d.id, d.user_id, u.full_name, d.type, d.number, '
         'd.expires_at, d.created_at FROM document_rows d '
         'JOIN user_rows u ON u.id = d.user_id '
