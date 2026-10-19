@@ -342,6 +342,16 @@ class CoreEn extends CoreStrings {
             'You do not need to come.',
       );
   @override
+  Note shiftCancelledCompensated(String title, DateTime day, String amount) =>
+      (
+        title: 'Shift cancelled — you get compensation',
+        body: 'The employer cancelled “$title” on ${dayMonth(day)} too late. '
+            'You do not need to come, and $amount is already in your payouts.',
+      );
+  @override
+  String lateCancelCompensation(String title, DateTime day) =>
+      'Late cancellation compensation: “$title”, ${dayMonth(day)}';
+  @override
   Note shiftChanged(String title, DateTime day, List<String> changes) => (
         title: 'The shift has changed',
         body: '“$title”, ${dayMonth(day)}: ${changes.join(', ')}.',

@@ -343,6 +343,16 @@ class CoreRu extends CoreStrings {
             'Выходить не нужно.',
       );
   @override
+  Note shiftCancelledCompensated(String title, DateTime day, String amount) =>
+      (
+        title: 'Смена отменена — вам компенсация',
+        body: 'Заказчик отменил «$title» ${dayMonth(day)} слишком поздно. '
+            'Выходить не нужно, а $amount уже в ваших выплатах.',
+      );
+  @override
+  String lateCancelCompensation(String title, DateTime day) =>
+      'Компенсация за позднюю отмену: «$title», ${dayMonth(day)}';
+  @override
   Note shiftChanged(String title, DateTime day, List<String> changes) => (
         title: 'Смена изменилась',
         body: '«$title» ${dayMonth(day)}: ${changes.join(', ')}.',

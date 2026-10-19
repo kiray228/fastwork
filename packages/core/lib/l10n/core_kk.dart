@@ -341,6 +341,17 @@ class CoreKk extends CoreStrings {
             'болдырмады. Шығудың қажеті жоқ.',
       );
   @override
+  Note shiftCancelledCompensated(String title, DateTime day, String amount) =>
+      (
+        title: 'Ауысым болдырылмады — сізге өтемақы',
+        body: 'Тапсырыс беруші ${dayMonth(day)} «$title» ауысымын тым кеш '
+            'болдырмады. Шығудың қажеті жоқ, ал $amount төлемдеріңізге '
+            'түсті.',
+      );
+  @override
+  String lateCancelCompensation(String title, DateTime day) =>
+      'Кеш болдырмағаны үшін өтемақы: «$title», ${dayMonth(day)}';
+  @override
   Note shiftChanged(String title, DateTime day, List<String> changes) => (
         title: 'Ауысым өзгерді',
         body: '«$title», ${dayMonth(day)}: ${changes.join(', ')}.',

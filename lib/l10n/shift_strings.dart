@@ -191,6 +191,7 @@ abstract class ShiftStrings {
   String get requirementsTitle;
   String get medicalBookRequirement;
   String get bookNeedsMedicalBook;
+  String termLateCancel(int hours, String amount);
 }
 
 class _Ru extends ShiftStrings {
@@ -548,6 +549,9 @@ class _Ru extends ShiftStrings {
   String get bookNeedsMedicalBook =>
       'Для этой смены нужна проверенная санитарная книжка. '
       'Добавьте её в Профиль → Документы';
+  @override
+  String termLateCancel(int hours, String amount) =>
+      'Если заказчик отменит смену меньше чем за $hours ч — вам компенсация $amount';
 }
 
 class _Kk extends ShiftStrings {
@@ -892,6 +896,9 @@ class _Kk extends ShiftStrings {
   String get bookNeedsMedicalBook =>
       'Бұл ауысымға тексерілген санитарлық кітапша керек. '
       'Оны Профиль → Құжаттар бөліміне қосыңыз';
+  @override
+  String termLateCancel(int hours, String amount) =>
+      'Тапсырыс беруші ауысымды $hours сағаттан аз уақыт қалғанда болдырмаса — сізге $amount өтемақы';
 }
 
 class _En extends ShiftStrings {
@@ -1234,4 +1241,7 @@ class _En extends ShiftStrings {
   String get bookNeedsMedicalBook =>
       'This shift needs a verified medical book. '
       'Add it in Profile → Documents';
+  @override
+  String termLateCancel(int hours, String amount) =>
+      'If the employer cancels less than $hours h before — you get $amount';
 }

@@ -2345,13 +2345,37 @@ class DbShiftRepository implements ShiftRepository {
         status: Value(ApplicationStatus.cancelled),
       ));
 
+      // Отменил позже, чем исполнителю можно отменить запись, — каждому
+      // записавшемуся компенсация из уже внесённых денег. Начислением,
+      // как заработок: остаток, который вернётся заказчику, считается за
+      // вычетом начислений, и деньги не уйдут дважды.
+      final compensation =
+          shift.isFunded && shift.isLateCancelAt(now)
+              ? shift.lateCancelCompensation
+              : 0;
+      if (compensation > 0) {
+        for (final application in affected) {
+          await _record(
+            userId: application.workerId,
+            shiftId: shiftId,
+            kind: WalletEntryKind.earning,
+            amount: compensation,
+            title: (t) =>
+                t.lateCancelCompensation(shift.title, shift.workDate),
+          );
+        }
+      }
+
       await _refundRest(shift);
 
       for (final application in affected) {
         await _notify(
           userId: application.workerId,
           kind: NotificationKind.shiftCancelled,
-          note: (t) => t.shiftCancelled(shift.title, shift.workDate),
+          note: (t) => compensation > 0
+              ? t.shiftCancelledCompensated(
+                  shift.title, shift.workDate, formatMoney(compensation))
+              : t.shiftCancelled(shift.title, shift.workDate),
           shiftId: shiftId,
         );
       }

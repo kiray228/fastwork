@@ -260,6 +260,18 @@ class Shift {
   bool overlaps(Shift other) =>
       startsAt.isBefore(other.endsAt) && other.startsAt.isBefore(endsAt);
 
+  /// Заказчик отменяет смену позже, чем исполнителю можно отменить запись.
+  ///
+  /// Правило симметричное: исполнитель после этого срока отменить запись
+  /// не может — значит, и заказчик, отменяя позже, уже сорвал человеку
+  /// день. За это записавшимся положена компенсация.
+  bool isLateCancelAt(DateTime now) => !canCancelAt(now);
+
+  /// Компенсация каждому записавшемуся за позднюю отмену, в тиынах:
+  /// [kLateCancelPercent] процентов вознаграждения, целыми тенге.
+  int get lateCancelCompensation =>
+      totalPay * kLateCancelPercent ~/ 100 ~/ 100 * 100;
+
   /// Крайний срок отмены: за `cancelDeadlineHours` до начала смены.
   DateTime get cancelDeadline =>
       startsAt.subtract(Duration(hours: cancelDeadlineHours));
@@ -315,6 +327,15 @@ class Shift {
 
 /// Ярлыки смены. Подписи — в словаре: `coreTr.tag(tag)`.
 enum ShiftTag { night, noBreakDeduction, payoutTomorrow, fewSlots, urgent, noCancel }
+
+/// Какую долю вознаграждения получает исполнитель, если заказчик отменил
+/// смену позже срока отмены.
+///
+/// Тридцать процентов — заметно для заказчика, чтобы отменять в последний
+/// момент было невыгодно, и честно для исполнителя, который отказался
+/// ради смены от других планов. Деньги берутся из уже внесённой оплаты:
+/// заказчику возвращается остаток.
+const kLateCancelPercent = 30;
 
 /// Сколько человек можно позвать на одну смену. Больше — уже не смена,
 /// а мероприятие, и вести его стоит через поддержку.
