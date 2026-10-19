@@ -668,6 +668,10 @@ class FakeShiftRepository implements ShiftRepository {
   Future<List<AppUser>> favoriteWorkers() async =>
       [if (_favorites.contains(1)) _me()];
 
+  // Приглашённых в памяти нет: регистрация — дело другого хранилища.
+  @override
+  Future<ReferralStats> referralStats() async => const ReferralStats();
+
   // Исполнитель здесь один — «я». Знакомый, если в любимых или
   // отработал хоть одну смену.
   @override

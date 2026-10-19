@@ -77,6 +77,14 @@ void main() {
       expect(sharedShiftId(Uri.parse('https://x.kz/?shift=abc')), isNull);
     });
 
+    test('приглашение: номер пригласившего в параметре и обратно', () {
+      final link = inviteLink(7);
+      expect(link.toString(), 'https://kiray228.github.io/fastwork/?ref=7');
+      expect(referrerId(link), 7);
+      expect(referrerId(shiftLink(42)), isNull);
+      expect(referrerId(Uri.parse('https://x.kz/?ref=abc')), isNull);
+    });
+
     test('в тексте для пересылки — ссылка, если она есть', () {
       final text = shiftShareText(shift(), link: shiftLink(1));
       expect(text, contains('Записаться: https://kiray228.github.io'));

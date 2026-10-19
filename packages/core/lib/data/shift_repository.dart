@@ -301,6 +301,10 @@ abstract class ShiftRepository {
   /// отработал у него. Сначала любимые, потом — с кем больше смен.
   Future<List<KnownWorker>> knownWorkers();
 
+  /// Сколько людей пришло по моей ссылке-приглашению и сколько из них
+  /// уже отработали смену.
+  Future<ReferralStats> referralStats();
+
   /// Позвать на свою смену, которая недобирает людей, того, кого заказчик
   /// знает: любимого или отработавшего у него. Приглашение приходит
   /// уведомлением; записывается человек сам.
@@ -2084,6 +2088,28 @@ class DbShiftRepository implements ShiftRepository {
           isFavorite: r.read<int>('is_favorite') > 0,
         ),
     ];
+  }
+
+  @override
+  Future<ReferralStats> referralStats() async {
+    final row = await db.query(
+      '''
+      SELECT
+        CAST(COUNT(*) AS INTEGER) AS joined,
+        CAST(COALESCE(SUM(CASE WHEN EXISTS (
+          SELECT 1 FROM application_rows a
+          WHERE a.worker_id = u.id AND a.status = 'completed')
+        THEN 1 ELSE 0 END), 0) AS INTEGER) AS worked
+      FROM user_rows u
+      WHERE u.referred_by = ?
+      ''',
+      variables: [Variable.withInt(_workerId)],
+      readsFrom: {db.userRows, db.applicationRows},
+    ).getSingle();
+    return ReferralStats(
+      joined: row.read<int>('joined'),
+      worked: row.read<int>('worked'),
+    );
   }
 
   /// Отработал ли исполнитель хотя бы одну смену у этого заказчика.

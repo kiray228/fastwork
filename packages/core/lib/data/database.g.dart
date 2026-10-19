@@ -2004,6 +2004,17 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _referredByMeta = const VerificationMeta(
+    'referredBy',
+  );
+  @override
+  late final GeneratedColumn<int> referredBy = GeneratedColumn<int>(
+    'referred_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2019,6 +2030,7 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
     termsVersion,
     termsAcceptedAt,
     language,
+    referredBy,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2121,6 +2133,12 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
         language.isAcceptableOrUnknown(data['language']!, _languageMeta),
       );
     }
+    if (data.containsKey('referred_by')) {
+      context.handle(
+        _referredByMeta,
+        referredBy.isAcceptableOrUnknown(data['referred_by']!, _referredByMeta),
+      );
+    }
     return context;
   }
 
@@ -2182,6 +2200,10 @@ class $UserRowsTable extends UserRows with TableInfo<$UserRowsTable, UserRow> {
         DriftSqlType.string,
         data['${effectivePrefix}language'],
       ),
+      referredBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}referred_by'],
+      ),
     );
   }
 
@@ -2233,6 +2255,10 @@ class UserRow extends DataClass implements Insertable<UserRow> {
   /// получателя, — сам получатель в этот момент может быть офлайн.
   /// null — не знаем: пишем на языке того, кто действует.
   final String? language;
+
+  /// Кто пригласил: по чьей ссылке человек пришёл. null — сам.
+  /// Добавлена в 27-й версии схемы.
+  final int? referredBy;
   const UserRow({
     required this.id,
     required this.phone,
@@ -2247,6 +2273,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     required this.termsVersion,
     this.termsAcceptedAt,
     this.language,
+    this.referredBy,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2271,6 +2298,9 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     }
     if (!nullToAbsent || language != null) {
       map['language'] = Variable<String>(language);
+    }
+    if (!nullToAbsent || referredBy != null) {
+      map['referred_by'] = Variable<int>(referredBy);
     }
     return map;
   }
@@ -2298,6 +2328,9 @@ class UserRow extends DataClass implements Insertable<UserRow> {
       language: language == null && nullToAbsent
           ? const Value.absent()
           : Value(language),
+      referredBy: referredBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(referredBy),
     );
   }
 
@@ -2320,6 +2353,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
       termsVersion: serializer.fromJson<int>(json['termsVersion']),
       termsAcceptedAt: serializer.fromJson<DateTime?>(json['termsAcceptedAt']),
       language: serializer.fromJson<String?>(json['language']),
+      referredBy: serializer.fromJson<int?>(json['referredBy']),
     );
   }
   @override
@@ -2339,6 +2373,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
       'termsVersion': serializer.toJson<int>(termsVersion),
       'termsAcceptedAt': serializer.toJson<DateTime?>(termsAcceptedAt),
       'language': serializer.toJson<String?>(language),
+      'referredBy': serializer.toJson<int?>(referredBy),
     };
   }
 
@@ -2356,6 +2391,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     int? termsVersion,
     Value<DateTime?> termsAcceptedAt = const Value.absent(),
     Value<String?> language = const Value.absent(),
+    Value<int?> referredBy = const Value.absent(),
   }) => UserRow(
     id: id ?? this.id,
     phone: phone ?? this.phone,
@@ -2372,6 +2408,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
         ? termsAcceptedAt.value
         : this.termsAcceptedAt,
     language: language.present ? language.value : this.language,
+    referredBy: referredBy.present ? referredBy.value : this.referredBy,
   );
   UserRow copyWithCompanion(UserRowsCompanion data) {
     return UserRow(
@@ -2394,6 +2431,9 @@ class UserRow extends DataClass implements Insertable<UserRow> {
           ? data.termsAcceptedAt.value
           : this.termsAcceptedAt,
       language: data.language.present ? data.language.value : this.language,
+      referredBy: data.referredBy.present
+          ? data.referredBy.value
+          : this.referredBy,
     );
   }
 
@@ -2412,7 +2452,8 @@ class UserRow extends DataClass implements Insertable<UserRow> {
           ..write('createdAt: $createdAt, ')
           ..write('termsVersion: $termsVersion, ')
           ..write('termsAcceptedAt: $termsAcceptedAt, ')
-          ..write('language: $language')
+          ..write('language: $language, ')
+          ..write('referredBy: $referredBy')
           ..write(')'))
         .toString();
   }
@@ -2432,6 +2473,7 @@ class UserRow extends DataClass implements Insertable<UserRow> {
     termsVersion,
     termsAcceptedAt,
     language,
+    referredBy,
   );
   @override
   bool operator ==(Object other) =>
@@ -2449,7 +2491,8 @@ class UserRow extends DataClass implements Insertable<UserRow> {
           other.createdAt == this.createdAt &&
           other.termsVersion == this.termsVersion &&
           other.termsAcceptedAt == this.termsAcceptedAt &&
-          other.language == this.language);
+          other.language == this.language &&
+          other.referredBy == this.referredBy);
 }
 
 class UserRowsCompanion extends UpdateCompanion<UserRow> {
@@ -2466,6 +2509,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
   final Value<int> termsVersion;
   final Value<DateTime?> termsAcceptedAt;
   final Value<String?> language;
+  final Value<int?> referredBy;
   const UserRowsCompanion({
     this.id = const Value.absent(),
     this.phone = const Value.absent(),
@@ -2480,6 +2524,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     this.termsVersion = const Value.absent(),
     this.termsAcceptedAt = const Value.absent(),
     this.language = const Value.absent(),
+    this.referredBy = const Value.absent(),
   });
   UserRowsCompanion.insert({
     this.id = const Value.absent(),
@@ -2495,6 +2540,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     this.termsVersion = const Value.absent(),
     this.termsAcceptedAt = const Value.absent(),
     this.language = const Value.absent(),
+    this.referredBy = const Value.absent(),
   }) : phone = Value(phone),
        fullName = Value(fullName),
        city = Value(city),
@@ -2513,6 +2559,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     Expression<int>? termsVersion,
     Expression<DateTime>? termsAcceptedAt,
     Expression<String>? language,
+    Expression<int>? referredBy,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2528,6 +2575,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
       if (termsVersion != null) 'terms_version': termsVersion,
       if (termsAcceptedAt != null) 'terms_accepted_at': termsAcceptedAt,
       if (language != null) 'language': language,
+      if (referredBy != null) 'referred_by': referredBy,
     });
   }
 
@@ -2545,6 +2593,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     Value<int>? termsVersion,
     Value<DateTime?>? termsAcceptedAt,
     Value<String?>? language,
+    Value<int?>? referredBy,
   }) {
     return UserRowsCompanion(
       id: id ?? this.id,
@@ -2560,6 +2609,7 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
       termsVersion: termsVersion ?? this.termsVersion,
       termsAcceptedAt: termsAcceptedAt ?? this.termsAcceptedAt,
       language: language ?? this.language,
+      referredBy: referredBy ?? this.referredBy,
     );
   }
 
@@ -2605,6 +2655,9 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
     if (language.present) {
       map['language'] = Variable<String>(language.value);
     }
+    if (referredBy.present) {
+      map['referred_by'] = Variable<int>(referredBy.value);
+    }
     return map;
   }
 
@@ -2623,7 +2676,8 @@ class UserRowsCompanion extends UpdateCompanion<UserRow> {
           ..write('createdAt: $createdAt, ')
           ..write('termsVersion: $termsVersion, ')
           ..write('termsAcceptedAt: $termsAcceptedAt, ')
-          ..write('language: $language')
+          ..write('language: $language, ')
+          ..write('referredBy: $referredBy')
           ..write(')'))
         .toString();
   }
@@ -12842,6 +12896,7 @@ typedef $$UserRowsTableCreateCompanionBuilder = UserRowsCompanion Function({
   Value<int> termsVersion,
   Value<DateTime?> termsAcceptedAt,
   Value<String?> language,
+  Value<int?> referredBy,
 });
 typedef $$UserRowsTableUpdateCompanionBuilder = UserRowsCompanion Function({
   Value<int> id,
@@ -12857,6 +12912,7 @@ typedef $$UserRowsTableUpdateCompanionBuilder = UserRowsCompanion Function({
   Value<int> termsVersion,
   Value<DateTime?> termsAcceptedAt,
   Value<String?> language,
+  Value<int?> referredBy,
 });
 
 class $$UserRowsTableFilterComposer
@@ -12930,6 +12986,11 @@ class $$UserRowsTableFilterComposer
 
   ColumnFilters<String> get language => $composableBuilder(
     column: $table.language,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get referredBy => $composableBuilder(
+    column: $table.referredBy,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -13007,6 +13068,11 @@ class $$UserRowsTableOrderingComposer
     column: $table.language,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get referredBy => $composableBuilder(
+    column: $table.referredBy,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$UserRowsTableAnnotationComposer
@@ -13062,6 +13128,11 @@ class $$UserRowsTableAnnotationComposer
 
   GeneratedColumn<String> get language =>
       $composableBuilder(column: $table.language, builder: (column) => column);
+
+  GeneratedColumn<int> get referredBy => $composableBuilder(
+    column: $table.referredBy,
+    builder: (column) => column,
+  );
 }
 
 class $$UserRowsTableTableManager
@@ -13105,6 +13176,7 @@ class $$UserRowsTableTableManager
                 Value<int> termsVersion = const Value.absent(),
                 Value<DateTime?> termsAcceptedAt = const Value.absent(),
                 Value<String?> language = const Value.absent(),
+                Value<int?> referredBy = const Value.absent(),
               }) => UserRowsCompanion(
                 id: id,
                 phone: phone,
@@ -13119,6 +13191,7 @@ class $$UserRowsTableTableManager
                 termsVersion: termsVersion,
                 termsAcceptedAt: termsAcceptedAt,
                 language: language,
+                referredBy: referredBy,
               ),
           createCompanionCallback:
               ({
@@ -13135,6 +13208,7 @@ class $$UserRowsTableTableManager
                 Value<int> termsVersion = const Value.absent(),
                 Value<DateTime?> termsAcceptedAt = const Value.absent(),
                 Value<String?> language = const Value.absent(),
+                Value<int?> referredBy = const Value.absent(),
               }) => UserRowsCompanion.insert(
                 id: id,
                 phone: phone,
@@ -13149,6 +13223,7 @@ class $$UserRowsTableTableManager
                 termsVersion: termsVersion,
                 termsAcceptedAt: termsAcceptedAt,
                 language: language,
+                referredBy: referredBy,
               ),
           withReferenceMapper: (p0) => p0
               .map(

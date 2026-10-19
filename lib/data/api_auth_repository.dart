@@ -86,6 +86,7 @@ class ApiAuthRepository implements AuthRepository {
     String? email,
     String role = UserRole.worker,
     String? company,
+    int? referredBy,
   }) async {
     // Почту не передаём: сервер знает её из токена, выданного при
     // подтверждении кода. Так её нельзя подменить по дороге.
@@ -96,6 +97,7 @@ class ApiAuthRepository implements AuthRepository {
       'role': role,
       'company': company,
       'acceptedTermsVersion': acceptedTermsVersion,
+      'referredBy': referredBy,
     }) as Map<String, dynamic>;
 
     client.token = data['token'] as String;

@@ -110,6 +110,16 @@ const sharedLinksWork = bool.hasEnvironment('API_URL') &&
 Uri shiftLink(int shiftId) =>
     Uri.parse(appUrl).replace(queryParameters: {'shift': '$shiftId'});
 
+/// Ссылка-приглашение от человека: открывает приложение, а при
+/// регистрации друга запоминает, кто его позвал.
+Uri inviteLink(int userId) =>
+    Uri.parse(appUrl).replace(queryParameters: {'ref': '$userId'});
+
+/// Кто пригласил — из адреса, по которому открыли приложение. null —
+/// пришли сами.
+int? referrerId(Uri address) =>
+    int.tryParse(address.queryParameters['ref'] ?? '');
+
 /// Номер смены из адреса, по которому открыли приложение. null — открыли
 /// просто так, без ссылки на смену.
 int? sharedShiftId(Uri address) =>

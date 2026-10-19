@@ -244,6 +244,7 @@ class _RegisterPageState extends State<RegisterPage> {
           role: role,
           company: isManager ? companyController.text.trim() : null,
           acceptedTermsVersion: kTermsVersion,
+          referredBy: widget.preferences?.referrer,
         );
       } else {
         // На своём устройстве: если таким номером уже входили — пускаем,

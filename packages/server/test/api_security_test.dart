@@ -447,6 +447,25 @@ void main() {
     expect(applied['result'], 'needsMedicalBook');
   });
 
+  test('приглашённых считает только свой аккаунт', () async {
+    final (anon, _) = await call('GET', '/api/me/referrals');
+    expect(anon, 401);
+    await DbAuthRepository(db).register(
+      phone: '77000000009',
+      fullName: 'Друг Исполнителя',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      referredBy: workerId,
+    );
+    final (code, mine) =
+        await call('GET', '/api/me/referrals', token: workerToken);
+    expect(code, 200);
+    expect(mine, {'joined': 1, 'worked': 0});
+    final (_, other) =
+        await call('GET', '/api/me/referrals', token: managerToken);
+    expect(other, {'joined': 0, 'worked': 0});
+  });
+
   group('гость без входа', () {
     test('видит оплаченные смены своего города, но не чужие отклики',
         () async {

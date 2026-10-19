@@ -7,6 +7,8 @@ import 'data/repositories.dart';
 import 'data/session.dart';
 import 'documents_page.dart';
 import 'hidden_companies_page.dart';
+import 'invite_card.dart';
+import 'links.dart';
 import 'manager/favorites_page.dart';
 import 'my_reviews_page.dart';
 import 'stories/story_actions.dart';
@@ -266,6 +268,12 @@ class ProfilePage extends StatelessWidget {
           const SizedBox(height: 14),
           if (!user.isManager) ...[
             _Stats(user: user),
+            const SizedBox(height: 14),
+          ],
+          // Ссылкой есть смысл делиться, только когда смены на сервере:
+          // без него у друга своя база и ссылка ведёт в пустоту.
+          if (!user.isManager && sharedLinksWork) ...[
+            InviteFriendsCard(user: user, repository: repos.shifts),
             const SizedBox(height: 14),
           ],
           SurfaceCard(
