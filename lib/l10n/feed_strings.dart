@@ -103,6 +103,12 @@ abstract class FeedStrings {
   String get unhideCompany;
   String companyHiddenSnack(String name);
   String companyShownSnack(String name);
+  String guestTitle(String city);
+  String get guestBanner;
+  String get guestSignIn;
+  String get guestCity;
+  String get guestEmptyTitle;
+  String get guestEmptySubtitle;
 }
 
 class _Ru extends FeedStrings {
@@ -254,6 +260,22 @@ class _Ru extends FeedStrings {
   String companyHiddenSnack(String name) => 'Смен «$name» больше нет в вашей ленте';
   @override
   String companyShownSnack(String name) => 'Смены «$name» снова в ленте';
+  @override
+  String guestTitle(String city) => 'Смены · $city';
+  @override
+  String get guestBanner =>
+      'Смотреть можно уже сейчас. Вход нужен только для записи — '
+      'это займёт минуту.';
+  @override
+  String get guestSignIn => 'Войти';
+  @override
+  String get guestCity => 'Город';
+  @override
+  String get guestEmptyTitle => 'Пока смен нет';
+  @override
+  String get guestEmptySubtitle =>
+      'В этом городе на ближайшие две недели смен нет. '
+      'Посмотрите другой город или загляните позже.';
 }
 
 class _Kk extends FeedStrings {
@@ -409,6 +431,22 @@ class _Kk extends FeedStrings {
   String companyHiddenSnack(String name) => '«$name» ауысымдары енді лентаңызда жоқ';
   @override
   String companyShownSnack(String name) => '«$name» ауысымдары қайта лентада';
+  @override
+  String guestTitle(String city) => 'Ауысымдар · $city';
+  @override
+  String get guestBanner =>
+      'Қарауға қазір болады. Кіру тек жазылу үшін керек — '
+      'бір минут қана.';
+  @override
+  String get guestSignIn => 'Кіру';
+  @override
+  String get guestCity => 'Қала';
+  @override
+  String get guestEmptyTitle => 'Әзірге ауысым жоқ';
+  @override
+  String get guestEmptySubtitle =>
+      'Бұл қалада алдағы екі аптада ауысым жоқ. '
+      'Басқа қаланы қараңыз немесе кейінірек кіріңіз.';
 }
 
 class _En extends FeedStrings {
@@ -560,4 +598,20 @@ class _En extends FeedStrings {
   String companyHiddenSnack(String name) => '$name is hidden from your feed';
   @override
   String companyShownSnack(String name) => '$name is back in your feed';
+  @override
+  String guestTitle(String city) => 'Shifts · $city';
+  @override
+  String get guestBanner =>
+      'Look around now. You only need to sign in to book — '
+      'it takes a minute.';
+  @override
+  String get guestSignIn => 'Sign in';
+  @override
+  String get guestCity => 'City';
+  @override
+  String get guestEmptyTitle => 'No shifts yet';
+  @override
+  String get guestEmptySubtitle =>
+      'No shifts in this city for the next two weeks. '
+      'Try another city or check back later.';
 }

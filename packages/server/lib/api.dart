@@ -7,6 +7,7 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:fastwork_core/data/auth_repository.dart';
 import 'package:fastwork_core/data/database.dart';
 import 'package:fastwork_core/data/current_user.dart';
+import 'package:fastwork_core/data/guest_shifts.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
 import 'package:fastwork_core/data/support_repository.dart';
 import 'package:fastwork_core/category.dart';
@@ -175,6 +176,11 @@ class Api {
   /// Сессия создаётся **на каждый запрос заново**. Это важно: сервер
   /// обслуживает много людей одновременно, и одна общая сессия перепутала
   /// бы их между собой.
+  /// Смены глазами гостя: никто не вошёл, известен только город.
+  GuestShifts get _guestShifts => RepositoryGuestShifts(
+        (city) => DbShiftRepository(db, GuestCity(city), payments: payments),
+      );
+
   DbShiftRepository _shiftsFor(AppUser user) =>
       DbShiftRepository(db, StaticUser(user), payments: payments);
 
@@ -519,6 +525,25 @@ class Api {
         final updated = await DbAuthRepository(db).changeCity(user.id, city);
         return _json(updated!.toJson());
       });
+    });
+
+    // --- смены для гостя ---------------------------------------------------
+    //
+    // Без токена: посмотреть, что за смены и сколько платят, можно до
+    // регистрации. Записаться — уже только войдя.
+
+    router.get('/api/public/shifts', (Request request) async {
+      final city = request.url.queryParameters['city'] ?? '';
+      if (!kCities.contains(city)) return _error(serverTr.unknownCity);
+      final shifts = await _guestShifts.upcoming(city);
+      return _json(shifts.map((s) => s.toJson()).toList());
+    });
+
+    router.get('/api/public/shifts/<id|[0-9]+>',
+        (Request request, String id) async {
+      final shift = await _guestShifts.shiftById(int.parse(id));
+      if (shift == null) return _error(coreTr.shiftNotFound, status: 404);
+      return _json(shift.toJson());
     });
 
     // --- лента смен --------------------------------------------------------

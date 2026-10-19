@@ -24,6 +24,9 @@ class AppPreferences extends ChangeNotifier {
   /// Человек закрыл карточку «Какая работа вам интересна?».
   bool _interestsHidden;
 
+  /// Город, который смотрел гость до входа.
+  String? _guestCity;
+
   /// [deviceLanguage] — язык телефона. Им говорим, пока человек не выбрал
   /// язык сам; не передали — по-русски, как в тестах.
   AppPreferences({SharedPreferences? store, String? deviceLanguage})
@@ -32,7 +35,8 @@ class AppPreferences extends ChangeNotifier {
         _language = ValueNotifier(
             Lang.fromCode(store?.getString(_languageKey) ?? deviceLanguage)),
         _seenStories = {...?store?.getStringList(_seenKey)},
-        _interestsHidden = store?.getBool(_interestsKey) ?? false;
+        _interestsHidden = store?.getBool(_interestsKey) ?? false,
+        _guestCity = store?.getString(_guestCityKey);
 
   /// Открыть настройки с диска.
   ///
@@ -57,6 +61,7 @@ class AppPreferences extends ChangeNotifier {
   static const _languageKey = 'language';
   static const _seenKey = 'seen_stories';
   static const _interestsKey = 'interests_hidden';
+  static const _guestCityKey = 'guest_city';
 
   static ThemeMode _readThemeMode(SharedPreferences? store) =>
       switch (store?.getString(_themeKey)) {
@@ -107,6 +112,15 @@ class AppPreferences extends ChangeNotifier {
   /// Закрыта ли карточка выбора интересов в ленте. Закрыл — больше не
   /// спрашиваем: навязчивость хуже пустой подсказки.
   bool get interestsHidden => _interestsHidden;
+
+  /// Город, который гость выбрал до входа. Им же предлагаем город в
+  /// анкете: человек смотрел смены в Шымкенте — скорее всего, он оттуда.
+  String? get guestCity => _guestCity;
+
+  Future<void> setGuestCity(String city) async {
+    _guestCity = city;
+    await _store?.setString(_guestCityKey, city);
+  }
 
   Future<void> hideInterests() async {
     if (_interestsHidden) return;

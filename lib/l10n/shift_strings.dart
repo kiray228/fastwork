@@ -186,6 +186,8 @@ abstract class ShiftStrings {
   List<String> get chatQuickWorker;
   List<String> get chatQuickEmployer;
   String get cancelReasonTitle;
+  String get signInToBook;
+  String get signInToWaitlist;
 }
 
 class _Ru extends ShiftStrings {
@@ -529,6 +531,10 @@ class _Ru extends ShiftStrings {
       ];
   @override
   String get cancelReasonTitle => 'Почему отменяете? Заказчик увидит причину';
+  @override
+  String get signInToBook => 'Войти и записаться';
+  @override
+  String get signInToWaitlist => 'Мест нет · Войти и ждать места';
 }
 
 class _Kk extends ShiftStrings {
@@ -859,6 +865,10 @@ class _Kk extends ShiftStrings {
       ];
   @override
   String get cancelReasonTitle => 'Неге бас тартасыз? Тапсырыс беруші себебін көреді';
+  @override
+  String get signInToBook => 'Кіріп, жазылу';
+  @override
+  String get signInToWaitlist => 'Орын жоқ · Кіріп, орын күту';
 }
 
 class _En extends ShiftStrings {
@@ -1187,4 +1197,8 @@ class _En extends ShiftStrings {
       ];
   @override
   String get cancelReasonTitle => 'Why are you cancelling? The employer will see it';
+  @override
+  String get signInToBook => 'Sign in to book';
+  @override
+  String get signInToWaitlist => 'No spots · Sign in to wait for one';
 }

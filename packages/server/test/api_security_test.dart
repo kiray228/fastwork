@@ -414,4 +414,44 @@ void main() {
       );
     });
   });
+
+  group('гость без входа', () {
+    test('видит оплаченные смены своего города, но не чужие отклики',
+        () async {
+      final shiftId = await bookedShift();
+      // Неоплаченная смена гостю не видна — для всех, кроме заказчика,
+      // её ещё нет.
+      final (_, unpaid) = await call('POST', '/api/shifts',
+          token: managerToken,
+          body: {...shiftBody(), 'method': 'kaspi', 'phone': '87011234567'});
+
+      final (code, list) = await call('GET', '/api/public/shifts?city=%D0%90%D0%BB%D0%BC%D0%B0%D1%82%D1%8B');
+      expect(code, 200);
+      final ids = [for (final s in list as List) s['id']];
+      expect(ids, contains(shiftId));
+      expect(ids, isNot(contains(unpaid['shiftId'])));
+      final shown = list.firstWhere((s) => s['id'] == shiftId);
+      // Записанный исполнитель есть в счётчике, но не в «моём статусе».
+      expect(shown['workersHired'], 1);
+      expect(shown['myStatus'], isNull);
+
+      final (one, single) = await call('GET', '/api/public/shifts/$shiftId');
+      expect(one, 200);
+      expect(single['title'], 'Услуги грузчика');
+      final (hidden, _) =
+          await call('GET', '/api/public/shifts/${unpaid['shiftId']}');
+      expect(hidden, 404);
+    });
+
+    test('город — только из списка; в другом городе чужих смен нет',
+        () async {
+      await bookedShift();
+      final (bad, error) = await call('GET', '/api/public/shifts?city=Moscow');
+      expect(bad, 400);
+      expect(error['error'], isNotEmpty);
+      final (_, astana) = await call(
+          'GET', '/api/public/shifts?city=%D0%90%D1%81%D1%82%D0%B0%D0%BD%D0%B0');
+      expect(astana, isEmpty);
+    });
+  });
 }
