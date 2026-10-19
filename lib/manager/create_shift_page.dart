@@ -80,6 +80,20 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
   /// Правим уже существующую смену, а не заводим новую.
   bool get isEditing => widget.editing != null;
 
+  /// Адреса прошлых смен — подсказки под полем адреса.
+  List<String> addresses = const [];
+
+  /// Узнать адреса тихо: не узнали — поле просто без подсказок.
+  Future<void> _loadAddresses() async {
+    try {
+      final mine =
+          await widget.repository.shiftsCreatedBy(widget.session.workerId);
+      if (mounted) setState(() => addresses = recentAddresses(mine));
+    } catch (_) {
+      // Без подсказок адрес набирается руками, как раньше.
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -108,6 +122,7 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
     start = _asTime(shift?.startMinutes ?? 600);
     end = _asTime(shift?.endMinutes ?? 1320);
     category = shift?.category;
+    _loadAddresses();
   }
 
   static TimeOfDay _asTime(int minutes) =>
@@ -418,6 +433,31 @@ class _CreateShiftPageState extends State<CreateShiftPage> {
                   hint: tr.manager.addressHint,
                   onChanged: (_) => setState(() => error = null),
                 ),
+                // Где уже были смены — одним касанием, без опечаток.
+                if (addresses.any(
+                    (a) => a != addressController.text.trim())) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final a in addresses)
+                        if (a != addressController.text.trim())
+                          ActionChip(
+                            avatar: const Icon(Icons.place_outlined, size: 16),
+                            label: Text(
+                              a,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            tooltip: tr.manager.useAddress,
+                            onPressed: () => setState(() {
+                              addressController.text = a;
+                              error = null;
+                            }),
+                          ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

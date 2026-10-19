@@ -417,6 +417,26 @@ enum CancelReason {
   return (ahead: ahead, past: past);
 }
 
+/// Адреса, где заказчик уже выставлял смены, — свежие первыми.
+///
+/// У сети магазинов или склада точек немного, и набирать один и тот же
+/// адрес на каждую смену — лишняя работа и лишние опечатки: «пр. Абая,
+/// 109» и «Абая 109» для исполнителя — уже два разных места. Одинаковые
+/// с точностью до пробелов и регистра считаем одним адресом.
+List<String> recentAddresses(Iterable<Shift> shifts, {int limit = 6}) {
+  final sorted = [...shifts]..sort((a, b) => b.startsAt.compareTo(a.startsAt));
+  final seen = <String>{};
+  final result = <String>[];
+  for (final s in sorted) {
+    final address = s.address.trim();
+    final key = address.toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    if (address.isEmpty || !seen.add(key)) continue;
+    result.add(address);
+    if (result.length == limit) break;
+  }
+  return result;
+}
+
 /// Один ли это день? Время суток нас не интересует, только дата.
 bool isSameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
@@ -570,7 +590,7 @@ List<Shift> buildDemoShifts() {
       title: 'Услуги грузчика (ночная смена)',
       category: 'loader',
       company: 'Заммлер Казахстан',
-      address: 'г. Шымкент, Орманшы ж/м, Енбекшинский район',
+      address: 'г. Алматы, мкр. Алатау, ул. Ибрагимова, 9',
       startMinutes: 1080, // 18:00
       endMinutes: 360, // 06:00 следующего дня
       hourlyRate: 110000,
@@ -607,7 +627,7 @@ List<Shift> buildDemoShifts() {
       title: 'Услуги промоутера',
       category: 'promoter',
       company: 'Sinsay',
-      address: 'г. Шымкент, ТРЦ Mega Planet',
+      address: 'г. Алматы, ТРЦ Mega Alma-Ata, ул. Розыбакиева, 247а',
       startMinutes: 660, // 11:00
       endMinutes: 1140, // 19:00
       hourlyRate: 80000, // 800 ₸

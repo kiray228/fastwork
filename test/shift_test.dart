@@ -182,4 +182,34 @@ void main() {
         reason: 'сегодняшняя — первой, отменённая — не впереди');
     expect(split.past.map((s) => s.id), [4, 5, 3]);
   });
+
+  test('адреса прошлых смен: свежие первыми, без повторов и пустых', () {
+    Shift at(int day, String address) => Shift(
+          id: day,
+          workDate: DateTime(2026, 9, day),
+          title: 'тест',
+          company: 'тест',
+          address: address,
+          startMinutes: 600,
+          endMinutes: 1260,
+          hourlyRate: 110000,
+          workersNeeded: 1,
+          workersHired: 0,
+        );
+    expect(
+      recentAddresses([
+        at(1, 'ул. Абая, 1'),
+        at(5, 'пр. Достык, 5'),
+        at(3, '  УЛ.  Абая, 1 '),
+        at(4, ' '),
+        at(2, 'ул. Сатпаева, 2'),
+      ]),
+      ['пр. Достык, 5', 'УЛ.  Абая, 1', 'ул. Сатпаева, 2'],
+    );
+    expect(
+      recentAddresses([for (var d = 1; d <= 9; d++) at(d, 'дом $d')],
+          limit: 3),
+      ['дом 9', 'дом 8', 'дом 7'],
+    );
+  });
 }
