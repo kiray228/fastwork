@@ -1578,12 +1578,15 @@ class DbShiftRepository implements ShiftRepository {
         AND u.phone NOT LIKE 'deleted-%'
         AND NOT EXISTS (SELECT 1 FROM favorite_rows fav
           WHERE fav.employer_id = ? AND fav.worker_id = u.id)
+        AND NOT EXISTS (SELECT 1 FROM hidden_company_rows hc
+          WHERE hc.user_id = u.id AND hc.company = ?)
       ''',
       variables: [
         Variable.withDateTime(day),
         Variable.withDateTime(day),
         Variable.withString(shift.city),
         Variable.withInt(shift.createdBy ?? 0),
+        Variable.withString(shift.company),
       ],
       readsFrom: {
         db.availabilityRows,
@@ -2254,13 +2257,17 @@ class DbShiftRepository implements ShiftRepository {
     final rows = await db.query(
       'SELECT 1 FROM availability_rows av '
       'JOIN user_rows u ON u.id = av.user_id '
-      'WHERE av.user_id = ? AND av.day = ? AND u.city = ? LIMIT 1',
+      'WHERE av.user_id = ? AND av.day = ? AND u.city = ? '
+      // Скрыл компанию — значит, её приглашения ему не нужны.
+      'AND NOT EXISTS (SELECT 1 FROM hidden_company_rows hc '
+      'WHERE hc.user_id = u.id AND hc.company = ?) LIMIT 1',
       variables: [
         Variable.withInt(workerId),
         Variable.withDateTime(_dayOf(shift.workDate)),
         Variable.withString(shift.city),
+        Variable.withString(shift.company),
       ],
-      readsFrom: {db.availabilityRows, db.userRows},
+      readsFrom: {db.availabilityRows, db.userRows, db.hiddenCompanyRows},
     ).get();
     return rows.isNotEmpty;
   }
@@ -2308,6 +2315,21 @@ class DbShiftRepository implements ShiftRepository {
   Future<List<KnownWorker>> availableWorkers(int shiftId) async {
     final mine = await _myShiftOr(shiftId);
     if (mine is! Shift) return const [];
+    // Список — для смены, на которую ещё можно позвать. Иначе заказчик
+    // мог бы, не платя, заводить смены на любые дни и смотреть, кто когда
+    // свободен.
+    if (mine.awaitingPayment ||
+        mine.isCancelled ||
+        mine.hasStartedAt(clock())) {
+      return const [];
+    }
+    return _freeFor(mine);
+  }
+
+  /// Кто свободен в день смены, живёт в её городе, не записан, не скрыл
+  /// компанию и подходит по рейтингу и санкнижке. Одно правило и для
+  /// списка заказчику, и для числа в предупреждении о недоборе.
+  Future<List<KnownWorker>> _freeFor(Shift mine) async {
     final rows = await db.query(
       '''
       SELECT u.*,
@@ -2329,19 +2351,23 @@ class DbShiftRepository implements ShiftRepository {
         AND NOT EXISTS (SELECT 1 FROM application_rows a
           WHERE a.shift_id = ? AND a.worker_id = u.id
             AND a.status IN ('active', 'completed'))
+        AND NOT EXISTS (SELECT 1 FROM hidden_company_rows hc
+          WHERE hc.user_id = u.id AND hc.company = ?)
       ORDER BY live_rating DESC, done_count DESC, u.full_name
       LIMIT 50
       ''',
       variables: [
         Variable.withDateTime(_dayOf(mine.workDate)),
         Variable.withString(mine.city),
-        Variable.withInt(shiftId),
+        Variable.withInt(mine.id),
+        Variable.withString(mine.company),
       ],
       readsFrom: {
         db.availabilityRows,
         db.userRows,
         db.applicationRows,
         db.workerReviewRows,
+        db.hiddenCompanyRows,
       },
     ).get();
 
@@ -3845,14 +3871,7 @@ class DbShiftRepository implements ShiftRepository {
     final rows = await db.query(
       '''
       SELECT s.id, s.title, s.work_date, s.start_minutes, s.city,
-             s.created_by, s.workers_needed, $_hiredSql,
-        CAST((SELECT COUNT(*) FROM availability_rows av
-          JOIN user_rows u ON u.id = av.user_id
-          WHERE av.day = s.work_date AND u.city = s.city
-            AND u.role = 'worker' AND u.phone NOT LIKE 'deleted-%'
-            AND NOT EXISTS (SELECT 1 FROM application_rows ap
-              WHERE ap.shift_id = s.id AND ap.worker_id = u.id
-                AND ap.status = 'active')) AS INTEGER) AS free_people
+             s.created_by, s.workers_needed, $_hiredSql
       FROM shift_rows s
       WHERE s.cancelled_at IS NULL AND s.created_by IS NOT NULL
         AND s.work_date >= ? AND s.work_date < ? AND $_publishedSql
@@ -3882,7 +3901,11 @@ class DbShiftRepository implements ShiftRepository {
       if (starts.difference(now) > const Duration(hours: 24)) continue;
       final missing = r.read<int>('workers_needed') - r.read<int>('hired');
       if (missing <= 0) continue;
-      final free = r.read<int>('free_people');
+      // Свободных считаем тем же правилом, что и список «Свободны в этот
+      // день»: иначе уведомление обещало бы пятерых, а в списке был бы
+      // один.
+      final shift = await _loadShift(r.read<int>('id'));
+      final free = shift == null ? 0 : (await _freeFor(shift)).length;
       final title = r.read<String>('title');
       final start = r.read<int>('start_minutes');
       await _notify(

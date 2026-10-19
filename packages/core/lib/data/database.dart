@@ -896,6 +896,7 @@ class AppDatabase extends _$AppDatabase {
     const indexes = {
       'idx_notifications_user': 'notification_rows (user_id, read_at)',
       'idx_availability_day': 'availability_rows (day, user_id)',
+      'idx_notifications_email': 'notification_rows (email_state, created_at)',
       'idx_applications_worker': 'application_rows (worker_id, status)',
       'idx_shifts_city_date': 'shift_rows (city, work_date)',
       'idx_shifts_created_by': 'shift_rows (created_by)',

@@ -44,11 +44,12 @@ void main() {
         ago: const Duration(hours: 7)); // устарело
 
     final mails = await takeNoticeEmails(db, now: now);
+    // Срочное — первым, остальные — в пределе.
     expect(mails.map((m) => m.title), [
-      'Заголовок invited',
-      'Заголовок invited',
-      'Заголовок invited',
       'Заголовок shiftCancelled',
+      'Заголовок invited',
+      'Заголовок invited',
+      'Заголовок invited',
     ]);
     expect(mails.first.email, 'a@x.kz');
     expect(mails.first.shiftId, 7);
@@ -64,6 +65,29 @@ void main() {
           ..where((n) => n.emailState.isNull() & n.kind.equals('slotFreed')))
         .write(NotificationRowsCompanion(createdAt: Value(tomorrow)));
     expect(await takeNoticeEmails(db, now: tomorrow), hasLength(1));
+  });
+
+  test('про учебные смены писем нет', () async {
+    final a = await user('5', email: 'a@x.kz');
+    final demo = await db.into(db.shiftRows).insert(ShiftRowsCompanion.insert(
+          workDate: now,
+          title: 'Учебная',
+          company: 'Magnum',
+          address: 'ул. Абая, 1',
+          startMinutes: 600,
+          endMinutes: 1200,
+          hourlyRate: 100000,
+          workersNeeded: 2,
+        ));
+    await db.into(db.notificationRows).insert(NotificationRowsCompanion.insert(
+          userId: a,
+          kind: NotificationKind.reminder.name,
+          title: 'Смена завтра',
+          body: 'Текст',
+          shiftId: Value(demo),
+          createdAt: now,
+        ));
+    expect(await takeNoticeEmails(db, now: now), isEmpty);
   });
 
   test('без почты, с отпиской или удалённым — не пишем', () async {

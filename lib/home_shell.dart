@@ -83,15 +83,40 @@ class _HomeShellState extends State<HomeShell>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         widget.onShiftOpened?.call();
-        Navigator.of(context).push(
-          appRoute(ShiftDetailPage(
-            shiftId: shared,
-            repository: widget.repos.shifts,
-            session: widget.session,
-          )),
-        );
+        _openShared(shared);
       });
     }
+  }
+
+  /// Открыть смену из ссылки. Заказчику его собственная смена — списком
+  /// записавшихся: туда ведут письма «записался», «снял запись», «не
+  /// хватает людей», и экран смены глазами исполнителя ему ни к чему.
+  Future<void> _openShared(int shiftId) async {
+    final user = widget.session.user;
+    if (user != null && user.isManager) {
+      try {
+        final shift = await widget.repos.shifts.shiftById(shiftId);
+        if (!mounted) return;
+        if (shift != null && shift.createdBy == user.id) {
+          await Navigator.of(context).push(appRoute(ApplicantsPage(
+            shift: shift,
+            repository: widget.repos.shifts,
+            session: widget.session,
+          )));
+          return;
+        }
+      } catch (_) {
+        // Не узнали — откроем обычный экран смены, он сам покажет ошибку.
+      }
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      appRoute(ShiftDetailPage(
+        shiftId: shiftId,
+        repository: widget.repos.shifts,
+        session: widget.session,
+      )),
+    );
   }
 
   /// Завести учебную историю и сразу перечитать человека: иначе профиль
