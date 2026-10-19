@@ -238,6 +238,30 @@ AppUser userFromJson(Map<String, dynamic> json) => AppUser(
       termsVersion: json['termsVersion'] as int? ?? 0,
     );
 
+/// Исполнитель, которого заказчик уже знает: отработал у него хотя бы
+/// одну смену или отмечен любимым.
+///
+/// В [user] `completedShifts` и `noShows` — только у этого заказчика:
+/// звать человека решают по общей истории, а не по чужим сменам.
+class KnownWorker {
+  final AppUser user;
+  final bool isFavorite;
+
+  const KnownWorker({required this.user, required this.isFavorite});
+}
+
+extension KnownWorkerJson on KnownWorker {
+  Map<String, dynamic> toJson() => {
+        'user': user.toJson(),
+        'isFavorite': isFavorite,
+      };
+}
+
+KnownWorker knownWorkerFromJson(Map<String, dynamic> json) => KnownWorker(
+      user: userFromJson(json['user'] as Map<String, dynamic>),
+      isFavorite: json['isFavorite'] as bool? ?? false,
+    );
+
 extension ShiftApplicantJson on ShiftApplicant {
   Map<String, dynamic> toJson() => {
         'user': user.toJson(),

@@ -660,6 +660,18 @@ class FakeShiftRepository implements ShiftRepository {
   Future<List<AppUser>> favoriteWorkers() async =>
       [if (_favorites.contains(1)) _me()];
 
+  // Исполнитель здесь один — «я». Знакомый, если в любимых или
+  // отработал хоть одну смену.
+  @override
+  Future<List<KnownWorker>> knownWorkers() async {
+    final worked =
+        _myStatuses.values.any((s) => s == ApplicationStatus.completed);
+    final favorite = _favorites.contains(1);
+    return [
+      if (worked || favorite) KnownWorker(user: _me(), isFavorite: favorite),
+    ];
+  }
+
   /// Оценки исполнителей, поставленные заказчиком.
   final List<WorkerReview> _workerReviews = [];
   final Set<String> _rated = {}; // 'shiftId:workerId'

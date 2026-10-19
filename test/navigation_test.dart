@@ -1306,6 +1306,48 @@ void main() {
       expect(find.text('Засчитано: 3 чел.'), findsOneWidget);
     });
 
+    testWidgets('на недобирающую смену зовут знакомых — кроме записанных',
+        (tester) async {
+      final now = DateTime.now();
+      final repo = _KnownWorkersRepository(Shift(
+        id: 1,
+        workDate: DateTime(now.year, now.month, now.day + 1),
+        title: 'Услуги фасовщика',
+        company: 'Magnum',
+        address: 'г. Алматы, ул. Абая, 1',
+        startMinutes: 600,
+        endMinutes: 1260,
+        hourlyRate: 100000,
+        workersNeeded: 5,
+        workersHired: 1,
+        createdBy: 1,
+      ));
+      await openApp(
+        tester,
+        role: UserRole.manager,
+        repos: buildRepos(
+          shifts: repo,
+          signedIn: testUser(role: UserRole.manager),
+        ),
+      );
+
+      await tester.tap(find.text('Услуги фасовщика'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Позвать знакомых'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Кого позвать на смену'), findsOneWidget);
+      expect(find.text('Исполнитель 21'), findsOneWidget);
+      expect(find.textContaining('невыходов: 1'), findsOneWidget);
+      // Уже записанного в списке нет — он только на экране под окном.
+      expect(find.text('Исполнитель 11'), findsOneWidget);
+
+      await tester.tap(find.text('Позвать').first);
+      await tester.pumpAndSettle();
+      expect(repo.invitations, [(1, 21)]);
+      expect(find.text('Позвали'), findsOneWidget);
+    });
+
     testWidgets('над списком — сводка дня, неотметившийся помечен',
         (tester) async {
       final now = DateTime.now();
@@ -2238,6 +2280,33 @@ extension on AppRepositories {
 ///
 /// В обычном хранилище в памяти один человек на всё — а здесь нужна
 /// толпа, поэтому список записавшихся подставляем сами.
+/// Смена на завтра: один записан, ещё двое знакомых заказчику.
+class _KnownWorkersRepository extends FakeShiftRepository {
+  _KnownWorkersRepository(Shift shift) : super(shifts: [shift]);
+
+  AppUser _person(int id, {int noShows = 0}) => AppUser(
+        id: id,
+        phone: '7700000000$id',
+        fullName: 'Исполнитель $id',
+        city: 'Алматы',
+        rating: 4.5,
+        completedShifts: 2,
+        noShows: noShows,
+        isVerified: false,
+      );
+
+  @override
+  Future<List<ShiftApplicant>> applicantsFor(int shiftId) async =>
+      [ShiftApplicant(user: _person(11), status: 'active', checkedInAt: null)];
+
+  @override
+  Future<List<KnownWorker>> knownWorkers() async => [
+        KnownWorker(user: _person(21), isFavorite: true),
+        KnownWorker(user: _person(11), isFavorite: false),
+        KnownWorker(user: _person(22, noShows: 1), isFavorite: false),
+      ];
+}
+
 class _CrowdShiftRepository extends FakeShiftRepository {
   final List<int> confirmed = [];
 

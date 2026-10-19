@@ -295,8 +295,13 @@ abstract class ShiftRepository {
   /// им приходит приглашение.
   Future<List<AppUser>> favoriteWorkers();
 
-  /// Позвать любимого исполнителя на свою смену, которая недобирает
-  /// людей. Приглашение приходит уведомлением; записывается он сам.
+  /// Кого заказчик может позвать на смену: любимые и все, кто уже
+  /// отработал у него. Сначала любимые, потом — с кем больше смен.
+  Future<List<KnownWorker>> knownWorkers();
+
+  /// Позвать на свою смену, которая недобирает людей, того, кого заказчик
+  /// знает: любимого или отработавшего у него. Приглашение приходит
+  /// уведомлением; записывается человек сам.
   Future<BookingResult> inviteToShift({
     required int shiftId,
     required int workerId,
@@ -1994,6 +1999,78 @@ class DbShiftRepository implements ShiftRepository {
         .toList();
   }
 
+  @override
+  Future<List<KnownWorker>> knownWorkers() async {
+    final rows = await db.query(
+      '''
+      SELECT u.*,
+             CAST(COALESCE(
+               (SELECT AVG(w.rating) FROM worker_review_rows w
+                 WHERE w.worker_id = u.id),
+               u.rating
+             ) AS DOUBLE PRECISION) AS live_rating,
+             CAST((SELECT COUNT(*) FROM application_rows d
+               JOIN shift_rows ds ON ds.id = d.shift_id
+               WHERE d.worker_id = u.id AND d.status = 'completed'
+                 AND ds.created_by = ?) AS INTEGER) AS together_count,
+             CAST((SELECT COUNT(*) FROM application_rows m
+               JOIN shift_rows ms ON ms.id = m.shift_id
+               WHERE m.worker_id = u.id AND m.status = 'no_show'
+                 AND ms.created_by = ?) AS INTEGER) AS missed_count,
+             CASE WHEN EXISTS (SELECT 1 FROM favorite_rows f
+               WHERE f.employer_id = ? AND f.worker_id = u.id)
+               THEN 1 ELSE 0 END AS is_favorite
+      FROM user_rows u
+      WHERE u.id IN (SELECT f2.worker_id FROM favorite_rows f2
+                      WHERE f2.employer_id = ?)
+         OR u.id IN (SELECT a.worker_id FROM application_rows a
+                      JOIN shift_rows s ON s.id = a.shift_id
+                      WHERE s.created_by = ? AND a.status = 'completed')
+      ORDER BY is_favorite DESC, together_count DESC, u.full_name
+      LIMIT 100
+      ''',
+      variables: [for (var i = 0; i < 5; i++) Variable.withInt(_workerId)],
+      readsFrom: {
+        db.favoriteRows,
+        db.userRows,
+        db.applicationRows,
+        db.shiftRows,
+        db.workerReviewRows,
+      },
+    ).get();
+
+    return [
+      for (final r in rows)
+        KnownWorker(
+          user: AppUser(
+            id: r.read<int>('id'),
+            phone: r.read<String>('phone'),
+            fullName: r.read<String>('full_name'),
+            city: r.read<String>('city'),
+            rating: r.read<double>('live_rating'),
+            isVerified: r.read<bool>('is_verified'),
+            role: r.read<String>('role'),
+            completedShifts: r.read<int>('together_count'),
+            noShows: r.read<int>('missed_count'),
+          ),
+          isFavorite: r.read<int>('is_favorite') > 0,
+        ),
+    ];
+  }
+
+  /// Отработал ли исполнитель хотя бы одну смену у этого заказчика.
+  Future<bool> _workedFor(int employerId, int workerId) async {
+    final rows = await db.query(
+      'SELECT 1 FROM application_rows a '
+      'JOIN shift_rows s ON s.id = a.shift_id '
+      "WHERE s.created_by = ? AND a.worker_id = ? AND a.status = 'completed' "
+      'LIMIT 1',
+      variables: [Variable.withInt(employerId), Variable.withInt(workerId)],
+      readsFrom: {db.applicationRows, db.shiftRows},
+    ).get();
+    return rows.isNotEmpty;
+  }
+
   /// Позвать любимых исполнителей на только что опубликованную смену.
   ///
   /// Только тех, кто живёт в городе смены: приглашение в другой город
@@ -3214,13 +3291,16 @@ class DbShiftRepository implements ShiftRepository {
     if (shift.awaitingPayment) return BookingResult.awaitingPayment;
     if (!shift.hasFreeSlots) return BookingResult.noSlots;
 
-    // Только любимых: приглашение — знак доверия, а не рассылка всем
-    // подряд. Иначе заказчик мог бы слать уведомления кому угодно.
+    // Только знакомых: любимых и тех, кто уже отработал у заказчика.
+    // Приглашение — продолжение общей истории, а не рассылка всем
+    // подряд: иначе заказчик мог бы слать уведомления кому угодно.
     final favorite = await (db.select(db.favoriteRows)
           ..where((f) =>
               f.employerId.equals(_workerId) & f.workerId.equals(workerId)))
         .getSingleOrNull();
-    if (favorite == null) return BookingResult.notMine;
+    if (favorite == null && !await _workedFor(_workerId, workerId)) {
+      return BookingResult.notMine;
+    }
 
     final status = await _statusOf(shiftId, workerId);
     if (status == ApplicationStatus.active ||

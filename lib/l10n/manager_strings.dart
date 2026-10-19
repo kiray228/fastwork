@@ -208,6 +208,14 @@ abstract class ManagerStrings {
   String get daySummaryMissing;
   String get copyApplicants;
   String get applicantsCopied;
+  String get inviteKnownButton;
+  String get inviteKnownTitle;
+  String get inviteKnownHint;
+  String get inviteKnownEmpty;
+  String get inviteKnownAction;
+  String get inviteKnownDone;
+  String knownWorkerStats(String rating, String shifts);
+  String knownWorkerMissed(int count);
 }
 
 class _Ru extends ManagerStrings {
@@ -590,6 +598,27 @@ class _Ru extends ManagerStrings {
   @override
   String get applicantsCopied =>
       'Список скопирован — можно передать охране или в рабочий чат';
+  @override
+  String get inviteKnownButton => 'Позвать знакомых';
+  @override
+  String get inviteKnownTitle => 'Кого позвать на смену';
+  @override
+  String get inviteKnownHint =>
+      'Любимые и все, кто уже отработал у вас. Им придёт уведомление, '
+      'записываются они сами.';
+  @override
+  String get inviteKnownEmpty =>
+      'Пока некого позвать: здесь появятся те, кто отработает у вас '
+      'хотя бы одну смену.';
+  @override
+  String get inviteKnownAction => 'Позвать';
+  @override
+  String get inviteKnownDone => 'Позвали';
+  @override
+  String knownWorkerStats(String rating, String shifts) =>
+      '★ $rating · $shifts у вас';
+  @override
+  String knownWorkerMissed(int count) => 'невыходов: $count';
 }
 
 class _Kk extends ManagerStrings {
@@ -979,6 +1008,27 @@ class _Kk extends ManagerStrings {
   @override
   String get applicantsCopied =>
       'Тізім көшірілді — күзетке немесе жұмыс чатына беруге болады';
+  @override
+  String get inviteKnownButton => 'Таныстарды шақыру';
+  @override
+  String get inviteKnownTitle => 'Ауысымға кімді шақырамыз';
+  @override
+  String get inviteKnownHint =>
+      'Таңдаулылар және сізде жұмыс істеп көргендердің бәрі. Оларға '
+      'хабарлама келеді, өздері жазылады.';
+  @override
+  String get inviteKnownEmpty =>
+      'Әзірге шақыратын адам жоқ: мұнда сізде кемінде бір ауысым '
+      'істегендер шығады.';
+  @override
+  String get inviteKnownAction => 'Шақыру';
+  @override
+  String get inviteKnownDone => 'Шақырылды';
+  @override
+  String knownWorkerStats(String rating, String shifts) =>
+      '★ $rating · сізде $shifts';
+  @override
+  String knownWorkerMissed(int count) => 'келмеді: $count';
 }
 
 class _En extends ManagerStrings {
@@ -1362,4 +1412,25 @@ class _En extends ManagerStrings {
   @override
   String get applicantsCopied =>
       'List copied — share it with security or a work chat';
+  @override
+  String get inviteKnownButton => 'Invite people you know';
+  @override
+  String get inviteKnownTitle => 'Who to invite';
+  @override
+  String get inviteKnownHint =>
+      'Your favourites and everyone who has worked for you. They get a '
+      'notification and book themselves.';
+  @override
+  String get inviteKnownEmpty =>
+      'Nobody to invite yet: people appear here after working at least '
+      'one shift for you.';
+  @override
+  String get inviteKnownAction => 'Invite';
+  @override
+  String get inviteKnownDone => 'Invited';
+  @override
+  String knownWorkerStats(String rating, String shifts) =>
+      '★ $rating · $shifts with you';
+  @override
+  String knownWorkerMissed(int count) => 'no-shows: $count';
 }

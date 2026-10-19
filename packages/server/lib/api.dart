@@ -1049,6 +1049,17 @@ class Api {
       });
     });
 
+    // Кого заказчик может позвать на смену: любимые и отработавшие у него.
+    router.get('/api/manager/known-workers', (Request request) async {
+      return _authorized(request, (user) async {
+        if (!user.isManager) {
+          return _error(serverTr.employersOnly, status: 403);
+        }
+        final people = await _shiftsFor(user).knownWorkers();
+        return _json(people.map((p) => p.toJson()).toList());
+      });
+    });
+
     router.post('/api/favorites/<id|[0-9]+>',
         (Request request, String id) async {
       return _authorized(request, (user) async {
