@@ -135,6 +135,8 @@ abstract class CoreStrings {
 
   String get termsNotAccepted;
   String get documentNotFound;
+  String get unknownDocumentType;
+  String get documentNeedsExpiry;
   String get ticketNotFound;
   String withdrawMin(String amount);
   String get withdrawOverBalance;
@@ -209,12 +211,13 @@ abstract class CoreStrings {
 
   /// Правка смены сняла запись: новое время налезло на другую смену
   /// человека или доход за месяц перевалил бы за 300 МРП. Исполнителю.
+  /// [medicalBook] — к новой дате у человека не действует санкнижка.
   Note releasedByEdit(String title, DateTime day, List<String> changes,
-      {required bool overLimit});
+      {required bool overLimit, bool medicalBook});
 
   /// То же — заказчику: кого сняли и почему.
   Note workerReleased(String name, String title, DateTime day,
-      {required bool overLimit});
+      {required bool overLimit, bool medicalBook});
   String changedDay(DateTime day);
   String changedTime(String time);
   String changedRate(String rate);

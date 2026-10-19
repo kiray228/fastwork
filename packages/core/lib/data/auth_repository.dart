@@ -220,7 +220,9 @@ class DbAuthRepository implements AuthRepository {
     final now = DateTime.now();
     // Пригласивший должен существовать: номер из ссылки мог быть
     // выдуман или аккаунт уже удалён.
-    final inviter = referredBy == null ? null : await refresh(referredBy);
+    final found = referredBy == null ? null : await refresh(referredBy);
+    final inviter =
+        found == null || found.phone.startsWith('deleted-') ? null : found;
     final id = await db.into(db.userRows).insert(
           UserRowsCompanion.insert(
             phone: phone,

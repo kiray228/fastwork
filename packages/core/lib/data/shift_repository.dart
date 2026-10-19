@@ -770,7 +770,7 @@ class DbShiftRepository implements ShiftRepository {
         return BookingResult.ratingTooLow;
       }
       if (shift.needsMedicalBook &&
-          !await _hasMedicalBook(_workerId, shift.workDate)) {
+          !await _hasMedicalBook(_workerId, shift)) {
         return BookingResult.needsMedicalBook;
       }
       if (!shift.hasFreeSlots) return BookingResult.noSlots;
@@ -2015,9 +2015,16 @@ class DbShiftRepository implements ShiftRepository {
   }
 
   /// Есть ли у человека проверенная санитарная книжка, которая действует
-  /// в день смены. На проверке или отклонённая не считается: заказчик
+  /// всю смену. На проверке или отклонённая не считается: заказчик
   /// отвечает перед санэпидемстанцией, а не перед обещанием.
-  Future<bool> _hasMedicalBook(int workerId, DateTime day) async {
+  ///
+  /// «Всю смену» — по дню её конца: ночная смена с 22:00 до 06:00
+  /// кончается назавтра, и книжка, истекающая в день начала, к утру уже
+  /// не действует.
+  Future<bool> _hasMedicalBook(int workerId, Shift shift) async {
+    // Минуту назад от конца: смена до 24:00 кончается в тот же день.
+    final end = shift.endsAt.subtract(const Duration(minutes: 1));
+    final day = DateTime(end.year, end.month, end.day);
     final rows = await (db.select(db.documentRows)
           ..where((d) =>
               d.userId.equals(workerId) &
@@ -2053,11 +2060,13 @@ class DbShiftRepository implements ShiftRepository {
                WHERE f.employer_id = ? AND f.worker_id = u.id)
                THEN 1 ELSE 0 END AS is_favorite
       FROM user_rows u
-      WHERE u.id IN (SELECT f2.worker_id FROM favorite_rows f2
-                      WHERE f2.employer_id = ?)
-         OR u.id IN (SELECT a.worker_id FROM application_rows a
-                      JOIN shift_rows s ON s.id = a.shift_id
-                      WHERE s.created_by = ? AND a.status = 'completed')
+      WHERE (u.id IN (SELECT f2.worker_id FROM favorite_rows f2
+                       WHERE f2.employer_id = ?)
+          OR u.id IN (SELECT a.worker_id FROM application_rows a
+                       JOIN shift_rows s ON s.id = a.shift_id
+                       WHERE s.created_by = ? AND a.status = 'completed'))
+        -- Удалённый аккаунт позвать некуда: уведомление никто не прочтёт.
+        AND u.phone NOT LIKE 'deleted-%'
       ORDER BY is_favorite DESC, together_count DESC, u.full_name
       LIMIT 100
       ''',
@@ -2101,7 +2110,7 @@ class DbShiftRepository implements ShiftRepository {
           WHERE a.worker_id = u.id AND a.status = 'completed')
         THEN 1 ELSE 0 END), 0) AS INTEGER) AS worked
       FROM user_rows u
-      WHERE u.referred_by = ?
+      WHERE u.referred_by = ? AND u.phone NOT LIKE 'deleted-%'
       ''',
       variables: [Variable.withInt(_workerId)],
       readsFrom: {db.userRows, db.applicationRows},
@@ -2561,12 +2570,13 @@ class DbShiftRepository implements ShiftRepository {
       ));
       released++;
       final overLimit = reason == BookingResult.earningsLimit;
+      final medicalBook = reason == BookingResult.needsMedicalBook;
       await _notify(
         userId: application.workerId,
         kind: NotificationKind.shiftChanged,
         note: (t) => t.releasedByEdit(
             before.title, before.workDate, changesIn(t),
-            overLimit: overLimit),
+            overLimit: overLimit, medicalBook: medicalBook),
         shiftId: before.id,
       );
       final name = await _fullNameOf(application.workerId);
@@ -2575,7 +2585,7 @@ class DbShiftRepository implements ShiftRepository {
         kind: NotificationKind.withdrew,
         note: (t) => t.workerReleased(
             name ?? t.someone, edit.title, edit.workDate,
-            overLimit: overLimit),
+            overLimit: overLimit, medicalBook: medicalBook),
         shiftId: before.id,
         // Правку делает сам заказчик, но о снятой записи он не знает,
         // пока ему не сказать.
@@ -2610,6 +2620,13 @@ class DbShiftRepository implements ShiftRepository {
         before.endsAt != after.endsAt;
     if (moved && hasTimeConflict(after, await _activeShiftsOf(workerId))) {
       return BookingResult.timeConflict;
+    }
+    // Смену с продуктами передвинули дальше срока санкнижки — без неё
+    // человек на неё выйти не может.
+    if (moved &&
+        after.needsMedicalBook &&
+        !await _hasMedicalBook(workerId, after)) {
+      return BookingResult.needsMedicalBook;
     }
     final otherMonth = monthOf(before.workDate) != monthOf(after.workDate);
     if (otherMonth || after.totalPay > before.totalPay) {
@@ -3378,6 +3395,12 @@ class DbShiftRepository implements ShiftRepository {
         .getSingleOrNull();
     if (favorite == null && !await _workedFor(_workerId, workerId)) {
       return BookingResult.notMine;
+    }
+    final target = await (db.select(db.userRows)
+          ..where((u) => u.id.equals(workerId)))
+        .getSingleOrNull();
+    if (target == null || target.phone.startsWith('deleted-')) {
+      return BookingResult.notFound;
     }
 
     final status = await _statusOf(shiftId, workerId);

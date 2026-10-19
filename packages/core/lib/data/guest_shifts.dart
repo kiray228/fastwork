@@ -83,6 +83,15 @@ class RepositoryGuestShifts implements GuestShifts {
       upcomingShifts(forCity(city), clock());
 
   // Город для одной смены не важен: её ищут по номеру.
+  //
+  // Отменённую и уже прошедшую гостю не показываем: номера смен идут
+  // подряд, и иначе без входа можно было бы выкачать всю историю —
+  // компании, адреса, оплату.
   @override
-  Future<Shift?> shiftById(int id) => forCity('').shiftById(id);
+  Future<Shift?> shiftById(int id) async {
+    final shift = await forCity('').shiftById(id);
+    if (shift == null || shift.isCancelled) return null;
+    if (!clock().isBefore(shift.endsAt)) return null;
+    return shift;
+  }
 }

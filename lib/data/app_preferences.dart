@@ -136,6 +136,11 @@ class AppPreferences extends ChangeNotifier {
     await _store?.setInt(_referrerKey, userId);
   }
 
+  Future<void> clearReferrer() async {
+    _referrer = null;
+    await _store?.remove(_referrerKey);
+  }
+
   Future<void> hideInterests() async {
     if (_interestsHidden) return;
     _interestsHidden = true;

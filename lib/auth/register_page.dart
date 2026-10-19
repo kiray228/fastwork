@@ -246,6 +246,9 @@ class _RegisterPageState extends State<RegisterPage> {
           acceptedTermsVersion: kTermsVersion,
           referredBy: widget.preferences?.referrer,
         );
+        // Приглашение засчитано. Следующий, кто зарегистрируется с этого
+        // телефона, — уже не тот друг.
+        await widget.preferences?.clearReferrer();
       } else {
         // На своём устройстве: если таким номером уже входили — пускаем,
         // иначе создаём.

@@ -8,6 +8,7 @@ import 'package:fastwork_core/terms.dart';
 import 'package:fastwork_server/api.dart';
 import 'package:fastwork_server/auth_service.dart';
 import 'package:fastwork_server/code_sender.dart';
+import 'package:fastwork_server/rate_limit.dart';
 import 'package:shelf/shelf.dart';
 import 'package:test/test.dart';
 
@@ -272,18 +273,62 @@ void main() {
       expect(write, 400);
     });
 
-    test('чужой документ не одобрить', () async {
-      await call('POST', '/api/documents',
-          token: workerToken, body: {'type': 'id_card', 'number': '123'});
+    test('документ одобряет только оператор — ни владелец, ни чужой',
+        () async {
+      await call('POST', '/api/documents', token: workerToken, body: {
+        'type': 'medical_book',
+        'number': 'МК-1',
+        'expiresAt': DateTime.now().add(const Duration(days: 90)).toIso8601String(),
+      });
       final (_, docs) = await call('GET', '/api/documents', token: workerToken);
       final docId = docs.single['id'];
 
-      final (code, _) = await call('POST', '/api/documents/$docId/review',
-          token: strangerToken, body: {'approved': false});
-      expect(code, 400);
+      // Старого адреса самопроверки больше нет.
+      for (final token in [workerToken, strangerToken]) {
+        final (code, _) = await call('POST', '/api/documents/$docId/review',
+            token: token, body: {'approved': true});
+        expect(code, 404);
+      }
+      // Служебный — без ключа закрыт.
+      final (noKey, _) = await call(
+          'POST', '/api/admin/documents/$docId/review',
+          token: workerToken, body: {'approved': true});
+      expect(noKey, 403);
+      final (_, still) = await call('GET', '/api/documents', token: workerToken);
+      expect(still.single['status'], 'pending');
 
+      // Оператор со служебным ключом видит очередь и одобряет.
+      final admin = Api(db, ConsoleCodeSender(), adminKey: 'secret-key');
+      Future<(int, dynamic)> asAdmin(String method, String path,
+          [Object? body]) async {
+        final response = await admin.router.call(Request(
+          method,
+          Uri.parse('http://localhost$path'),
+          body: body == null ? null : jsonEncode(body),
+          headers: {'x-admin-key': 'secret-key'},
+        ));
+        final text = await response.readAsString();
+        return (response.statusCode, jsonDecode(text));
+      }
+
+      final (_, queue) = await asAdmin('GET', '/api/admin/documents');
+      expect(queue.single['id'], docId);
+      expect(queue.single['fullName'], 'Ернар Калдыбеков');
+      final (ok, _) = await asAdmin(
+          'POST', '/api/admin/documents/$docId/review', {'approved': true});
+      expect(ok, 200);
       final (_, after) = await call('GET', '/api/documents', token: workerToken);
-      expect(after.single['status'], isNot('rejected'));
+      expect(after.single['status'], 'approved');
+    });
+
+    test('документы — только известных типов, санкнижка — со сроком',
+        () async {
+      final (unknown, _) = await call('POST', '/api/documents',
+          token: workerToken, body: {'type': 'diploma', 'number': '1'});
+      expect(unknown, 400);
+      final (noDate, _) = await call('POST', '/api/documents',
+          token: workerToken, body: {'type': 'medical_book', 'number': '1'});
+      expect(noDate, 400);
     });
   });
 
@@ -492,6 +537,30 @@ void main() {
       final (hidden, _) =
           await call('GET', '/api/public/shifts/${unpaid['shiftId']}');
       expect(hidden, 404);
+    });
+
+    test('отменённую смену гость не видит, номера заказчика — тоже',
+        () async {
+      final shiftId = await bookedShift();
+      final (_, shown) = await call('GET', '/api/public/shifts/$shiftId');
+      expect(shown.containsKey('createdBy'), isFalse);
+      await call('POST', '/api/shifts/$shiftId/cancel-shift',
+          token: managerToken);
+      final (gone, _) = await call('GET', '/api/public/shifts/$shiftId');
+      expect(gone, 404);
+    });
+
+    test('частые запросы без входа упираются в предел', () async {
+      final limited = Api(db, ConsoleCodeSender(),
+          publicLimit: RateLimiter(
+              limit: 2, window: const Duration(minutes: 1)));
+      Future<int> hit() async => (await limited.router.call(Request(
+              'GET',
+              Uri.parse('http://localhost/api/public/shifts?city=Moscow'))))
+          .statusCode;
+      expect(await hit(), 400);
+      expect(await hit(), 400);
+      expect(await hit(), 429);
     });
 
     test('город — только из списка; в другом городе чужих смен нет',

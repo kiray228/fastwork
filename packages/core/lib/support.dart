@@ -82,10 +82,13 @@ class UserDocument {
   }
 }
 
+/// Какие документы принимаем. Другие типы хранилище не примет: в базу
+/// не должно попадать что попало.
+const kDocumentTypes = ['id_card', 'medical_book'];
+
 /// Типы документов и их названия для экрана — на языке приложения.
 Map<String, String> get documentTypes => {
-      for (final type in const ['id_card', 'medical_book'])
-        type: coreTr.documentType(type),
+      for (final type in kDocumentTypes) type: coreTr.documentType(type),
     };
 
 /// Документы со сроком действия. Удостоверение тоже не вечное, но оно

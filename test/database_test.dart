@@ -2082,6 +2082,133 @@ void main() {
     expect((stats.joined, stats.worked), (2, 1));
   });
 
+  Future<(AppUser manager, AppUser worker)> foodPeople(String tag) async {
+    final manager = await auth.register(
+      phone: '7704000000$tag',
+      fullName: 'Айгуль Досова',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      role: UserRole.manager,
+      company: 'Magnum',
+    );
+    final worker = await auth.register(
+      phone: '7705000000$tag',
+      fullName: 'Азамат Серик',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    return (manager, worker);
+  }
+
+  Future<int> foodShift(AppUser manager, DateTime day,
+          {int start = 600, int end = 1200}) =>
+      shifts.publishShift(
+        workDate: day,
+        title: 'Услуги повара',
+        company: 'Magnum',
+        address: 'г. Алматы, ул. Абая, 1',
+        startMinutes: start,
+        endMinutes: end,
+        hourlyRate: 100000,
+        workersNeeded: 2,
+        createdBy: manager.id,
+        city: 'Алматы',
+        card: testCard,
+        category: 'cook',
+        needsMedicalBook: true,
+      );
+
+  Future<void> approvedBook(DateTime until) async {
+    final documents = DbDocumentRepository(db, session);
+    await documents.upload(
+        type: 'medical_book', number: 'МК', expiresAt: until);
+    await documents.review((await documents.documents()).single.id,
+        approved: true);
+  }
+
+  test('ночная смена: санкнижка должна действовать и утром', () async {
+    final (manager, worker) = await foodPeople('1');
+    final day = daysAgo(-3);
+    session.setUser(manager);
+    final night = await foodShift(manager, day, start: 1320, end: 360);
+
+    session.setUser(worker);
+    await approvedBook(day); // истекает в день начала — к утру уже нет
+    expect(await shifts.apply(night), BookingResult.needsMedicalBook);
+    await approvedBook(DateTime(day.year, day.month, day.day + 1));
+    expect(await shifts.apply(night), BookingResult.ok);
+  });
+
+  test('смену передвинули за срок санкнижки — запись снимается', () async {
+    final (manager, worker) = await foodPeople('2');
+    final day = daysAgo(-3);
+    session.setUser(manager);
+    final shiftId = await foodShift(manager, day);
+    session.setUser(worker);
+    await approvedBook(day);
+    expect(await shifts.apply(shiftId), BookingResult.ok);
+
+    session.setUser(manager);
+    final later = DateTime(day.year, day.month, day.day + 2);
+    final edit = await shifts.updateShift(
+      shiftId: shiftId,
+      workDate: later,
+      title: 'Услуги повара',
+      address: 'г. Алматы, ул. Абая, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 2,
+    );
+    expect(edit.result, BookingResult.ok);
+
+    session.setUser(worker);
+    expect((await shifts.shiftById(shiftId))!.isApplied, isFalse);
+    final note = (await shifts.notifications())
+        .firstWhere((n) => n.kind == NotificationKind.shiftChanged);
+    expect(note.body, contains('санитарная книжка'));
+  });
+
+  test('удалённый аккаунт не в «знакомых», позвать и пригласить его нельзя',
+      () async {
+    final (_, workerId, managerId) = await workedShift();
+    // Так помечает удалённый аккаунт `deleteAccountIn` (настоящее удаление
+    // не пустит: на балансе заработок за смену).
+    await (db.update(db.userRows)..where((u) => u.id.equals(workerId)))
+        .write(UserRowsCompanion(phone: Value('deleted-$workerId')));
+    final manager = (await auth.refresh(managerId))!;
+    session.setUser(manager);
+    expect(await shifts.knownWorkers(), isEmpty);
+    final next = await shifts.publishShift(
+      workDate: daysAgo(-1),
+      title: 'Услуги фасовщика',
+      company: 'Magnum',
+      address: 'г. Алматы, ул. Абая, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 2,
+      createdBy: managerId,
+      city: 'Алматы',
+      card: testCard,
+    );
+    expect(await shifts.inviteToShift(shiftId: next, workerId: workerId),
+        BookingResult.notFound);
+
+    // По ссылке удалённого приглашение не засчитывается.
+    final friend = await auth.register(
+      phone: '77060000001',
+      fullName: 'Друг',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      referredBy: workerId,
+    );
+    final row = await (db.select(db.userRows)
+          ..where((u) => u.id.equals(friend.id)))
+        .getSingle();
+    expect(row.referredBy, isNull);
+  });
+
   test('на смену с санкнижкой — только с проверенной и действующей',
       () async {
     final manager = await auth.register(
