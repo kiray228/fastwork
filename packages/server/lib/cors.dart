@@ -49,9 +49,12 @@ Map<String, String> _headersFor(String? origin, List<String> allowed) {
     // разрешение одного сайта другому.
     if (allowed.isNotEmpty) 'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    // X-Admin-Key здесь нет: служебный адрес зовут из терминала, а не из
-    // браузера, и разрешать странице слать этот заголовок незачем.
-    'Access-Control-Allow-Headers':
-        'Content-Type, Authorization, Accept-Language',
+    // X-Admin-Key — для экрана оператора в веб-версии: документы он
+    // проверяет из приложения, а не из терминала. Только своим сайтам из
+    // списка: ни чужому, ни «всем подряд» (пустой список) разрешать
+    // странице слать служебный ключ незачем.
+    'Access-Control-Allow-Headers': allowed.isNotEmpty && allow != null
+        ? 'Content-Type, Authorization, Accept-Language, X-Admin-Key'
+        : 'Content-Type, Authorization, Accept-Language',
   };
 }

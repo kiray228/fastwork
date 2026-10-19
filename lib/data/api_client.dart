@@ -71,16 +71,20 @@ class ApiClient {
   /// засыпает, и первый запрос будит его секунд тридцать-сорок.
   static const timeout = Duration(seconds: 60);
 
-  Future<dynamic> get(String path, [Map<String, String>? query]) async =>
+  /// [extra] — заголовки сверх обычных: служебный ключ оператора.
+  Future<dynamic> get(String path,
+          [Map<String, String>? query, Map<String, String>? extra]) async =>
       _decode(await http
-          .get(_uri(path, query), headers: _headers)
+          .get(_uri(path, query), headers: {..._headers, ...?extra})
           .timeout(timeout));
 
-  Future<dynamic> post(String path, [Object? body]) async => _decode(
+  Future<dynamic> post(String path,
+          [Object? body, Map<String, String>? extra]) async =>
+      _decode(
         await http
             .post(
               _uri(path),
-              headers: _headers,
+              headers: {..._headers, ...?extra},
               body: body == null ? null : jsonEncode(body),
             )
             .timeout(timeout),
