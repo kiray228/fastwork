@@ -46,6 +46,7 @@ enum BookingResult {
   wrongCode, // код отметки не совпал с кодом на экране заказчика
   tooManyAttempts, // код отметки вводили неверно слишком много раз
   ownShift, // на свою же смену заказчик записаться не может
+  needsMedicalBook, // нужна проверенная санитарная книжка, а её нет
   checkedIn, // человек отметился по коду — невыход так просто не поставить
   notFound,
 }
@@ -181,6 +182,7 @@ abstract class ShiftRepository {
     List<String> duties,
     String? dressCode,
     double? minRating,
+    bool needsMedicalBook,
   });
 
   /// Оплатить смену заново — если прошлая попытка не прошла или человек
@@ -599,6 +601,7 @@ class DbShiftRepository implements ShiftRepository {
         cancelDeadlineHours: row.read<int>('cancel_deadline_hours'),
         minRating: row.readNullable<double>('min_rating'),
         createdBy: row.readNullable<int>('created_by'),
+        needsMedicalBook: row.read<bool>('needs_medical_book'),
         cancelledAt: row.readNullable<DateTime>('cancelled_at'),
         isFunded: row.read<int>('funded') > 0,
         awaitingPayment: row.read<int>('awaiting') > 0,
@@ -761,6 +764,10 @@ class DbShiftRepository implements ShiftRepository {
       }
       if (!shift.ratingAllows(session.rating)) {
         return BookingResult.ratingTooLow;
+      }
+      if (shift.needsMedicalBook &&
+          !await _hasMedicalBook(_workerId, shift.workDate)) {
+        return BookingResult.needsMedicalBook;
       }
       if (!shift.hasFreeSlots) return BookingResult.noSlots;
       if (hasTimeConflict(shift, await _activeShifts())) {
@@ -1622,6 +1629,7 @@ class DbShiftRepository implements ShiftRepository {
     List<String> duties = const [],
     String? dressCode,
     double? minRating,
+    bool needsMedicalBook = false,
   }) async {
     // Сколько это стоит, считаем той же моделью, что и экран: сумма за
     // смену — формула, и держать её в двух местах нельзя.
@@ -1659,6 +1667,7 @@ class DbShiftRepository implements ShiftRepository {
         duties: duties,
         dressCode: dressCode,
         minRating: minRating,
+        needsMedicalBook: needsMedicalBook,
       );
       await db.into(db.paymentRows).insert(PaymentRowsCompanion.insert(
             shiftId: id,
@@ -1783,6 +1792,7 @@ class DbShiftRepository implements ShiftRepository {
     required List<String> duties,
     required String? dressCode,
     required double? minRating,
+    bool needsMedicalBook = false,
   }) {
     return db.into(db.shiftRows).insert(
           ShiftRowsCompanion.insert(
@@ -1800,6 +1810,7 @@ class DbShiftRepository implements ShiftRepository {
             duties: Value(duties.join('\n')),
             dressCode: Value(dressCode),
             minRating: Value(minRating),
+            needsMedicalBook: Value(needsMedicalBook),
           ),
         );
   }
@@ -1997,6 +2008,23 @@ class DbShiftRepository implements ShiftRepository {
               completedShifts: r.read<int>('together_count'),
             ))
         .toList();
+  }
+
+  /// Есть ли у человека проверенная санитарная книжка, которая действует
+  /// в день смены. На проверке или отклонённая не считается: заказчик
+  /// отвечает перед санэпидемстанцией, а не перед обещанием.
+  Future<bool> _hasMedicalBook(int workerId, DateTime day) async {
+    final rows = await (db.select(db.documentRows)
+          ..where((d) =>
+              d.userId.equals(workerId) &
+              d.type.equals('medical_book') &
+              d.status.equals(DocumentStatus.approved)))
+        .get();
+    return rows.any((d) {
+      final until = d.expiresAt;
+      return until == null ||
+          !day.isAfter(DateTime(until.year, until.month, until.day));
+    });
   }
 
   @override

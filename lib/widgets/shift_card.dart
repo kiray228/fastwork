@@ -127,6 +127,11 @@ class ShiftCard extends StatelessWidget {
                 // Деньги уже у сервиса — самое важное, что исполнитель
                 // может узнать о заказчике до записи.
                 if (shift.isFunded) const GuaranteeChip(),
+                if (shift.needsMedicalBook)
+                  TagChip(
+                    text: tr.feed.medicalBookTag,
+                    icon: Icons.medical_information_outlined,
+                  ),
                 if (!allowed)
                   TagChip(
                     text: tr.feed.ratingRequired(

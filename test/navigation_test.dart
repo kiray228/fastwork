@@ -467,6 +467,45 @@ void main() {
   });
 
   group('запись на смену', () {
+    testWidgets('смена с санкнижкой: видно заранее, без книжки — понятный отказ',
+        (tester) async {
+      final now = DateTime.now();
+      final repo = FakeShiftRepository(clock: morning(), shifts: [
+        Shift(
+          id: 1,
+          workDate: DateTime(now.year, now.month, now.day + 1),
+          title: 'Услуги повара',
+          company: 'Magnum',
+          address: 'г. Алматы, ул. Абая, 1',
+          startMinutes: 600,
+          endMinutes: 1260,
+          hourlyRate: 100000,
+          workersNeeded: 3,
+          workersHired: 0,
+          category: 'cook',
+          needsMedicalBook: true,
+        ),
+      ]);
+      await openApp(tester, shifts: repo);
+      await tester.tap(find.text('Все дни'));
+      await tester.pumpAndSettle();
+      expect(find.text('Санкнижка'), findsOneWidget);
+
+      await tester.tap(find.text('Подробнее').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Требования'), findsOneWidget);
+
+      await tester.tap(find.text('Записаться на смену'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подтверждаю'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('нужна проверенная санитарная книжка'),
+          findsOneWidget);
+      expect((await repo.shiftById(1))!.isApplied, isFalse);
+    });
+
     testWidgets('запись требует подтверждения условий', (tester) async {
       await openApp(tester);
 
@@ -953,6 +992,44 @@ void main() {
       final created = (await shifts.shiftsCreatedBy(1)).single;
       expect(created.dressCode, 'Чёрный низ');
       expect(created.minRating, 4.5);
+    });
+
+    testWidgets('для повара санкнижка включается сама и доходит до смены',
+        (tester) async {
+      final shifts = FakeShiftRepository(clock: morning());
+      await openApp(
+        tester,
+        role: UserRole.manager,
+        repos: buildRepos(
+          shifts: shifts,
+          signedIn: testUser(role: UserRole.manager),
+        ),
+      );
+      await tester.tap(find.text('Создать'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'Услуги повара');
+      await tester.enterText(find.byType(TextField).at(1), 'ул. Абая, 10');
+      await tester.tap(find.text('Выберите категорию'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Повар'));
+      await tester.tap(find.text('Повар'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Нужна санитарная книжка'));
+      final toggle = tester.widget<SwitchListTile>(find.byType(SwitchListTile));
+      expect(toggle.value, isTrue);
+
+      await tester.ensureVisible(find.text('Оплатить и опубликовать'));
+      await tester.tap(find.text('Оплатить и опубликовать'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Оплатить ').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Подставить тестовую карту'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Оплатить ').last);
+      await tester.pumpAndSettle();
+
+      expect((await shifts.shiftsCreatedBy(1)).single.needsMedicalBook, isTrue);
     });
 
     testWidgets('смену можно оплатить через Kaspi.kz', (tester) async {

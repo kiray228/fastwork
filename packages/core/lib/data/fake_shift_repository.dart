@@ -30,6 +30,9 @@ class FakeShiftRepository implements ShiftRepository {
   /// Город «текущего пользователя» — по нему фильтруется лента.
   String city;
 
+  /// У «текущего пользователя» есть проверенная санитарная книжка.
+  bool hasMedicalBook = false;
+
   /// Который сейчас час — как у `DbShiftRepository`: тесты подставляют
   /// свои часы и двигают их, когда нужно «дожить» до смены.
   DateTime Function() clock;
@@ -144,6 +147,9 @@ class FakeShiftRepository implements ShiftRepository {
     }
     if (shift.hasStartedAt(clock())) return BookingResult.alreadyStarted;
     if (!shift.ratingAllows(userRating)) return BookingResult.ratingTooLow;
+    if (shift.needsMedicalBook && !hasMedicalBook) {
+      return BookingResult.needsMedicalBook;
+    }
     if (!shift.hasFreeSlots) return BookingResult.noSlots;
     final booked = _shifts
         .where((s) => _myStatuses[s.id] == ApplicationStatus.active)
@@ -464,6 +470,7 @@ class FakeShiftRepository implements ShiftRepository {
     List<String> duties = const [],
     String? dressCode,
     double? minRating,
+    bool needsMedicalBook = false,
   }) async {
     final id = (_shifts.map((s) => s.id).fold<int>(0, (a, b) => a > b ? a : b)) + 1;
     final shift = Shift(
@@ -483,6 +490,7 @@ class FakeShiftRepository implements ShiftRepository {
       dressCode: dressCode,
       minRating: minRating,
       createdBy: createdBy,
+      needsMedicalBook: needsMedicalBook,
     );
     final kaspiPhone = _phoneFor(method, phone);
     _shifts.add(shift);
@@ -834,6 +842,7 @@ class FakeShiftRepository implements ShiftRepository {
       cancelDeadlineHours: old.cancelDeadlineHours,
       minRating: old.minRating,
       createdBy: old.createdBy,
+      needsMedicalBook: old.needsMedicalBook,
     );
 
     final paid = _paidFor(before);

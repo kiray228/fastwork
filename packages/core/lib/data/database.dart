@@ -50,6 +50,12 @@ class ShiftRows extends Table {
   /// Добавлена в третьей версии схемы.
   RealColumn get minRating => real().nullable()();
 
+  /// Нужна санитарная книжка: работа с продуктами. Записаться может
+  /// только тот, у кого книжка проверена и действует в день смены.
+  /// Добавлена в 26-й версии схемы.
+  BoolColumn get needsMedicalBook =>
+      boolean().withDefault(const Constant(false))();
+
   /// Когда заказчик отменил смену. null — смена в силе.
   ///
   /// Строку не удаляем, а помечаем. Удали мы её — вместе со сменой по
@@ -876,7 +882,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 25;
+  int get schemaVersion => 26;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -999,6 +1005,10 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 25) {
             await m.createTable(hiddenCompanyRows);
+          }
+          if (from < 26) {
+            await addColumnIfMissing(
+                m, shiftRows, shiftRows.needsMedicalBook);
           }
         },
         beforeOpen: (details) async {

@@ -24,6 +24,7 @@ extension PublishShift on ShiftRepository {
     List<String> duties = const [],
     String? dressCode,
     double? minRating,
+    bool needsMedicalBook = false,
   }) async {
     final checkout = await createShift(
       method: PaymentMethod.card,
@@ -41,6 +42,7 @@ extension PublishShift on ShiftRepository {
       duties: duties,
       dressCode: dressCode,
       minRating: minRating,
+      needsMedicalBook: needsMedicalBook,
     );
     final paid = await completeSandboxPayment(checkout.id, card: card);
     if (!paid.isPaid) throw PaymentDeclined(paid.message ?? 'не оплачено');

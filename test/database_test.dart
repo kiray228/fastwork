@@ -5,6 +5,7 @@ import 'package:fastwork_core/data/database.dart';
 import 'package:fastwork_core/data/mrp_store.dart';
 import 'package:fastwork/data/session.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
+import 'package:fastwork_core/data/support_repository.dart';
 import 'package:fastwork_core/data/user_language.dart';
 import 'package:fastwork_core/errors.dart';
 import 'package:fastwork_core/l10n/core_strings.dart';
@@ -1988,6 +1989,70 @@ void main() {
     expect(await shifts.inviteToShift(shiftId: shiftId, workerId: workerId),
         BookingResult.notMine);
   });
+  test('на смену с санкнижкой — только с проверенной и действующей',
+      () async {
+    final manager = await auth.register(
+      phone: '77010000099',
+      fullName: 'Айгуль Досова',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      role: UserRole.manager,
+      company: 'Magnum',
+    );
+    final worker = await auth.register(
+      phone: '77020000099',
+      fullName: 'Азамат Серик',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    session.setUser(manager);
+    final shiftDay = daysAgo(-3);
+    final shiftId = await shifts.publishShift(
+      workDate: shiftDay,
+      title: 'Услуги повара',
+      company: 'Magnum',
+      address: 'г. Алматы, ул. Абая, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 2,
+      createdBy: manager.id,
+      city: 'Алматы',
+      card: testCard,
+      category: 'cook',
+      needsMedicalBook: true,
+    );
+    expect((await shifts.shiftById(shiftId))!.needsMedicalBook, isTrue);
+
+    session.setUser(worker);
+    final documents = DbDocumentRepository(db, session);
+    // Без книжки — нельзя.
+    expect(await shifts.apply(shiftId), BookingResult.needsMedicalBook);
+
+    // На проверке — тоже нельзя: обещание ещё не книжка.
+    await documents.upload(
+      type: 'medical_book',
+      number: 'МК-1',
+      expiresAt: DateTime(shiftDay.year, shiftDay.month, shiftDay.day - 1),
+    );
+    expect(await shifts.apply(shiftId), BookingResult.needsMedicalBook);
+
+    // Проверена, но истекает накануне смены — нельзя.
+    final id = (await documents.documents()).single.id;
+    await documents.review(id, approved: true);
+    expect(await shifts.apply(shiftId), BookingResult.needsMedicalBook);
+
+    // Действует в день смены — можно.
+    await documents.upload(
+      type: 'medical_book',
+      number: 'МК-2',
+      expiresAt: shiftDay,
+    );
+    await documents.review((await documents.documents()).single.id,
+        approved: true);
+    expect(await shifts.apply(shiftId), BookingResult.ok);
+  });
+
   test('отработавшего у заказчика можно позвать и не делая любимым',
       () async {
     final (_, workerId, managerId) = await workedShift();
