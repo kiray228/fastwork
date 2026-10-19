@@ -502,6 +502,37 @@ class Api {
       });
     });
 
+    // Дни «свободен»: какие отмечены и отметить/снять один.
+    router.get('/api/me/availability', (Request request) async {
+      return _authorized(request, (user) async {
+        final days = (await _shiftsFor(user).availability()).toList()..sort();
+        return _json([for (final d in days) d.toIso8601String()]);
+      });
+    });
+
+    router.post('/api/me/availability', (Request request) async {
+      return _authorized(request, (user) async {
+        final body = await _body(request);
+        await _shiftsFor(user).setAvailable(
+          DateTime.parse(body['day'] as String),
+          available: body['available'] as bool? ?? true,
+        );
+        return _json({'ok': true});
+      });
+    });
+
+    // Кто свободен в день смены — только заказчику и только своей смены.
+    router.get('/api/shifts/<id|[0-9]+>/available-workers',
+        (Request request, String id) async {
+      return _authorized(request, (user) async {
+        if (!user.isManager) {
+          return _error(serverTr.employersOnly, status: 403);
+        }
+        final people = await _shiftsFor(user).availableWorkers(int.parse(id));
+        return _json(people.map((p) => p.toJson()).toList());
+      });
+    });
+
     // Сколько людей пришло по ссылке-приглашению.
     router.get('/api/me/referrals', (Request request) async {
       return _authorized(request, (user) async {

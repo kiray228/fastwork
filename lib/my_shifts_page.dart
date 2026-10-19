@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'availability_card.dart';
 import 'data/session.dart';
 import 'l10n/strings.dart';
 import 'package:fastwork_core/data/shift_repository.dart';
@@ -157,6 +158,14 @@ class _MyShiftsPageState extends State<MyShiftsPage> {
                   child: ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     children: [
+                      // Смен нет — тем важнее сказать, когда свободен:
+                      // тогда смена сможет найти человека сама.
+                      if (!archived)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                          child:
+                              AvailabilityCard(repository: widget.repository),
+                        ),
                       EmptyState(
                         icon: archived
                             ? Icons.inventory_2_outlined
@@ -184,7 +193,12 @@ class _MyShiftsPageState extends State<MyShiftsPage> {
                       // и сколько за них придёт. Ради этого числа человек
                       // и выходит на смены.
                       if (!archived && rawIndex == 0) {
-                        return _UpcomingTotal(shifts: value);
+                        return Column(
+                          children: [
+                            AvailabilityCard(repository: widget.repository),
+                            _UpcomingTotal(shifts: value),
+                          ],
+                        );
                       }
                       final index = archived ? rawIndex : rawIndex - 1;
                       final shift = value[index];

@@ -200,6 +200,9 @@ class CoreRu extends CoreStrings {
   @override
   String get documentNotFound => 'Документ не найден';
   @override
+  String get availabilityOutOfRange =>
+      'Отметить можно только ближайшие две недели';
+  @override
   String get unknownDocumentType => 'Такого документа у нас нет';
   @override
   String get documentNeedsExpiry =>

@@ -238,6 +238,10 @@ AppUser userFromJson(Map<String, dynamic> json) => AppUser(
       termsVersion: json['termsVersion'] as int? ?? 0,
     );
 
+/// На сколько дней вперёд можно отметить «свободен» — столько же, сколько
+/// дней в полосе дат ленты.
+const kAvailabilityDays = 14;
+
 /// Сколько людей пришло по ссылке-приглашению и сколько из них уже
 /// отработали хотя бы одну смену.
 class ReferralStats {

@@ -195,6 +195,9 @@ class CoreEn extends CoreStrings {
   @override
   String get documentNotFound => 'Document not found';
   @override
+  String get availabilityOutOfRange =>
+      'You can only mark the next two weeks';
+  @override
   String get unknownDocumentType => 'Unknown document type';
   @override
   String get documentNeedsExpiry =>

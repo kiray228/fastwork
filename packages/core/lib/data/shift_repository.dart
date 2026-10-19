@@ -305,6 +305,19 @@ abstract class ShiftRepository {
   /// уже отработали смену.
   Future<ReferralStats> referralStats();
 
+  /// Дни, в которые я отметил «свободен», — от сегодня и дальше.
+  Future<Set<DateTime>> availability();
+
+  /// Отметить день «свободен» или снять отметку. Только ближайшие
+  /// [kAvailabilityDays] дней.
+  Future<void> setAvailable(DateTime day, {required bool available});
+
+  /// Кто свободен в день смены заказчика и живёт в её городе, — кого
+  /// можно позвать, даже если раньше не работали вместе. Только своей
+  /// смены; без телефонов: человек согласился на приглашение, а не на
+  /// звонки.
+  Future<List<KnownWorker>> availableWorkers(int shiftId);
+
   /// Позвать на свою смену, которая недобирает людей, того, кого заказчик
   /// знает: любимого или отработавшего у него. Приглашение приходит
   /// уведомлением; записывается человек сам.
@@ -2121,6 +2134,125 @@ class DbShiftRepository implements ShiftRepository {
     );
   }
 
+  /// Отметил ли человек «свободен» в день смены и живёт ли в её городе.
+  Future<bool> _availableFor(Shift shift, int workerId) async {
+    final rows = await db.query(
+      'SELECT 1 FROM availability_rows av '
+      'JOIN user_rows u ON u.id = av.user_id '
+      'WHERE av.user_id = ? AND av.day = ? AND u.city = ? LIMIT 1',
+      variables: [
+        Variable.withInt(workerId),
+        Variable.withDateTime(_dayOf(shift.workDate)),
+        Variable.withString(shift.city),
+      ],
+      readsFrom: {db.availabilityRows, db.userRows},
+    ).get();
+    return rows.isNotEmpty;
+  }
+
+  static DateTime _dayOf(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  @override
+  Future<Set<DateTime>> availability() async {
+    final now = clock();
+    final rows = await (db.select(db.availabilityRows)
+          ..where((a) =>
+              a.userId.equals(_workerId) &
+              a.day.isBiggerOrEqualValue(_dayOf(now))))
+        .get();
+    return {for (final r in rows) _dayOf(r.day)};
+  }
+
+  @override
+  Future<void> setAvailable(DateTime day, {required bool available}) async {
+    final date = _dayOf(day);
+    if (!available) {
+      await (db.delete(db.availabilityRows)
+            ..where((a) => a.userId.equals(_workerId) & a.day.equals(date)))
+          .go();
+      return;
+    }
+    final today = _dayOf(clock());
+    final last = DateTime(today.year, today.month, today.day + kAvailabilityDays);
+    if (date.isBefore(today) || !date.isBefore(last)) {
+      throw UserError(_t.availabilityOutOfRange);
+    }
+    await db.into(db.availabilityRows).insert(
+          AvailabilityRowsCompanion.insert(
+            userId: _workerId,
+            day: date,
+            createdAt: clock(),
+          ),
+          onConflict: DoNothing(
+            target: [db.availabilityRows.userId, db.availabilityRows.day],
+          ),
+        );
+  }
+
+  @override
+  Future<List<KnownWorker>> availableWorkers(int shiftId) async {
+    final mine = await _myShiftOr(shiftId);
+    if (mine is! Shift) return const [];
+    final rows = await db.query(
+      '''
+      SELECT u.*,
+             CAST(COALESCE(
+               (SELECT AVG(w.rating) FROM worker_review_rows w
+                 WHERE w.worker_id = u.id),
+               u.rating
+             ) AS DOUBLE PRECISION) AS live_rating,
+             CAST((SELECT COUNT(*) FROM application_rows c
+               WHERE c.worker_id = u.id AND c.status = 'completed')
+               AS INTEGER) AS done_count,
+             CAST((SELECT COUNT(*) FROM application_rows m
+               WHERE m.worker_id = u.id AND m.status = 'no_show')
+               AS INTEGER) AS missed_count
+      FROM availability_rows av
+      JOIN user_rows u ON u.id = av.user_id
+      WHERE av.day = ? AND u.city = ? AND u.role = 'worker'
+        AND u.phone NOT LIKE 'deleted-%'
+        AND NOT EXISTS (SELECT 1 FROM application_rows a
+          WHERE a.shift_id = ? AND a.worker_id = u.id
+            AND a.status IN ('active', 'completed'))
+      ORDER BY live_rating DESC, done_count DESC, u.full_name
+      LIMIT 50
+      ''',
+      variables: [
+        Variable.withDateTime(_dayOf(mine.workDate)),
+        Variable.withString(mine.city),
+        Variable.withInt(shiftId),
+      ],
+      readsFrom: {
+        db.availabilityRows,
+        db.userRows,
+        db.applicationRows,
+        db.workerReviewRows,
+      },
+    ).get();
+
+    final people = <KnownWorker>[];
+    for (final r in rows) {
+      final user = AppUser(
+        id: r.read<int>('id'),
+        phone: '',
+        fullName: r.read<String>('full_name'),
+        city: r.read<String>('city'),
+        rating: r.read<double>('live_rating'),
+        isVerified: r.read<bool>('is_verified'),
+        role: r.read<String>('role'),
+        completedShifts: r.read<int>('done_count'),
+        noShows: r.read<int>('missed_count'),
+      );
+      // Звать того, кого смена всё равно не пустит, — только обнадёжить.
+      if (!mine.ratingAllows(user.rating)) continue;
+      if (mine.needsMedicalBook && !await _hasMedicalBook(user.id, mine)) {
+        continue;
+      }
+      people.add(KnownWorker(user: user, isFavorite: false));
+    }
+    return people;
+  }
+
   /// Отработал ли исполнитель хотя бы одну смену у этого заказчика.
   Future<bool> _workedFor(int employerId, int workerId) async {
     final rows = await db.query(
@@ -3393,7 +3525,12 @@ class DbShiftRepository implements ShiftRepository {
           ..where((f) =>
               f.employerId.equals(_workerId) & f.workerId.equals(workerId)))
         .getSingleOrNull();
-    if (favorite == null && !await _workedFor(_workerId, workerId)) {
+    // Знакомые — любимые и отработавшие у заказчика. И ещё те, кто сам
+    // отметил, что свободен в этот день в городе смены: они согласились,
+    // чтобы их звали.
+    if (favorite == null &&
+        !await _workedFor(_workerId, workerId) &&
+        !await _availableFor(shift, workerId)) {
       return BookingResult.notMine;
     }
     final target = await (db.select(db.userRows)

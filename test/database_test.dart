@@ -2033,6 +2033,100 @@ void main() {
     expect(await shifts.inviteToShift(shiftId: shiftId, workerId: workerId),
         BookingResult.notMine);
   });
+  test('«свободен»: только ближайшие две недели, снять можно', () async {
+    final worker = await auth.register(
+      phone: '77070000001',
+      fullName: 'Азамат Серик',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+    );
+    session.setUser(worker);
+    final today = daysAgo(0);
+    final tomorrow = daysAgo(-1);
+    await shifts.setAvailable(tomorrow, available: true);
+    await shifts.setAvailable(tomorrow, available: true); // второй раз — не ошибка
+    await shifts.setAvailable(today, available: true);
+    expect(await shifts.availability(), {today, tomorrow});
+    await shifts.setAvailable(today, available: false);
+    expect(await shifts.availability(), {tomorrow});
+
+    expect(() => shifts.setAvailable(daysAgo(1), available: true),
+        throwsA(isA<UserError>()));
+    expect(() => shifts.setAvailable(daysAgo(-14), available: true),
+        throwsA(isA<UserError>()));
+  });
+
+  test('заказчик видит свободных в день смены своего города и может позвать',
+      () async {
+    final manager = await auth.register(
+      phone: '77070000010',
+      fullName: 'Айгуль Досова',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      role: UserRole.manager,
+      company: 'Magnum',
+    );
+    Future<AppUser> worker(String phone, String name, String city) =>
+        auth.register(
+          phone: phone,
+          fullName: name,
+          city: city,
+          acceptedTermsVersion: kTermsVersion,
+        );
+    final free = await worker('77070000011', 'Свободный Алматы', 'Алматы');
+    final booked = await worker('77070000012', 'Уже Записан', 'Алматы');
+    final astana = await worker('77070000013', 'Свободный Астана', 'Астана');
+    final busy = await worker('77070000014', 'Не Отмечал', 'Алматы');
+
+    final day = daysAgo(-2);
+    session.setUser(manager);
+    final shiftId = await shifts.publishShift(
+      workDate: day,
+      title: 'Услуги грузчика',
+      company: 'Magnum',
+      address: 'г. Алматы, ул. Абая, 1',
+      startMinutes: 600,
+      endMinutes: 1200,
+      hourlyRate: 100000,
+      workersNeeded: 3,
+      createdBy: manager.id,
+      city: 'Алматы',
+      card: testCard,
+    );
+
+    for (final w in [free, booked, astana]) {
+      session.setUser(w);
+      await shifts.setAvailable(day, available: true);
+    }
+    session.setUser(booked);
+    expect(await shifts.apply(shiftId), BookingResult.ok);
+
+    session.setUser(manager);
+    final list = await shifts.availableWorkers(shiftId);
+    expect(list.map((k) => k.user.fullName), ['Свободный Алматы']);
+    expect(list.single.user.phone, isEmpty,
+        reason: 'согласие на приглашение — не на звонки');
+
+    // Позвать свободного можно, хотя вместе не работали.
+    expect(await shifts.inviteToShift(shiftId: shiftId, workerId: free.id),
+        BookingResult.ok);
+    // А того, кто день не отмечал, — по-прежнему нельзя.
+    expect(await shifts.inviteToShift(shiftId: shiftId, workerId: busy.id),
+        BookingResult.notMine);
+
+    // Чужая смена — пустой список.
+    final other = await auth.register(
+      phone: '77070000019',
+      fullName: 'Другой Заказчик',
+      city: 'Алматы',
+      acceptedTermsVersion: kTermsVersion,
+      role: UserRole.manager,
+      company: 'Small',
+    );
+    session.setUser(other);
+    expect(await shifts.availableWorkers(shiftId), isEmpty);
+  });
+
   test('приглашённые считаются, выдуманный пригласивший — не ошибка',
       () async {
     final inviter = await auth.register(

@@ -352,6 +352,24 @@ class HiddenCompanyRows extends Table {
       ];
 }
 
+/// Дни, когда исполнитель свободен и готов выйти: «завтра и в субботу
+/// могу». Заказчик недобирающей смены видит таких людей своего города и
+/// может позвать. Только по согласию: в список попадает тот, кто сам
+/// отметил день.
+class AvailabilityRows extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get userId => integer()();
+
+  /// День — полночь, как `work_date` у смены.
+  DateTimeColumn get day => dateTime()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {userId, day},
+      ];
+}
+
 /// Подписки исполнителей на виды работ: «сообщать о новых сменах
 /// грузчика».
 ///
@@ -747,6 +765,7 @@ class ShiftMessageRows extends Table {
     CategoryFollowRows,
     ShiftMessageRows,
     HiddenCompanyRows,
+    AvailabilityRows,
   ],
 )
 /// Описание базы: какие таблицы и какой версии схема.
@@ -868,6 +887,7 @@ class AppDatabase extends _$AppDatabase {
   Future<void> _createIndexes() async {
     const indexes = {
       'idx_notifications_user': 'notification_rows (user_id, read_at)',
+      'idx_availability_day': 'availability_rows (day, user_id)',
       'idx_applications_worker': 'application_rows (worker_id, status)',
       'idx_shifts_city_date': 'shift_rows (city, work_date)',
       'idx_shifts_created_by': 'shift_rows (created_by)',
@@ -886,7 +906,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 27;
+  int get schemaVersion => 28;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1016,6 +1036,9 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 27) {
             await addColumnIfMissing(m, userRows, userRows.referredBy);
+          }
+          if (from < 28) {
+            await m.createTable(availabilityRows);
           }
         },
         beforeOpen: (details) async {
