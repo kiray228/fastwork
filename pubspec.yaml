@@ -95,6 +95,15 @@ flutter:
   # "family" key with the font family name, and a "fonts" key with a
   # list giving the asset and other descriptors for the font. For
   # example:
+  # Знак тенге «₸»: в Manrope его нет, а запасной шрифт браузер
+  # докачивал секундами. Как получен — tool/make_tenge_font.py.
+  fonts:
+    - family: Tenge
+      fonts:
+        - asset: assets/fonts/tenge-regular.ttf
+        - asset: assets/fonts/tenge-bold.ttf
+          weight: 700
+
   # fonts:
   #   - family: Schyler
   #     fonts:

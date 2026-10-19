@@ -56,11 +56,13 @@ class AppTheme {
       labelLarge: base.labelLarge?.copyWith(fontWeight: FontWeight.w700),
     );
 
-    // Запасные шрифты. Не во всех шрифтах есть символ тенге «₸» — если
-    // его не окажется, Flutter возьмёт его из следующего шрифта списка,
-    // а не нарисует пустой квадратик.
+    // Запасные шрифты. В Manrope нет символа тенге «₸» — Flutter берёт
+    // его из следующего шрифта списка. Первым стоит свой шрифт из одного
+    // этого знака: он в самом приложении, и браузеру не нужно секундами
+    // докачивать чужой, показывая пока пустой прямоугольник у каждой
+    // суммы.
     final textThemeWithFallback = textTheme.apply(
-      fontFamilyFallback: const ['Roboto', 'Noto Sans', 'Arial'],
+      fontFamilyFallback: const ['Tenge', 'Roboto', 'Noto Sans', 'Arial'],
     );
 
     // Поля ввода — тоже стекло: полупрозрачная заливка и светлая кромка.
