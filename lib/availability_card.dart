@@ -104,7 +104,17 @@ class _AvailabilityCardState extends State<AvailabilityCard> {
                           '${day.day}',
                         ),
                         selected: days.contains(day),
-                        showCheckmark: false,
+                        // Отмеченный день должен читаться с первого
+                        // взгляда: в тёмной теме одна заливка почти
+                        // сливалась с фоном.
+                        showCheckmark: true,
+                        checkmarkColor: AppColors.brand,
+                        selectedColor: AppColors.brand.withValues(alpha: 0.22),
+                        side: BorderSide(
+                          color: days.contains(day)
+                              ? AppColors.brand
+                              : Colors.transparent,
+                        ),
                         onSelected: pending.contains(day)
                             ? null
                             : (_) => _toggle(day),
