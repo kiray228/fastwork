@@ -345,6 +345,15 @@ class CoreRu extends CoreStrings {
         body: 'Заказчик оценил работу на «$title» ${dayMonth(day)}.',
       );
   @override
+  Note newShiftOnFreeDay(
+          String company, String title, DateTime day, String time,
+          String pay) =>
+      (
+        title: 'Смена в ваш свободный день',
+        body: '$company: «$title», ${dayMonth(day)}, $time — $pay. '
+            'Вы отметили этот день свободным.',
+      );
+  @override
   Note shiftCancelled(String title, DateTime day) => (
         title: 'Смена отменена',
         body: 'Заказчик отменил «$title» ${dayMonth(day)}. '
